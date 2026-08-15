@@ -32,3 +32,11 @@ data/processed/*
 models/*.pkl
 models/*.joblib
 models/*.txt
+# Except the trained single-stage xP model itself: the dashboard's
+# historical-mode tools (Squad Builder/Transfers/Chip Advisor) load it
+# directly for predicted_points, and Streamlit Cloud has no way to run
+# train.py itself -- same "committed deliberately, no personal data" pattern
+# as data/dashboard_bootstrap.json above. ~1.4MB. The play-classifier and
+# points-given-played files stay ignored -- only the single-stage model is
+# actually used at inference time (see train.py's two-stage negative result).
+!models/xp_model_single_stage.txt

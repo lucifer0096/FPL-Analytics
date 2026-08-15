@@ -13,6 +13,7 @@ import json
 import os
 import sys
 
+import lightgbm as lgb
 import pandas as pd
 import streamlit as st
 
@@ -22,6 +23,8 @@ sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 
 from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
+from predict import load_model, predict_points
+from train import FEATURE_COLUMNS
 
 st.set_page_config(
     page_title="FPL Analytics",
@@ -66,16 +69,35 @@ def load_features() -> pd.DataFrame:
     return pd.read_parquet(FEATURES_PATH)
 
 
+@st.cache_resource
+def _get_xp_model():
+    """Cached across reruns (st.cache_resource, not cache_data -- this holds a
+    live LightGBM Booster object, not a serializable value). Returns None if
+    the model file isn't present (e.g. a fresh clone before running train.py),
+    so callers can fall back to the naive rolling-average estimate instead of
+    crashing the whole dashboard."""
+    try:
+        return load_model()
+    except lgb.basic.LightGBMError:
+        return None
+
+
 def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
-    """Build an optimizer-ready player pool for one (season, GW), using each
-    player's rolling-5 average as a predicted_points stand-in -- the same
-    approach used throughout this project's test scripts, since no live
-    per-gameweek model predictions exist yet for a season that hasn't
-    started."""
+    """Build an optimizer-ready player pool for one (season, GW). predicted_points
+    comes from the trained single-stage xP model (incorporates fixture_difficulty,
+    opponent/team form, recent minutes/form -- see train.py's FEATURE_COLUMNS),
+    falling back to the player's own rolling-5 average only if no trained model
+    file is present."""
     sub = df[(df["season"] == season) & (df["GW"] == gw)].copy()
     sub["player_id"] = sub["player_code"]
     sub["cost"] = sub["value"] / 10.0
-    sub["predicted_points"] = sub["total_points_avg_last_5"].fillna(0).clip(lower=0)
+
+    model = _get_xp_model()
+    if model is not None and set(FEATURE_COLUMNS).issubset(sub.columns):
+        sub["predicted_points"] = predict_points(sub, model)
+    else:
+        sub["predicted_points"] = sub["total_points_avg_last_5"].fillna(0).clip(lower=0)
+
     return sub.drop_duplicates(subset="player_id")[
         ["player_id", "name", "position", "team", "cost", "predicted_points"]
     ]
@@ -96,7 +118,15 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
     history) get predicted_points = 0 rather than a guess -- same honest
     treatment as new_player_baseline's fallback for genuinely unknown players,
     just without that feature's league-wide price-band averaging here (a
-    simpler stand-in, since this is a demo view, not a training feature)."""
+    simpler stand-in, since this is a demo view, not a training feature).
+
+    Deliberately NOT run through the trained xP model (unlike gw_pool) --
+    fixture_difficulty is a real, published-ahead-of-kickoff feature for a
+    given match (see features.py), but there IS no 2026-27 fixture list here
+    yet, so there's nothing genuine to feed the model for it. Feeding it a
+    placeholder (e.g. last season's fixture) would look like a real prediction
+    while actually being fabricated -- the honest rolling-average estimate is
+    preferable to a model output built on an invented input."""
     prior = _features_df[_features_df["season"] == prior_season].copy()
     last_gw = prior["GW"].max()
     closing_form = (
