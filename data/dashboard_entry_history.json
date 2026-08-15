@@ -1,0 +1,66 @@
+{
+  "current": [],
+  "past": [
+    {
+      "season_name": "2016/17",
+      "total_points": 2053,
+      "rank": 386166,
+      "rank_percentage": "9"
+    },
+    {
+      "season_name": "2017/18",
+      "total_points": 2049,
+      "rank": 809108,
+      "rank_percentage": "14"
+    },
+    {
+      "season_name": "2018/19",
+      "total_points": 2094,
+      "rank": 898121,
+      "rank_percentage": "14"
+    },
+    {
+      "season_name": "2019/20",
+      "total_points": 1973,
+      "rank": 2207538,
+      "rank_percentage": "29"
+    },
+    {
+      "season_name": "2020/21",
+      "total_points": 2206,
+      "rank": 873796,
+      "rank_percentage": "11"
+    },
+    {
+      "season_name": "2021/22",
+      "total_points": 2130,
+      "rank": 1688770,
+      "rank_percentage": "18"
+    },
+    {
+      "season_name": "2022/23",
+      "total_points": 2312,
+      "rank": 1404045,
+      "rank_percentage": "12"
+    },
+    {
+      "season_name": "2023/24",
+      "total_points": 2284,
+      "rank": 1189768,
+      "rank_percentage": "11"
+    },
+    {
+      "season_name": "2024/25",
+      "total_points": 2227,
+      "rank": 2461833,
+      "rank_percentage": "22"
+    },
+    {
+      "season_name": "2025/26",
+      "total_points": 2102,
+      "rank": 2240945,
+      "rank_percentage": "17"
+    }
+  ],
+  "chips": []
+}

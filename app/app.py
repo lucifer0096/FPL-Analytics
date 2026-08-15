@@ -33,6 +33,47 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Scoped visual styling only -- no logic here. Colors match the pitch view's
+# own green (see render_pitch) so the two don't clash, plus FPL's own purple
+# as an accent (their real brand color, not invented). Kept to CSS only, no
+# custom components, so it degrades gracefully if Streamlit's internal class
+# names shift in a future version -- worst case it looks like plain Streamlit.
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+    h1, h2, h3 { font-family: "Segoe UI", Roboto, sans-serif; }
+    div[data-testid="stMetric"] {
+        background: linear-gradient(135deg, rgba(42,150,80,0.12), rgba(90,60,180,0.10));
+        border: 1px solid rgba(42,150,80,0.35);
+        border-radius: 10px;
+        padding: 12px 14px 8px 14px;
+    }
+    div[data-testid="stMetricLabel"] { font-size: 0.8rem; opacity: 0.8; }
+    .stTabs [data-baseweb="tab-list"] { gap: 4px; }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 8px 16px;
+    }
+    .app-hero {
+        background: linear-gradient(120deg, #1f7a3f 0%, #2a9650 55%, #5a3cb4 130%);
+        border-radius: 14px;
+        padding: 22px 28px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+    .app-hero h1 {
+        color: white;
+        margin: 0 0 6px 0;
+        font-size: 1.9rem;
+    }
+    .app-hero p {
+        color: rgba(255,255,255,0.92);
+        margin: 0;
+        font-size: 0.95rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet")
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")
 MANAGER_ENTRY_ID = 1132016
@@ -249,14 +290,33 @@ def load_model_metrics() -> dict:
         return json.load(f)
 
 
+_DASHBOARD_ENTRY_HISTORY_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_entry_history.json")
+
+
 def _find_entry_history_path(entry_id: int) -> str:
     """Most recent data/raw/{season}/entry/{entry_id}/history.json the collector
     has written -- checks every season folder (not just the latest), since a
     manager's PAST-season totals (what this tab shows) don't change once a
-    season ends, so whichever collector run captured them is still valid."""
+    season ends, so whichever collector run captured them is still valid.
+
+    data/raw/ is entirely gitignored (see .gitignore's note on personal
+    manager data), so a fresh deploy (Streamlit Cloud) has nothing here --
+    same problem as load_latest_prices()'s bootstrap fallback. Falls back to
+    data/dashboard_entry_history.json, a single deliberately-committed,
+    non-timestamped copy of this manager's real history -- not a new privacy
+    decision, since this exact data is already published on the public
+    manager-history GitHub Pages page linked throughout this app; this is
+    just giving the dashboard tab the same data that page already has.
+    Refreshed by hand/CI, same as the bootstrap fallback -- goes stale
+    between refreshes but only for PAST seasons, which don't change once
+    finished anyway."""
     pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "entry", str(entry_id), "history.json")
     paths = sorted(glob.glob(pattern))
-    return paths[-1] if paths else None
+    if paths:
+        return paths[-1]
+    if os.path.exists(_DASHBOARD_ENTRY_HISTORY_FALLBACK):
+        return _DASHBOARD_ENTRY_HISTORY_FALLBACK
+    return None
 
 
 @st.cache_data
@@ -540,15 +600,37 @@ def render_pitch(squad: pd.DataFrame, top_player_badge: str = None) -> None:
     st.markdown(pitch_html, unsafe_allow_html=True)
 
 
-st.title("⚽ FPL Analytics")
-st.caption(
-    "Expected-points model, squad optimizer, and chip advisor for Fantasy Premier League. "
-    "The 2026-27 season hasn't started yet, so every tool below runs against historical "
-    "seasons as a working demo — this becomes a live tool once real gameweeks exist."
-)
+st.markdown("""
+<div class="app-hero">
+<h1>⚽ FPL Analytics</h1>
+<p>Expected-points model, squad optimizer, and chip advisor for Fantasy Premier League —
+built on the live FPL API, not a third-party scrape. The 2026-27 season hasn't started yet,
+so every tool below runs against historical seasons as a working demo; it becomes a live
+tool automatically once real gameweeks exist.</p>
+</div>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("### ⚽ FPL Analytics")
+    st.caption("Model-driven FPL squad, transfer, and chip planning.")
+    st.divider()
+    st.markdown(
+        "**Pipeline**\n\n"
+        "1. Live FPL API collector\n"
+        "2. Unified historical dataset\n"
+        "3. Feature engineering\n"
+        "4. Trained LightGBM model\n"
+        "5. Squad/transfer optimizer\n"
+        "6. Chip-timing advisor"
+    )
+    st.divider()
+    st.markdown(
+        "[GitHub repo](https://github.com/lucifer0096/FPL-Analytics) · "
+        "[Manager history page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)"
+    )
 
 tab_overview, tab_squad, tab_transfers, tab_chips, tab_model, tab_history = st.tabs(
-    ["Overview", "Squad Builder", "Transfers", "Chip Advisor", "Model Performance", "Manager History"]
+    ["📋 Overview", "🧠 Squad Builder", "🔁 Transfers", "🃏 Chip Advisor", "📈 Model Performance", "🏆 Manager History"]
 )
 
 # =============================================================================
