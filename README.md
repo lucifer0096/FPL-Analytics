@@ -2,6 +2,8 @@
 
 A Fantasy Premier League expected-points model, squad optimizer, and dashboard, built on the free public FPL API — started because [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League) (the community dataset this project used historically) is archived at the end of the 2024-25 season and won't be updated for 2025-26 onward.
 
+**[View the manager history page →](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)**
+
 ## Status
 
 **Stage 1 (in progress): data collector.** A lightweight client for the official FPL API (`bootstrap-static`, `element-summary`, `fixtures`, `entry`) that snapshots each gameweek's data to disk as the season progresses, since the live API only exposes current state, not history.
@@ -63,7 +65,7 @@ python src/collector/snapshot.py --force       # always snapshot, ignoring saved
 
 ## Manager History
 
-[`docs/my-fpl-history.html`](docs/my-fpl-history.html) is a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Open it directly in a browser, or view it live via GitHub Pages once enabled for this repo. The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
+**[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
 
 ## Future Improvements
 
