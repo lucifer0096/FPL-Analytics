@@ -110,23 +110,36 @@ Player-level features are grouped by `player_code` (not `element` — see the ca
 python src/model/train.py
 ```
 
-Trains a LightGBM regressor on a fixed allowlist of pre-match-known features (not an exclusion list — a new leaky column added later can't silently become a model input). Uses a **chronological** split, not a random one: everything before 2024-25 trains the model, 2024-25 is the validation season, and 2025-26 is held out entirely, untouched by any training or tuning decision, as a true final check once the model is otherwise finalized. A random split would let the model "see the future" within a season.
+Trains LightGBM models on a fixed allowlist of pre-match-known features (not an exclusion list — a new leaky column added later can't silently become a model input). Uses a **chronological** split, not a random one: everything before 2024-25 trains the models, 2024-25 is the validation season, and 2025-26 is held out entirely, untouched by any training or tuning decision, as a true final check once the model is otherwise finalized. A random split would let the model "see the future" within a season.
+
+**Two model architectures, compared directly:**
+- **Single-stage** — one LightGBM regressor predicts `total_points` for every row.
+- **Two-stage** — since ~64% of rows are players who didn't play that gameweek at all, this splits the problem into a play classifier (P(plays), AUC 0.931) and a points-conditional-on-playing regressor, combined as `P(plays) × E[points | plays]`, on the hypothesis that a single regressor was spending most of its error budget on the play/didn't-play distinction. **Result: this didn't help** — two-stage MAE (1.001) barely beat single-stage (1.003). The single model was already implicitly learning that distinction well via its existing minutes-based features. Kept in the pipeline and reported on every run as a documented negative result, not discarded.
 
 **Two baselines, reported with different confidence:**
 - A genuinely leak-free naive baseline — the player's own rolling 5-gameweek average (already a model feature, shifted by 1 gameweek).
 - FPL's own published `xP`. This one carries an explicit caveat from the data source's own maintainer: `xP` is scraped from FPL's `ep_this` field, and since the scraper runs after each gameweek ends, the archived value may contain information FPL updated post-match — the update cadence for that field isn't documented. This makes it an informative but not fully trustworthy comparison, not a guaranteed-clean pre-match target. Reported as such rather than treated as ground truth.
 
-**Current validation results (2024-25 season):**
+**Current validation results (2024-25 season, full dataset):**
 
 | | MAE | RMSE |
 |---|---|---|
-| Trained model | 1.003 | 1.921 |
+| Single-stage model | 1.003 | 1.921 |
+| Two-stage model | 1.001 | 1.922 |
 | Naive baseline (rolling-5 average) | 1.052 | 2.069 |
 | FPL's own xP (caveat above) | 0.904 | 1.757 |
 
-The model beats the clean naive baseline, which is the trustworthy comparison. It doesn't yet beat FPL's own xP, though that comparison isn't fully apples-to-apples given the caveat above — a real gap remains either way, and closing it is the next round of work (see Future Improvements).
+Both models beat the clean naive baseline. Neither yet beats FPL's own xP overall — but restricting to rows where the player actually played tells a different story:
 
-Highest-importance features in the current model: `ict_index_avg_last_5`, `bps_avg_last_5`, `ict_index_avg_last_3`, `career_gw_count`, `bps_avg_last_3` — the rolling advanced-stat averages dominate over the newer team-form and fixture-difficulty features.
+| (played rows only, n=11,566) | MAE |
+|---|---|
+| Single-stage model | 1.839 |
+| Naive baseline | 2.053 |
+| FPL's own xP | 1.759 |
+
+The gap to FPL's xP shrinks from ~0.10 (full dataset) to ~0.08 (played only) — most of the overall gap is concentrated in non-playing rows, where FPL's xP likely draws on real injury/team-news signals (press conferences, training reports) that a model built purely on historical box-score stats has no way to see. This reframes the next step: closing the remaining gap isn't primarily a modeling problem, it's a data problem — see Future Improvements.
+
+Highest-importance features in the single-stage model: `ict_index_avg_last_5`, `bps_avg_last_5`, `ict_index_avg_last_3`, `career_gw_count`, `bps_avg_last_3` — the rolling advanced-stat averages dominate over the newer team-form and fixture-difficulty features.
 
 ## Manager History
 
@@ -134,7 +147,8 @@ Highest-importance features in the current model: `ict_index_avg_last_5`, `bps_a
 
 ## Future Improvements
 
-- Close the gap to FPL's own xP baseline — try adding `value` (price) as a feature, tuning LightGBM's hyperparameters, and/or a two-stage model (predict minutes/start probability first, then points conditional on playing), since ~64% of validation rows are players who didn't play that gameweek at all.
+- The remaining gap to FPL's xP is concentrated in non-playing rows (see Model Training) — likely needs a real availability/team-news signal (injury status, press-conference reports, starting-XI news close to the deadline) rather than more historical-stats feature engineering, since that gap doesn't look like a modeling problem.
+- Try adding `value` (price) as a feature and tuning LightGBM's hyperparameters on the played-only subset, where the model is already closer to FPL's baseline.
 - Consider a secondary model or extra features using xG/xA for 2022-23 onward once the core model is validated, since that signal is only available for a third of the training window.
 - Run the model against the 2025-26 final holdout only once no further tuning decisions remain, to get an honest read on generalization.
 - Build a squad optimizer (integer/linear programming) that picks the best 15-man squad under budget and formation constraints using model predictions.
