@@ -46,7 +46,7 @@ VAASTAV_ROOT = os.environ.get("VAASTAV_DATA_ROOT", r"E:\Fantasy-Premier-League\d
 
 ALL_SEASONS = [
     "2016-17", "2017-18", "2018-19", "2019-20",
-    "2020-21", "2021-22", "2022-23", "2023-24", "2024-25",
+    "2020-21", "2021-22", "2022-23", "2023-24", "2024-25", "2025-26",
 ]
 
 # Present in merged_gw.csv for every season 2016-17 through 2024-25.
@@ -159,6 +159,16 @@ def load_season(season: str) -> pd.DataFrame:
     if unmatched:
         print(f"  WARNING [{season}]: {unmatched} rows have no player_code match "
               f"(player left the game mid-season and dropped from players_raw.csv?)")
+
+    # FPL introduced a "pick a Manager" feature in 2024-25 (position == "AM"):
+    # a real-life manager selectable alongside your 15 players, scored on
+    # completely different rules. Not a player -- excluded from this player-
+    # performance dataset entirely, not just at training time, so nothing
+    # downstream (feature engineering included) has to special-case it.
+    n_managers = (df["position"] == "AM").sum()
+    if n_managers:
+        print(f"  [{season}]: excluding {n_managers} manager rows (position == 'AM')")
+        df = df[df["position"] != "AM"].reset_index(drop=True)
 
     df["season"] = season
     return df
