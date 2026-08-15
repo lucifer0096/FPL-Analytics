@@ -8,7 +8,7 @@ A Fantasy Premier League expected-points model, squad optimizer, and dashboard, 
 
 **Stage 1 (done): data collector.** A lightweight client for the official FPL API (`bootstrap-static`, `element-summary`, `fixtures`, `entry`) that snapshots each gameweek's data to disk as the season progresses, since the live API only exposes current state, not history. Runs dynamically via GitHub Actions — see [Automated collection](#automated-collection) below.
 
-**Stage 2 (in progress): expected-points (xP) model.** Historical data loading is done — 205,835 player-gameweek rows unified across all 9 tracked seasons (2016-17 to 2024-25). See [Historical Training Data](#historical-training-data) below. Feature engineering and training are next.
+**Stage 2 (in progress): expected-points (xP) model.** Historical data loading and feature engineering are done — 205,835 player-gameweek rows across all 9 tracked seasons (2016-17 to 2024-25), with rolling form and availability features built on top. See [Historical Training Data](#historical-training-data) and [Feature Engineering](#feature-engineering) below. Model training is next.
 
 Planned after that: a squad optimizer, then a live dashboard.
 
@@ -21,10 +21,11 @@ FPL-Analytics/
 │   │   ├── fpl_api.py         # Thin client for the FPL API endpoints
 │   │   └── snapshot.py        # Snapshots current season data to data/raw/
 │   └── model/
-│       └── load_historical.py # Loads/unifies 9 seasons of vaastav data for training
+│       ├── load_historical.py # Loads/unifies 9 seasons of vaastav data for training
+│       └── features.py        # Rolling form, availability, and gw-count features
 ├── data/
 │   ├── raw/                # Gitignored — raw API snapshots, regenerate anytime
-│   └── processed/          # Gitignored — historical_gw.parquet, regenerate anytime
+│   └── processed/          # Gitignored — historical_gw.parquet, features.parquet
 ├── docs/
 │   └── my-fpl-history.html # Manager history page, served via GitHub Pages
 ├── notebooks/               # EDA and model development
@@ -81,14 +82,27 @@ Two real data-quality issues surfaced and fixed while building this loader, both
 - **`team` was two different types across seasons** — a numeric, season-scoped id pre-2020-21, a name string from 2020-21 onward. Concatenating as-is broke parquet serialization; older seasons' ids are now resolved to the same name strings via `master_team_list.csv`.
 - **`element` (the in-file player id) is reassigned every season** — id `1` is a different real player in each of the 9 seasons. Verified directly: Salah's `element` changed every year (234, 253, 191, 254, 233, 283, 308, 328) while `players_raw.csv`'s `code` field stayed fixed at 118748 throughout. `player_code` is now joined in as the stable cross-season identifier — any rolling/lagged feature must group by this, not `element`.
 
+## Feature Engineering
+
+```bash
+python src/model/features.py
+```
+
+Builds the actual predictive features on top of the unified historical table, saved to `data/processed/features.parquet`:
+- Rolling 3- and 5-gameweek averages for points, minutes, BPS, and ICT index
+- Last-gameweek minutes and a "started" flag, to capture short-term availability separate from a season-long average
+- Career and season-to-date gameweek counts (season count resets at each season boundary; career count doesn't)
+
+Everything is grouped by `player_code` (not `element` — see the caveat above) and shifted by one gameweek before any rolling calculation, so a gameweek's own outcome can never leak into its own feature row. Verified two ways: a built-in check confirms zero rows at a player's first-ever tracked gameweek still carry a non-null rolling average (which would indicate leakage), and Salah's first five gameweeks of 2017-18 were hand-checked against the actual output (e.g. `total_points_avg_last_3` at GW5 = 4.33, matching (1+11+1)/3 from GW2–4, correctly excluding GW5's own score). Rolling form also correctly carries across season boundaries — a player's form entering a new season's GW1 reflects their last games of the previous season rather than resetting to null.
+
 ## Manager History
 
 **[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
 
 ## Future Improvements
 
-- Feature engineering: rolling form, fixture difficulty, home/away, minutes trend — grouped by `player_code` (see caveat above), not raw per-gameweek stats.
-- Train the xP model (gradient boosting or similar) on the unified 9-season dataset, validated against the FPL API's own naive `xP` field as a baseline.
+- Add fixture difficulty and home/away as features (not yet included — currently only player-form and availability features exist).
+- Train the xP model (gradient boosting or similar) on the unified 9-season feature set, validated against the FPL API's own naive `xP` field as a baseline.
 - Consider a secondary model or extra features using xG/xA for 2022-23 onward once the core model is validated, since that signal is only available for a third of the training window.
 - Build a squad optimizer (integer/linear programming) that picks the best 15-man squad under budget and formation constraints using model predictions.
 - Build a live dashboard (Streamlit) showing current-gameweek predictions, transfer suggestions, and how a manager's actual picks compare to what the model would have chosen.
