@@ -12,7 +12,9 @@ A Fantasy Premier League expected-points model, squad optimizer, and dashboard, 
 
 **Stage 3 (done): squad optimizer.** Squad builder, transfer optimizer, and chip-timing advisor, all encoding FPL's real rules (verified against the live API, not assumed) and tested against real historical data. See [Squad Optimizer](#squad-optimizer) below.
 
-Planned next: wire live 2026-27 predictions into the optimizer once the season starts, then a live dashboard.
+**Stage 4 (done): dashboard.** A Streamlit app tying the model, optimizer, and manager history together. See [Dashboard](#dashboard) below.
+
+Planned next: wire live 2026-27 predictions into the optimizer/dashboard once the season starts (first fixture 21 Aug 2026).
 
 ## Project Structure
 
@@ -33,6 +35,8 @@ FPL-Analytics/
 ├── data/
 │   ├── raw/                # Gitignored — raw API snapshots, regenerate anytime
 │   └── processed/          # Gitignored — historical_gw.parquet, features.parquet
+├── app/
+│   └── app.py              # Streamlit dashboard (model, optimizer, chips, manager history)
 ├── docs/
 │   └── my-fpl-history.html # Manager history page, served via GitHub Pages
 ├── notebooks/               # EDA and model development
@@ -204,9 +208,27 @@ Ranks candidate gameweeks for each chip, given per-gameweek player projections t
 
 Verified against real historical data (2025-26, squad built at GW10, projected across GW10–14): real, plausible players surface as Triple Captain candidates (Haaland 9.6 pts, Gabriel dos Santos Magalhães 11.0 pts), Bench Boost values differ meaningfully by gameweek, and Free Hit correctly identifies GW14 as the week the squad had drifted furthest from optimal (34.0-point gap).
 
+## Dashboard
+
+```bash
+streamlit run app/app.py
+```
+
+A Streamlit app with six tabs:
+- **Overview** — pipeline summary and headline stats.
+- **Squad Builder** — pick a historical season/gameweek, build the optimal squad for it.
+- **Transfers** — using the squad just built, find the best transfer(s) into the following gameweek.
+- **Chip Advisor** — using the squad just built, rank the next few gameweeks for Bench Boost, Triple Captain, and Free Hit.
+- **Model Performance** — the validation table and played-vs-full-dataset breakdown from Model Training.
+- **Manager History** — the same season-by-season points/rank chart as the standalone [manager history page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html), inline.
+
+**Every tool in this app currently runs against historical seasons, not live 2026-27 data** — the season hasn't started yet (first fixture 21 Aug 2026), so there's no rolling form or fixture history for any player this season. The Overview tab states this explicitly rather than silently showing meaningless pre-season numbers. Squad Builder, Transfers, and Chip Advisor are chained via session state — build a squad in one tab, and the other two operate on that same squad — the same pattern used throughout this project's test scripts (`test_optimizer.py`, `test_chips.py`).
+
+Verified end-to-end: ran the app headlessly (clean startup, no traceback), and separately exercised all three interactive code paths (squad build, transfer optimization, chip suggestions) outside Streamlit to confirm no runtime errors, reproducing the same real results seen in earlier testing.
+
 ## Manager History
 
-**[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
+**[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The same data is also shown inline in the [Dashboard](#dashboard)'s Manager History tab. Both are hardcoded from a point-in-time snapshot rather than fetched live — see Future Improvements for reading directly from the collector's saved history instead.
 
 ## Future Improvements
 
@@ -214,9 +236,10 @@ Verified against real historical data (2025-26, squad built at GW10, projected a
 - Try adding `value` (price) as a feature and tuning LightGBM's hyperparameters on the played-only subset, where the model is already closer to FPL's baseline.
 - Consider a secondary model or extra features using xG/xA for 2022-23 onward once the core model is validated, since that signal is only available for a third of the training window.
 - Run the model against the 2025-26 final holdout only once no further tuning decisions remain, to get an honest read on generalization.
-- Wire the trained model's live-gameweek predictions into the optimizer/transfer/chip modules once the 2026-27 season starts and the collector has real per-gameweek data to predict from — currently only tested against historical data and a meaningless pre-season player pool.
+- Wire the trained model's live-gameweek predictions into the optimizer/transfer/chip modules AND the dashboard once the 2026-27 season starts and the collector has real per-gameweek data to predict from — currently everything runs against historical data or a meaningless pre-season player pool.
 - Build a real multi-gameweek lookahead for Wildcard timing — the current chip advisor explicitly flags its Wildcard suggestion as a weaker single-gameweek-gap signal, not the multi-week strategic value a permanent squad change actually unlocks.
-- Track chip/free-transfer availability across a season (which chips are still unused this half, how many free transfers are currently banked) rather than requiring the caller to pass those in by hand each time.
-- Build a live dashboard (Streamlit) showing current-gameweek predictions, transfer suggestions, chip-timing recommendations, and how a manager's actual picks compare to what the model would have chosen.
+- Track chip/free-transfer availability across a season (which chips are still unused this half, how many free transfers are currently banked) rather than requiring the caller to pass those in by hand each time — the dashboard's transfer tab currently asks the user to enter free transfers manually every time.
+- Make the dashboard's Manager History tab and the standalone `docs/my-fpl-history.html` page both read live from the collector's saved entry history instead of each carrying its own hardcoded season data.
 - Once there's a processed, league-wide dataset (no personal data), commit it back to the repo each run like NZ-Jobs-Dashboard's sync workflow does, rather than only uploading artifacts.
+- Deploy the dashboard (Streamlit Community Cloud, matching the pattern used for other projects in this account's [data-portfolio](https://github.com/lucifer0096/data-portfolio) repo) so it's a live link, not just something run locally.
 - Once the model and dashboard are solid, port a clean version of this project into the main [data-portfolio](https://github.com/lucifer0096/data-portfolio) repo.
