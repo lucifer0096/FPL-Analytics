@@ -103,6 +103,52 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
     ]
 
 
+MIN_MINUTES_FOR_SEASON_RATE = 450  # ~5 full matches -- below this, a per-90 rate is too noisy to trust (a single 1-minute cameo goal would otherwise show as an absurd rate)
+
+
+@st.cache_data
+def season_pool(df: pd.DataFrame, season: str) -> pd.DataFrame:
+    """Build a 'Team of the Season' player pool for an ALREADY-COMPLETED season --
+    this is a look-back at who actually performed best, not a prediction, so it
+    uses each player's real total_points and minutes across every gameweek
+    played, not a rolling window or the xP model (which exist to estimate an
+    UNKNOWN future gameweek; there's nothing unknown here).
+
+    predicted_points here is actually points-per-90-minutes over the full
+    season, not a total -- dividing by 38 (or by however many GWs the dataset
+    has) would unfairly punish a player who missed matches to injury/rotation
+    relative to one who started every game, when both may have been equally
+    effective per minute on the pitch. Players below MIN_MINUTES_FOR_SEASON_RATE
+    total minutes are excluded entirely, not just down-weighted -- a small
+    sample produces an unreliable rate (e.g. one 1-minute cameo goal would
+    otherwise look like a 90-point-per-90 season)."""
+    sub = df[df["season"] == season].copy()
+    last_gw = sub["GW"].max()
+
+    totals = sub.groupby("player_code").agg(
+        total_points_sum=("total_points", "sum"),
+        minutes_sum=("minutes", "sum"),
+    )
+    totals = totals[totals["minutes_sum"] >= MIN_MINUTES_FOR_SEASON_RATE]
+    totals["points_per_90"] = totals["total_points_sum"] / (totals["minutes_sum"] / 90.0)
+
+    latest = (
+        sub[sub["GW"] == last_gw]
+        .drop_duplicates(subset="player_code")
+        .set_index("player_code")[["name", "position", "team", "value"]]
+    )
+
+    merged = totals.join(latest, how="inner").reset_index()
+    merged["player_id"] = merged["player_code"]
+    merged["cost"] = merged["value"] / 10.0
+    merged["predicted_points"] = merged["points_per_90"]
+
+    return merged[
+        ["player_id", "name", "position", "team", "cost", "predicted_points",
+         "total_points_sum", "minutes_sum"]
+    ]
+
+
 @st.cache_data
 def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
     """Build a 2026-27 pre-season player pool: each player's LIVE current price
@@ -169,18 +215,27 @@ def _latest_bootstrap_path() -> str:
     )
 
 
-def _player_card_html(row: pd.Series) -> str:
-    """One player's shirt-style card: name, price, predicted points.
+def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
+    """One player's shirt-style card: name, price, predicted points, and an
+    optional corner badge (e.g. MVP / Player of the Week) for the single
+    highest-predicted_points player in the squad.
 
     IMPORTANT: this is passed to st.markdown(unsafe_allow_html=True), which
     runs the string through Markdown parsing BEFORE rendering HTML -- Markdown
     treats 4+ leading spaces as a literal code block, so any indentation here
     (however readable in Python) prints as visible text on the page instead of
     rendering as HTML. Every line must start at column 0, no exceptions."""
+    badge_html = (
+        f'<div title="{badge_label}" style="position: absolute; top: -8px; right: -6px; '
+        f'background: #ffb300; color: #1a1a1a; border-radius: 50%; width: 20px; height: 20px; '
+        f'font-size: 12px; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">⭐</div>'
+    ) if badge_label else ""
     return (
-        f'<div style="background: rgba(255,255,255,0.94); border-radius: 8px; '
+        f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
         f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
         f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
+        f'{badge_html}'
         f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
         f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
         f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
@@ -190,11 +245,18 @@ def _player_card_html(row: pd.Series) -> str:
     )
 
 
-def render_pitch(squad: pd.DataFrame) -> None:
+def render_pitch(squad: pd.DataFrame, top_player_badge: str = None) -> None:
     """A real FPL-style pitch layout: starting XI positioned by row (GK at the
     back, then DEF/MID/FWD moving up the pitch, formation read directly from
     the squad rather than assumed), with the 4 bench players shown below in
     their own strip.
+
+    top_player_badge, if given, is the label ("MVP" for a full-season pool,
+    "Player of the Week" for a single-gameweek pool) shown on the single
+    highest-predicted_points player in the squad -- the badge's meaning
+    depends on what predicted_points means for that pool, so the caller
+    (which knows which Squad Builder mode built this squad) decides the label
+    rather than this function guessing from the data alone.
 
     IMPORTANT: every line of HTML built here must start at column 0 -- see
     _player_card_html's docstring for why (Markdown-then-HTML rendering via
@@ -202,12 +264,18 @@ def render_pitch(squad: pd.DataFrame) -> None:
     starters = squad[squad["in_starting_xi"]]
     bench = squad[~squad["in_starting_xi"]]
 
+    top_player_id = squad.loc[squad["predicted_points"].idxmax(), "player_id"] if top_player_badge and len(squad) else None
+
+    def _card(row):
+        badge = top_player_badge if row["player_id"] == top_player_id else None
+        return _player_card_html(row, badge)
+
     rows_html = ""
     for pos in ["GK", "DEF", "MID", "FWD"]:
         pos_players = starters[starters["position"] == pos]
         if pos_players.empty:
             continue
-        cards = "".join(_player_card_html(r) for _, r in pos_players.iterrows())
+        cards = "".join(_card(r) for _, r in pos_players.iterrows())
         rows_html += (
             '<div style="display: flex; justify-content: center; gap: 14px; '
             f'margin: 14px 0; flex-wrap: wrap;">{cards}</div>'
@@ -217,7 +285,7 @@ def render_pitch(squad: pd.DataFrame) -> None:
         str((starters["position"] == pos).sum()) for pos in ["DEF", "MID", "FWD"]
     )
 
-    bench_cards = "".join(_player_card_html(r) for _, r in bench.iterrows())
+    bench_cards = "".join(_card(r) for _, r in bench.iterrows())
 
     pitch_html = (
         '<div style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
@@ -298,7 +366,7 @@ with tab_squad:
 
     mode = st.radio(
         "Player pool",
-        ["Historical gameweek", "2026-27 pre-season (live prices)", "My squad (enter manually)"],
+        ["Historical gameweek", "Team of the Season", "2026-27 pre-season (live prices)", "My squad (enter manually)"],
         key="squad_mode",
         horizontal=True,
     )
@@ -322,13 +390,32 @@ with tab_squad:
         gw = col_b.slider("Gameweek", 1, max_gw, min(20, max_gw), key="squad_gw")
         pool = gw_pool(df, season, gw)
         pool_source = (season, gw)
-        st.caption(f"Player pool: {len(pool)} players, using each player's rolling-5 average as a predicted-points stand-in.")
+        model_note = "the trained xP model (fixture difficulty, form, minutes)" if _get_xp_model() is not None else "each player's rolling-5 average as a fallback (no trained model file found)"
+        st.caption(f"Player pool: {len(pool)} players, predicted-points from {model_note} for this specific past gameweek.")
 
         if pool is not None and st.button("Build optimal squad", key="build_squad_btn"):
             with st.spinner("Solving..."):
                 squad = optimize_squad(pool)
             st.session_state["built_squad"] = squad
             st.session_state["built_squad_season_gw"] = pool_source
+
+    elif mode == "Team of the Season":
+        season = st.selectbox("Season", SEASON_ORDER, index=SEASON_ORDER.index("2025-26"), key="tots_season")
+        pool = season_pool(df, season)
+        pool_source = None  # a full-season squad isn't tied to one gameweek -- Transfers/Chips need that, so treat this like pre-season/manual mode
+        st.caption(
+            f"Player pool: {len(pool)} players who played at least {MIN_MINUTES_FOR_SEASON_RATE} minutes in {season}. "
+            f"This is a LOOK BACK at who actually performed best that season (real points-per-90-minutes over every "
+            f"gameweek played, at their final-gameweek price), not a prediction — the season is already complete, "
+            f"so there's nothing to predict. Points-per-90 (not points-per-38-gameweeks) so a player who missed "
+            f"matches to injury/rotation isn't unfairly penalized against one who started every game."
+        )
+
+        if pool is not None and st.button("Build team of the season", key="build_tots_btn"):
+            with st.spinner("Solving..."):
+                squad = optimize_squad(pool)
+            st.session_state["built_squad"] = squad
+            st.session_state["built_squad_season_gw"] = "completed_season"  # distinct from pre-season/manual's None -- there's no live pool to fall back to for an already-finished season
 
     elif mode == "2026-27 pre-season (live prices)":
         try:
@@ -432,7 +519,14 @@ with tab_squad:
             f"{squad['predicted_points'].sum():.1f} total predicted points"
         )
 
-        render_pitch(squad)
+        squad_source = st.session_state["built_squad_season_gw"]
+        if squad_source == "completed_season":
+            badge_label = "MVP — highest points-per-90 this season"
+        elif isinstance(squad_source, tuple):
+            badge_label = "Player of the Week — top predicted scorer this gameweek"
+        else:
+            badge_label = None  # pre-season/manual mode -- predicted_points is last season's closing form, not a real per-GW or full-season figure, so an MVP/POTW label would overstate what it means
+        render_pitch(squad, top_player_badge=badge_label)
 
         with st.expander("Full squad table"):
             display = squad.copy()
@@ -461,7 +555,15 @@ with tab_transfers:
         df = load_features()
         current_squad = st.session_state["built_squad"]
 
-        if st.session_state["built_squad_season_gw"] is None:
+        if st.session_state["built_squad_season_gw"] == "completed_season":
+            st.info(
+                "This squad is a **Team of the Season** look-back at an already-completed "
+                "season — there's no 'next gameweek' to transfer into. Build a squad from "
+                "the Historical gameweek, pre-season, or manual-entry modes in the Squad "
+                "Builder tab to try this tool."
+            )
+            next_pool = None
+        elif st.session_state["built_squad_season_gw"] is None:
             # Pre-season or manually-entered squad: no "next historical gameweek"
             # exists, so check against the same LIVE pool the squad was built
             # from instead (re-fetched fresh, in case prices moved).
@@ -529,6 +631,13 @@ with tab_chips:
 
     if "built_squad" not in st.session_state:
         st.warning("Build a squad in the **Squad Builder** tab first.")
+    elif st.session_state["built_squad_season_gw"] == "completed_season":
+        st.info(
+            "This squad is a **Team of the Season** look-back at an already-completed "
+            "season — there are no upcoming gameweeks left to project chip timing "
+            "against. Build a squad from a historical gameweek in the Squad Builder "
+            "tab to try this tool."
+        )
     elif st.session_state["built_squad_season_gw"] is None:
         st.info(
             "Chip timing needs a run of several **upcoming** gameweeks to project against, "
