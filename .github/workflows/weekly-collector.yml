@@ -1,14 +1,17 @@
-name: Weekly FPL Data Collection
+name: FPL Data Collection
 
 on:
   workflow_dispatch:
   schedule:
-    # Mondays 06:00 UTC — after the weekend's gameweek fixtures have finished
-    - cron: "0 6 * * 1"
+    # Daily at 06:00 UTC. The collector itself checks the FPL API's gameweek
+    # finished/data_checked flags and only does a full snapshot when a new
+    # gameweek is actually ready — a fixed weekly cron would miss rearranged
+    # fixtures, midweek gameweeks, and blank/double gameweeks.
+    - cron: "0 6 * * *"
 
 jobs:
   collect:
-    name: Run collector and upload snapshot
+    name: Check and collect if a new gameweek is ready
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +28,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore collector state
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw/collector_state.json
+          key: fpl-collector-state-${{ github.run_id }}
+          restore-keys: |
+            fpl-collector-state-
+
+      - name: Check whether a new gameweek is ready
+        id: check
+        run: |
+          if python src/collector/snapshot.py --check-only; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run collector
+        if: steps.check.outputs.needed == 'true'
         env:
           # Optional: set an FPL_ENTRY_ID repository secret to also snapshot a
           # manager's team history/picks. Skipped automatically if unset.
@@ -33,8 +54,16 @@ jobs:
         run: python src/collector/snapshot.py
 
       - name: Upload data snapshot as artifact
+        if: steps.check.outputs.needed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fpl-data-snapshot-${{ github.run_id }}
           path: data/raw/
           retention-days: 90
+
+      - name: Save collector state
+        if: steps.check.outputs.needed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw/collector_state.json
+          key: fpl-collector-state-${{ github.run_id }}

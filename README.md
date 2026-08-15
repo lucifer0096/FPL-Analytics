@@ -47,12 +47,24 @@ This writes to `data/raw/{season}/`:
 - `entry/{entry_id}/history.json` — a manager's season-by-season totals + current-season gameweek record
 - `entry/{entry_id}/picks/gw{n}.json` — a manager's squad for each finished gameweek
 
-Run this periodically (e.g. weekly, after each gameweek's matches finish) to build up the season's history locally.
+### Dynamic scheduling
+
+`snapshot.py` doesn't assume gameweeks land on a fixed day — fixtures get rearranged, some gameweeks span midweek, and blank/double gameweeks skip or double up entirely. Instead, each run checks the FPL API's own `finished` and `data_checked` flags per gameweek and only does the expensive part (fetching every player's history) when a new gameweek is actually ready. State (the last gameweek snapshotted) is tracked in `data/raw/collector_state.json`.
+
+```bash
+python src/collector/snapshot.py --check-only  # exit 0 if a snapshot is needed, 1 if not; no run
+python src/collector/snapshot.py               # normal run: checks, snapshots only if needed
+python src/collector/snapshot.py --force       # always snapshot, ignoring saved state
+```
+
+### Automated collection
+
+`.github/workflows/weekly-collector.yml` runs daily (06:00 UTC) via GitHub Actions: it runs `--check-only` first, and only does a full snapshot when a new gameweek is ready, uploading the result as a 90-day build artifact. Collector state is cached between runs so the check works across separate CI runs, not just locally. To also capture your own team's history/picks, add an `FPL_ENTRY_ID` repository secret.
 
 ## Future Improvements
 
 - Build the xP model (gradient boosting or similar) on 2022-23–2024-25 data, validated against the FPL API's own naive `xP` field as a baseline.
 - Build a squad optimizer (integer/linear programming) that picks the best 15-man squad under budget and formation constraints using model predictions.
 - Build a live dashboard (Streamlit) showing current-gameweek predictions, transfer suggestions, and how a manager's actual picks compare to what the model would have chosen.
-- Schedule the collector to run automatically after each gameweek.
+- Once there's a processed, league-wide dataset (no personal data), commit it back to the repo each run like NZ-Jobs-Dashboard's sync workflow does, rather than only uploading artifacts.
 - Once the model and dashboard are solid, port a clean version of this project into the main [data-portfolio](https://github.com/lucifer0096/data-portfolio) repo.

@@ -1,13 +1,19 @@
 """Snapshot the current FPL season's data to disk.
 
-Run this periodically (e.g. weekly, after each gameweek's matches finish) to build
-up a local history of player performance, since the live API only exposes the
-current state, not a queryable history of past API pulls.
+Designed to run on a frequent, cheap schedule (e.g. daily) rather than a fixed
+"weekly" cron time, since gameweeks don't land on a fixed day — fixtures get
+rearranged, some gameweeks span midweek, and blank/double gameweeks skip or double
+up entirely. Instead, each run checks the FPL API's own gameweek-completion flags
+and only does the expensive part (fetching all 587+ players' histories) when a
+gameweek has actually finished and been data-checked since the last successful run.
 
 Usage:
-    python snapshot.py
+    python snapshot.py               # normal run: check, and snapshot if needed
+    python snapshot.py --check-only  # print whether a snapshot is needed, don't run one
+    python snapshot.py --force       # always do a full snapshot, ignoring last-run state
 """
 
+import argparse
 import csv
 import json
 import os
@@ -18,10 +24,32 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fpl_api
 
 RAW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "raw")
+STATE_PATH = os.path.join(RAW_DIR, "collector_state.json")
 
 # Set FPL_ENTRY_ID to snapshot a specific manager's team history/picks alongside the
 # league-wide data. Leave unset to skip that step.
 ENTRY_ID = os.environ.get("FPL_ENTRY_ID")
+
+
+def _load_state() -> dict:
+    if os.path.exists(STATE_PATH):
+        with open(STATE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return {"last_snapshotted_gw": 0}
+
+
+def _save_state(state: dict) -> None:
+    os.makedirs(RAW_DIR, exist_ok=True)
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+
+def _latest_data_checked_gw(bootstrap: dict) -> int:
+    """Highest gameweek id that's both finished and data-checked (bonus points and
+    stats finalized — these can still change for a day or two after 'finished').
+    Returns 0 if none yet."""
+    checked_gws = [e["id"] for e in bootstrap["events"] if e["finished"] and e["data_checked"]]
+    return max(checked_gws, default=0)
 
 
 def _season_label(bootstrap: dict) -> str:
@@ -121,10 +149,35 @@ def snapshot_entry(entry_id: int, season: str, current_gw: int) -> None:
 
 
 def main():
-    print("Fetching bootstrap-static...")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check-only", action="store_true",
+        help="Print whether a new gameweek is ready to snapshot, then exit without doing one."
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Always run a full snapshot, ignoring the last-run state."
+    )
+    args = parser.parse_args()
+
+    print("Fetching bootstrap-static (cheap check)...")
     bootstrap = fpl_api.get_bootstrap_static()
     season = _season_label(bootstrap)
-    print(f"Season detected: {season}")
+    latest_checked_gw = _latest_data_checked_gw(bootstrap)
+
+    state = _load_state()
+    last_snapshotted_gw = state.get("last_snapshotted_gw", 0)
+
+    needs_snapshot = args.force or latest_checked_gw > last_snapshotted_gw
+    print(f"Season: {season} | latest data-checked GW: {latest_checked_gw} | "
+          f"last snapshotted GW: {last_snapshotted_gw} | needs snapshot: {needs_snapshot}")
+
+    if args.check_only:
+        sys.exit(0 if needs_snapshot else 1)
+
+    if not needs_snapshot:
+        print("Nothing new since the last snapshot — skipping the full run.")
+        return
 
     bootstrap_path = snapshot_bootstrap(bootstrap, season)
     print(f"Saved bootstrap snapshot: {bootstrap_path}")
@@ -142,6 +195,9 @@ def main():
         snapshot_entry(int(ENTRY_ID), season, finished_gws)
     else:
         print("FPL_ENTRY_ID not set — skipping manager entry snapshot.")
+
+    _save_state({"last_snapshotted_gw": latest_checked_gw, "season": season})
+    print(f"Updated collector state: last_snapshotted_gw={latest_checked_gw}")
 
 
 if __name__ == "__main__":
