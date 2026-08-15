@@ -16,17 +16,22 @@ of realistic data before trusting it:
    actually selects good players -- not just a constraint-satisfying squad.
 """
 
-import glob
-import json
 import os
 import sys
 
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from optimizer import optimize_squad, POSITION_REQUIREMENTS, MAX_PER_TEAM, DEFAULT_BUDGET
-
-POSITION_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+from optimizer import (
+    optimize_squad,
+    optimize_transfers,
+    load_latest_prices,
+    POSITION_REQUIREMENTS,
+    MAX_PER_TEAM,
+    DEFAULT_BUDGET,
+    POINTS_PER_HIT,
+    SQUAD_SIZE,
+)
 
 HISTORICAL_TEST_SEASON = "2025-26"
 HISTORICAL_TEST_GW = 20
@@ -46,25 +51,22 @@ def load_historical_pool(season: str = HISTORICAL_TEST_SEASON, gw: int = HISTORI
 
 
 def load_player_pool() -> pd.DataFrame:
-    pattern = os.path.join("data", "raw", "*", "bootstrap", "bootstrap_*.json")
-    paths = sorted(glob.glob(pattern))
-    if not paths:
-        raise FileNotFoundError(f"No bootstrap snapshot found matching {pattern}")
-    with open(paths[-1], encoding="utf-8") as f:
-        data = json.load(f)
+    """Live bootstrap pool with `form` as a predicted_points stand-in (form is 0
+    for everyone pre-season -- see this module's docstring). Uses the same
+    latest-snapshot file load_latest_prices() would pick, so both stay in sync."""
+    import glob
+    import json
 
-    teams_by_id = {t["id"]: t["name"] for t in data["teams"]}
-    rows = []
-    for p in data["elements"]:
-        rows.append({
-            "player_id": p["id"],
-            "name": f"{p['first_name']} {p['second_name']}",
-            "position": POSITION_MAP[p["element_type"]],
-            "team": teams_by_id[p["team"]],
-            "cost": p["now_cost"] / 10.0,  # FPL's API stores price in tenths
-            "predicted_points": float(p["form"]) if p["form"] else 0.0,
-        })
-    return pd.DataFrame(rows)
+    pool = load_latest_prices()
+
+    pattern = os.path.join("data", "raw", "*", "bootstrap", "bootstrap_*.json")
+    latest_path = sorted(glob.glob(pattern))[-1]
+    with open(latest_path, encoding="utf-8") as f:
+        data = json.load(f)
+    form_by_id = {p["id"]: (float(p["form"]) if p["form"] else 0.0) for p in data["elements"]}
+    pool["predicted_points"] = pool["player_id"].map(form_by_id)
+
+    return pool
 
 
 def verify_squad(squad: pd.DataFrame) -> None:
@@ -120,3 +122,29 @@ if __name__ == "__main__":
     verify_squad(hist_squad)
     print(f"\nTotal predicted points: {hist_squad['predicted_points'].sum():.1f}")
     print(f"Total cost: £{hist_squad['cost'].sum():.1f}m")
+
+    print(f"\n\n### Test 3: transfer optimizer (GW{HISTORICAL_TEST_GW} squad -> GW{HISTORICAL_TEST_GW + 1} pool) ###\n")
+    next_gw_pool = load_historical_pool(gw=HISTORICAL_TEST_GW + 1)
+    # Only players present in both gameweeks' pools are valid transfer targets/
+    # holdovers -- a player who left the pool (rare, e.g. deregistered) can't be
+    # priced or projected for the next gameweek.
+    common_ids = set(hist_squad["player_id"]) & set(next_gw_pool["player_id"])
+    squad_ids_for_transfer = [pid for pid in hist_squad["player_id"] if pid in common_ids]
+    if len(squad_ids_for_transfer) < len(hist_squad):
+        print(f"Note: {len(hist_squad) - len(squad_ids_for_transfer)} squad player(s) "
+              f"not in the GW{HISTORICAL_TEST_GW + 1} pool, excluded from this test.")
+
+    if len(squad_ids_for_transfer) == SQUAD_SIZE:
+        result = optimize_transfers(
+            current_squad_ids=squad_ids_for_transfer,
+            players=next_gw_pool,
+            free_transfers=1,
+            bank=0.0,
+        )
+        print(f"Transfers out: {result['transfers_out']}")
+        print(f"Transfers in: {result['transfers_in']}")
+        print(f"Paid transfers: {result['num_paid_transfers']} (hit cost: -{result['hit_cost']} pts)")
+        print(f"Net points gain: {result['net_points_gain']:.1f}")
+        verify_squad(result["new_squad"])
+    else:
+        print("Skipping transfer test: squad player set changed too much between gameweeks.")

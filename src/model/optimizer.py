@@ -15,8 +15,55 @@ watchlist -- keeping the solver decoupled from the model makes it usable (and
 testable) even before the model's live-gameweek predictions exist.
 """
 
+import glob
+import json
+import os
+
 import pandas as pd
 import pulp
+
+_POSITION_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+
+
+def load_latest_prices(raw_data_dir: str = None) -> pd.DataFrame:
+    """Load the most recent bootstrap snapshot's player prices (`now_cost`).
+
+    Prices move week to week based on transfer momentum (FPL's own algorithm
+    reacts to transfers_in_event/transfers_out_event), so ANY optimizer call --
+    squad building or transfers -- should be fed prices from the latest
+    collector run, never a cached/stale snapshot. This always picks the most
+    recent bootstrap_*.json by filename (timestamps sort correctly), across
+    every season folder the collector has written, so a call right after a
+    weekly collector run automatically picks up that run's prices with no
+    extra wiring.
+
+    Returns (player_id, name, position, team, cost) -- cost is current price
+    only, not each squad member's individual sell price after the 50% profit
+    fee (see optimize_transfers' sell_price_col parameter for that)."""
+    raw_data_dir = raw_data_dir or os.path.join("data", "raw")
+    pattern = os.path.join(raw_data_dir, "*", "bootstrap", "bootstrap_*.json")
+    paths = sorted(glob.glob(pattern))
+    if not paths:
+        raise FileNotFoundError(
+            f"No bootstrap snapshot found matching {pattern} -- run the collector "
+            f"(src/collector/snapshot.py) at least once first."
+        )
+
+    with open(paths[-1], encoding="utf-8") as f:
+        data = json.load(f)
+
+    teams_by_id = {t["id"]: t["name"] for t in data["teams"]}
+    rows = [
+        {
+            "player_id": p["id"],
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP[p["element_type"]],
+            "team": teams_by_id[p["team"]],
+            "cost": p["now_cost"] / 10.0,  # FPL's API stores price in tenths
+        }
+        for p in data["elements"]
+    ]
+    return pd.DataFrame(rows)
 
 SQUAD_SIZE = 15
 POSITION_REQUIREMENTS = {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}
@@ -25,6 +72,17 @@ DEFAULT_BUDGET = 100.0
 
 STARTING_XI_SIZE = 11
 STARTING_XI_MIN = {"GK": 1, "DEF": 3, "MID": 2, "FWD": 1}
+
+# Verified live against the FPL API's bootstrap-static game_settings (2026-27
+# season), not assumed:
+POINTS_PER_HIT = 4  # cost per transfer beyond the free ones
+MAX_FREE_TRANSFERS_BANKED = 4  # max_extra_free_transfers -> 1 (this week) + 4 banked = 5 max
+SELL_ON_FEE = 0.5  # transfers_sell_on_fee: only 50% of a price RISE is kept on sale
+CHIP_HALVES = {
+    "first_half": (1, 19),   # start_event 1/2, stop_event 19
+    "second_half": (20, 38),  # start_event 20, stop_event 38
+}
+CHIPS = ["wildcard", "freehit", "bboost", "3xc"]  # one of each usable per half
 
 
 def optimize_squad(
@@ -124,3 +182,137 @@ def _select_starting_xi(
         raise RuntimeError(f"Starting XI solver failed (status: {pulp.LpStatus[status]})")
 
     return [pid for pid in player_ids if start[pid].value() == 1]
+
+
+def optimize_transfers(
+    current_squad_ids: list,
+    players: pd.DataFrame,
+    free_transfers: int,
+    bank: float = 0.0,
+    max_paid_transfers: int = 3,
+    id_col: str = "player_id",
+    position_col: str = "position",
+    team_col: str = "team",
+    cost_col: str = "cost",
+    points_col: str = "predicted_points",
+    sell_price_col: str = None,
+) -> dict:
+    """Given an existing 15-man squad and a number of banked free transfers,
+    solve for the transfer(s) -- if any -- that maximize
+    total_predicted_points - POINTS_PER_HIT * paid_transfers.
+
+    IMPORTANT: `players` must carry CURRENT prices, not a stale snapshot -- FPL
+    moves individual players' prices week to week based on transfer momentum, so
+    a squad valuation (and therefore how much budget is actually available for
+    incoming transfers) computed from last week's prices can be wrong. Use
+    load_latest_prices() to always pull the most recent collector snapshot
+    rather than caching a DataFrame across gameweeks.
+
+    `free_transfers` should already reflect FPL's real banking rule (1 per week,
+    capped at MAX_FREE_TRANSFERS_BANKED extra -- i.e. 5 max in a single week, not
+    enforced here since that's a season-long bookkeeping concern for the caller,
+    not something this one-gameweek solver needs to police).
+
+    `max_paid_transfers` bounds the search space -- without a cap the solver could
+    in principle propose overhauling the whole squad for a marginal points gain
+    at a steep hit cost, which is rarely the right real-world call; 3 is a
+    reasonable ceiling for a "how many transfers should I actually make" search.
+
+    `sell_price_col`: FPL only refunds SELL_ON_FEE (50%) of any price RISE since
+    purchase, not the full current price -- pass this column if you have each
+    squad player's actual selling_price (from the FPL API's picks endpoint) for
+    an accurate budget. Falls back to `cost_col` (current price) if not given,
+    which OVERSTATES available budget for any player who's risen in price since
+    being bought -- a known simplification, not a silent bug (see docstring note
+    below and the CAVEAT in this function's return value).
+
+    Returns a dict: {
+        "transfers_out": [player_id, ...],
+        "transfers_in": [player_id, ...],
+        "num_paid_transfers": int,
+        "hit_cost": int,               # points lost to hits
+        "new_squad": DataFrame,        # same shape as optimize_squad's return
+        "net_points_gain": float,      # predicted-points swing minus hit cost
+    }"""
+    if sell_price_col is None:
+        sell_price_col = cost_col
+
+    current_set = set(current_squad_ids)
+    if not current_set.issubset(set(players[id_col])):
+        missing = current_set - set(players[id_col])
+        raise ValueError(f"current_squad_ids contains ids not present in players: {missing}")
+    if len(current_set) != SQUAD_SIZE:
+        raise ValueError(f"current_squad_ids must have exactly {SQUAD_SIZE} players, got {len(current_set)}")
+
+    player_ids = players[id_col].tolist()
+    is_current = {pid: (pid in current_set) for pid in player_ids}
+
+    points = players.set_index(id_col)[points_col].to_dict()
+    cost = players.set_index(id_col)[cost_col].to_dict()
+    sell_price = players.set_index(id_col)[sell_price_col].to_dict()
+    position = players.set_index(id_col)[position_col].to_dict()
+    team = players.set_index(id_col)[team_col].to_dict()
+
+    prob = pulp.LpProblem("fpl_transfer_optimization", pulp.LpMaximize)
+    pick = pulp.LpVariable.dicts("pick", player_ids, cat="Binary")
+    # A "paid hit" indicator per player being brought IN beyond the free
+    # transfers -- modeled via a single aggregate hit count below instead of
+    # per-player, since hits are counted per transfer, not tied to a specific pair.
+    num_transfers = pulp.LpVariable("num_transfers", lowBound=0, upBound=max_paid_transfers + free_transfers, cat="Integer")
+    num_paid = pulp.LpVariable("num_paid", lowBound=0, upBound=max_paid_transfers, cat="Integer")
+
+    # Budget: total spend on incoming/kept players <= bank + sell value recovered
+    # from anyone transferred out. Kept players "cost" their sell price (already
+    # yours, no new spend); new players cost their buy price.
+    prob += pulp.lpSum(
+        pick[pid] * (sell_price[pid] if is_current[pid] else cost[pid])
+        for pid in player_ids
+    ) <= bank + pulp.lpSum(sell_price[pid] for pid in player_ids if is_current[pid])
+
+    prob += pulp.lpSum(pick[pid] for pid in player_ids) == SQUAD_SIZE
+    for pos, quota in POSITION_REQUIREMENTS.items():
+        pos_ids = [pid for pid in player_ids if position[pid] == pos]
+        prob += pulp.lpSum(pick[pid] for pid in pos_ids) == quota
+    for club in set(team.values()):
+        club_ids = [pid for pid in player_ids if team[pid] == club]
+        prob += pulp.lpSum(pick[pid] for pid in club_ids) <= MAX_PER_TEAM
+
+    # Number of transfers = number of currently-owned players NOT kept.
+    prob += num_transfers == pulp.lpSum(1 - pick[pid] for pid in player_ids if is_current[pid])
+    prob += num_paid >= num_transfers - free_transfers
+    prob += num_paid <= max_paid_transfers
+
+    prob += (
+        pulp.lpSum(pick[pid] * points[pid] for pid in player_ids)
+        - POINTS_PER_HIT * num_paid
+    )
+
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
+    if pulp.LpStatus[status] != "Optimal":
+        raise RuntimeError(
+            f"Transfer solver did not find an optimal solution (status: {pulp.LpStatus[status]})."
+        )
+
+    new_squad_ids = [pid for pid in player_ids if pick[pid].value() == 1]
+    transfers_out = sorted(current_set - set(new_squad_ids))
+    transfers_in = sorted(set(new_squad_ids) - current_set)
+    num_paid_actual = max(0, len(transfers_out) - free_transfers)
+
+    new_squad = players[players[id_col].isin(new_squad_ids)].copy()
+    starting_ids = _select_starting_xi(new_squad, id_col, position_col, points_col)
+    new_squad["in_starting_xi"] = new_squad[id_col].isin(starting_ids)
+
+    old_points = sum(points[pid] for pid in current_set)
+    new_points = sum(points[pid] for pid in new_squad_ids)
+    hit_cost = POINTS_PER_HIT * num_paid_actual
+
+    return {
+        "transfers_out": transfers_out,
+        "transfers_in": transfers_in,
+        "num_paid_transfers": num_paid_actual,
+        "hit_cost": hit_cost,
+        "new_squad": new_squad.sort_values(
+            [position_col, points_col], ascending=[True, False]
+        ).reset_index(drop=True),
+        "net_points_gain": (new_points - old_points) - hit_cost,
+    }
