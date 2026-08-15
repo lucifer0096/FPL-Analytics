@@ -38,13 +38,20 @@ st.set_page_config(
 # as an accent (their real brand color, not invented). Kept to CSS only, no
 # custom components, so it degrades gracefully if Streamlit's internal class
 # names shift in a future version -- worst case it looks like plain Streamlit.
+#
+# IMPORTANT: does NOT hardcode .stApp's background -- an earlier version of
+# this forced a dark background unconditionally, which broke the experience
+# for anyone using Streamlit's light theme (metric-card gradients tuned for
+# dark also looked washed out on light). Every color below is deliberately
+# translucent (rgba with a low alpha) or white-text-on-a-solid-gradient
+# (app-hero, which is a fixed-color element by design, same as the pitch
+# view), so it reads correctly against BOTH themes rather than assuming one.
 st.markdown("""
 <style>
-    .stApp { background-color: #0e1117; }
-    h1, h2, h3 { font-family: "Segoe UI", Roboto, sans-serif; }
+    h1, h2, h3, h4 { font-family: "Segoe UI", Roboto, sans-serif; }
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, rgba(42,150,80,0.12), rgba(90,60,180,0.10));
-        border: 1px solid rgba(42,150,80,0.35);
+        background: linear-gradient(135deg, rgba(42,150,80,0.14), rgba(90,60,180,0.12));
+        border: 1px solid rgba(42,150,80,0.4);
         border-radius: 10px;
         padding: 12px 14px 8px 14px;
     }
@@ -70,6 +77,13 @@ st.markdown("""
         color: rgba(255,255,255,0.92);
         margin: 0;
         font-size: 0.95rem;
+    }
+    .section-card {
+        background: rgba(127,127,127,0.06);
+        border: 1px solid rgba(127,127,127,0.15);
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin-bottom: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -272,7 +286,7 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
 
     live["predicted_points"] = live["player_code"].map(closing_form).fillna(0).clip(lower=0)
 
-    return live[["player_id", "name", "position", "team", "cost", "predicted_points"]]
+    return live[["player_id", "name", "position", "team", "cost", "predicted_points", "player_code"]]
 
 
 @st.cache_data
@@ -520,6 +534,26 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">🔍</div>'
         if "scout_reasons" in row.index and row["scout_reasons"] else ""
     )
+    # Real FPL player headshot -- checked directly against the live CDN:
+    # https://resources.premierleague.com/premierleague/photos/players/110x140/p{code}.png
+    # returns 200 for a real player code (confirmed with Raya, code 154561).
+    # `code` is FPL's stable cross-season id (see load_historical.py's
+    # caveat on `element`) -- gw_pool/season_pool already use it AS
+    # player_id directly, so those fall back to player_id below; only the
+    # live-pool functions (preseason_pool/scout_picks_pool) carry a
+    # separate player_code column, since their player_id is FPL's raw
+    # current-season numeric id instead. object-fit: cover crops to the
+    # card's fixed size without distorting a photo's real aspect ratio; a
+    # missing/broken image (some low-profile players have no real photo,
+    # FPL serves a generic placeholder for those, which still loads fine)
+    # is handled by onerror hiding the tag rather than showing a broken-
+    # image icon.
+    photo_code = row["player_code"] if "player_code" in row.index and pd.notna(row.get("player_code")) else row["player_id"]
+    img_html = (
+        f'<img src="https://resources.premierleague.com/premierleague/photos/players/110x140/p{photo_code}.png" '
+        f'style="width: 100%; height: 52px; object-fit: cover; border-radius: 6px; margin-bottom: 2px;" '
+        f'onerror="this.style.display=\'none\'" loading="lazy" />'
+    )
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
         f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
@@ -527,6 +561,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'{badge_html}'
         f'{dreamteam_html}'
         f'{scout_html}'
+        f'{img_html}'
         f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
         f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
         f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
@@ -739,17 +774,20 @@ with tab_squad:
         is_full_season = (gw_start, gw_end) == (1, max_gw)
         pool = season_pool(df, season, gw_start, gw_end)
         window_desc = f"the full {season} season" if is_full_season else f"GW{gw_start}–GW{gw_end} of {season}"
-        st.caption(
-            f"Player pool: {len(pool)} players who appeared at least once across {window_desc}, at the window's "
-            f"final-gameweek price. This is a LOOK BACK at who actually produced the most REAL points in this "
-            f"window, not a prediction — these gameweeks are already complete, so there's nothing to predict. "
-            f"Ranked by total points scored, not a per-game rate — a great rate over a handful of games can't "
-            f"outrank someone who played most of the window and produced far more for a real squad. "
-            f"Points-per-game (FPL's own metric: total points ÷ appearances, shown once a player has a few games "
-            f"to make it trustworthy) is shown on each card as context, not as what drives selection. "
-            f"No budget cap here — this is the best XI the window actually produced, not a squad you could have "
-            f"afforded on day one."
-        )
+        st.caption(f"Player pool: {len(pool)} players who appeared at least once across {window_desc}. A real LOOK BACK, not a prediction — ranked by total points scored, no budget cap.")
+        with st.expander("Why this ranking, and why no budget cap?"):
+            st.markdown(
+                f"This is a LOOK BACK at who actually produced the most REAL points in this "
+                f"window, not a prediction — these gameweeks are already complete, so there's "
+                f"nothing to predict.\n\n"
+                f"Ranked by **total points scored**, not a per-game rate — a great rate over a "
+                f"handful of games can't outrank someone who played most of the window and "
+                f"produced far more for a real squad. Points-per-game (FPL's own metric: total "
+                f"points ÷ appearances, shown once a player has a few games to make it "
+                f"trustworthy) is shown on each card as context, not as what drives selection.\n\n"
+                f"**No budget cap** — this is the best XI the window actually produced, not a "
+                f"squad you could have afforded on day one."
+            )
 
         build_label = "Build team of the season" if is_full_season else f"Build team of GW{gw_start}–{gw_end}"
         if pool is not None and st.button(build_label, key="build_tots_btn"):
@@ -789,17 +827,20 @@ with tab_squad:
             pool = scout_picks_pool(df)
             pool_source = None
             n_reasons = (pool["scout_reasons"] != "").sum()
-            st.caption(
-                f"This project's own take on FPL's editorial 'Scout Picks' — not a scrape of "
-                f"their article (checked: it's not structured API data, and has no stable weekly "
-                f"URL to fetch, only unpredictable per-article ids). Built from real signals instead: "
-                f"same pre-season pool as above, PLUS a boost for a genuinely easy GW1 fixture "
-                f"(against one of this season's actual promoted teams — Hull City, Ipswich Town, "
-                f"Coventry City, verified by diffing this season's team list against last season's) "
-                f"and for confirmed set-piece duty (FPL's own `penalties_order` field). "
-                f"{n_reasons} of {len(pool)} players got a real, shown reason for their boost — "
-                f"see the pitch view once built."
-            )
+            st.caption(f"This project's own take on FPL's editorial 'Scout Picks' — {n_reasons} of {len(pool)} players got a real, shown boost reason (🔍 on their pitch card).")
+            with st.expander("What is this, and why not FPL's actual Scout Picks?"):
+                st.markdown(
+                    "Not a scrape of FPL's real article — checked directly: it's not structured "
+                    "API data, and has no stable weekly URL to fetch, only unpredictable per-"
+                    "article ids.\n\n"
+                    "Built from real signals instead, on top of the same pre-season pool as "
+                    "above:\n"
+                    "- A boost for a genuinely easy **GW1 fixture** against one of this season's "
+                    "actual promoted teams (Hull City, Ipswich Town, Coventry City — verified by "
+                    "diffing this season's team list against last season's).\n"
+                    "- A boost for confirmed **set-piece duty**, via FPL's own `penalties_order` "
+                    "field."
+                )
         except FileNotFoundError as e:
             st.error(str(e))
             pool = None
@@ -975,20 +1016,17 @@ with tab_transfers:
                 free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider")
 
             if unlimited:
-                st.caption(
-                    f"Checking against {pool_label}. Unlimited transfers this gameweek — every transfer "
-                    f"that improves the squad is included, no hit cost, no per-transfer minimum-gain bar "
-                    f"(that bar only exists to protect a SCARCE resource; it doesn't apply when transfers "
-                    f"aren't scarce this gameweek)."
-                )
+                st.caption(f"Checking against {pool_label}. Unlimited transfers this gameweek — no hit cost, no minimum-gain bar.")
             else:
-                st.caption(
-                    f"Checking against {pool_label}. Only recommends a transfer if it clears a real "
-                    f"minimum gain on its own (each transfer judged individually, not as a batch average) "
-                    f"— a hit is only suggested if the gain clearly outweighs its -4pt cost, not just "
-                    f"barely breaks even. Having more free transfers banked never forces more transfers "
-                    f"to be used; holding is the answer whenever nothing clears the bar."
-                )
+                st.caption(f"Checking against {pool_label}. Only recommends a transfer that clears a real minimum gain on its own — never forces unused free transfers into play.")
+                with st.expander("How is a transfer judged \"worth it\"?"):
+                    st.markdown(
+                        "Each transfer is judged individually, not as a batch average — a strong "
+                        "1st transfer can't quietly subsidize a weak 5th one. A hit is only "
+                        "suggested if the gain clearly outweighs its -4pt cost, not just barely "
+                        "breaks even. Having more free transfers banked never forces more of them "
+                        "to be used; holding is the answer whenever nothing clears the bar."
+                    )
 
             if st.button("Find best transfer(s)", key="find_transfers_btn"):
                 common_ids = set(current_squad["player_id"]) & set(next_pool["player_id"])
@@ -1141,6 +1179,13 @@ with tab_model:
             f"entirely and untouched. Read live from models/metrics.json, written by "
             f"train.py's last run — not hardcoded."
         )
+
+        mm1, mm2, mm3 = st.columns(3)
+        mm1.metric("Model MAE", f"{metrics['single_stage']['mae']:.3f}")
+        mm2.metric("Naive baseline MAE", f"{metrics['naive_baseline']['mae']:.3f}")
+        if "fpl_xp_baseline" in metrics:
+            improvement = metrics["naive_baseline"]["mae"] - metrics["single_stage"]["mae"]
+            mm3.metric("Beats naive baseline by", f"{improvement:.3f} MAE")
 
         rows = [
             {"Model": "Single-stage", "MAE": metrics["single_stage"]["mae"], "RMSE": metrics["single_stage"]["rmse"]},
