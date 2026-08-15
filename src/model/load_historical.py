@@ -205,10 +205,35 @@ def load_all_seasons(seasons: list = None) -> pd.DataFrame:
     return combined
 
 
+def load_all_seasons_with_live(seasons: list = None) -> pd.DataFrame:
+    """load_all_seasons() (vaastav's archive, 2016-17 through 2025-26 -- the
+    only source of gameweek-level data for those seasons, since FPL's public
+    API only ever exposes SEASON-TOTAL aggregates for a finished season, never
+    gameweek-by-gameweek history; verified directly against history_past) PLUS
+    this project's own collected 2026-27+ data (load_live.py), concatenated.
+
+    Live rows carry several real FPL fields vaastav's data structurally never
+    has for any season (in_dreamteam, defensive_contribution, starts,
+    expected_goals/assists/goal_involvements/conceded) -- those stay NaN on
+    historical rows after concat, which is honest (they don't exist there),
+    not a bug to fix. Returns just the vaastav data, unchanged, if the
+    collector hasn't captured any live gameweeks yet."""
+    import load_live
+
+    historical = load_all_seasons(seasons)
+    live = load_live.load_all_live_seasons()
+    if live.empty:
+        return historical
+    combined = pd.concat([historical, live], ignore_index=True)
+    print(f"Added {len(live):,} live-collected rows ({sorted(live['season'].unique())}) "
+          f"on top of {len(historical):,} historical rows.")
+    return combined
+
+
 if __name__ == "__main__":
     import os
 
-    df = load_all_seasons()
+    df = load_all_seasons_with_live()
     print(df.shape)
     print(df["season"].value_counts().sort_index())
     print(df["position"].value_counts(dropna=False))
