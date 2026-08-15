@@ -400,34 +400,42 @@ with tab_transfers:
 
     if "built_squad" not in st.session_state:
         st.warning("Build a squad in the **Squad Builder** tab first.")
-    elif st.session_state["built_squad_season_gw"] is None:
-        st.info(
-            "The current squad was built in **2026-27 pre-season** mode, which has no "
-            "'next gameweek' to check transfers against yet — that only exists once the "
-            "collector has captured real 2026-27 results. Build a squad from a historical "
-            "gameweek in the Squad Builder tab to try this tool now."
-        )
     else:
-        built_season, built_gw = st.session_state["built_squad_season_gw"]
-        next_gw = built_gw + 1
         df = load_features()
-        max_gw_for_season = int(df[df["season"] == built_season]["GW"].max())
+        current_squad = st.session_state["built_squad"]
 
-        if next_gw > max_gw_for_season:
-            st.warning(f"GW{built_gw} is the last available gameweek in {built_season} — pick an earlier gameweek in the Squad Builder tab to leave room for a following gameweek.")
+        if st.session_state["built_squad_season_gw"] is None:
+            # Pre-season or manually-entered squad: no "next historical gameweek"
+            # exists, so check against the same LIVE pool the squad was built
+            # from instead (re-fetched fresh, in case prices moved).
+            try:
+                next_pool = preseason_pool(df)
+                pool_label = "the live 2026-27 pool (re-fetched, in case prices moved since you built this squad)"
+            except FileNotFoundError as e:
+                st.error(str(e))
+                next_pool = None
         else:
+            built_season, built_gw = st.session_state["built_squad_season_gw"]
+            next_gw = built_gw + 1
+            max_gw_for_season = int(df[df["season"] == built_season]["GW"].max())
+            if next_gw > max_gw_for_season:
+                st.warning(f"GW{built_gw} is the last available gameweek in {built_season} — pick an earlier gameweek in the Squad Builder tab to leave room for a following gameweek.")
+                next_pool = None
+            else:
+                next_pool = gw_pool(df, built_season, next_gw)
+                pool_label = f"GW{next_gw} of {built_season}"
+
+        if next_pool is not None:
             free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider")
+            st.caption(f"Checking against {pool_label}.")
 
             if st.button("Find best transfer(s)", key="find_transfers_btn"):
-                current_squad = st.session_state["built_squad"]
-                next_pool = gw_pool(df, built_season, next_gw)
-
                 common_ids = set(current_squad["player_id"]) & set(next_pool["player_id"])
                 squad_ids = [pid for pid in current_squad["player_id"] if pid in common_ids]
                 dropped = len(current_squad) - len(squad_ids)
 
                 if dropped:
-                    st.caption(f"Note: {dropped} squad player(s) not present in GW{next_gw}'s pool, excluded from this check.")
+                    st.caption(f"Note: {dropped} squad player(s) not present in this pool, excluded from this check.")
 
                 if len(squad_ids) == sum(POSITION_REQUIREMENTS.values()):
                     with st.spinner("Solving..."):
@@ -449,7 +457,7 @@ with tab_transfers:
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
                 else:
-                    st.error("Too many squad players missing from the next gameweek's pool to run this check.")
+                    st.error("Too many squad players missing from this pool to run this check.")
 
 # =============================================================================
 # CHIP ADVISOR
@@ -466,10 +474,12 @@ with tab_chips:
         st.warning("Build a squad in the **Squad Builder** tab first.")
     elif st.session_state["built_squad_season_gw"] is None:
         st.info(
-            "The current squad was built in **2026-27 pre-season** mode, which has no "
-            "upcoming gameweeks to project chip timing against yet — that only exists "
-            "once the collector has captured real 2026-27 results. Build a squad from a "
-            "historical gameweek in the Squad Builder tab to try this tool now."
+            "Chip timing needs a run of several **upcoming** gameweeks to project against, "
+            "which doesn't exist yet for a live/pre-season squad — only once the collector "
+            "has captured real 2026-27 gameweek results. Unlike the Transfers tab (which can "
+            "check a live squad against the current live pool), this tool specifically needs "
+            "a multi-gameweek future window, so it only works for a squad built from a "
+            "historical gameweek in the Squad Builder tab for now."
         )
     else:
         built_season, built_gw = st.session_state["built_squad_season_gw"]
