@@ -61,6 +61,10 @@ python src/collector/snapshot.py --force       # always snapshot, ignoring saved
 
 `.github/workflows/weekly-collector.yml` runs daily (06:00 UTC) via GitHub Actions: it runs `--check-only` first, and only does a full snapshot when a new gameweek is ready, uploading the result as a 90-day build artifact. Collector state is cached between runs so the check works across separate CI runs, not just locally. To also capture your own team's history/picks, add an `FPL_ENTRY_ID` repository secret.
 
+## Manager History
+
+[`docs/my-fpl-history.html`](docs/my-fpl-history.html) is a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Open it directly in a browser, or view it live via GitHub Pages once enabled for this repo. The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
+
 ## Future Improvements
 
 - Build the xP model (gradient boosting or similar) on 2022-23–2024-25 data, validated against the FPL API's own naive `xP` field as a baseline.

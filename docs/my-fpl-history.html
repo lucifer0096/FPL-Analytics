@@ -1,0 +1,507 @@
+<!doctype html>
+<title>Rahul's FPL History — 2016/17 to 2025/26</title>
+<style>
+  @font-face {
+    font-family: "Oswald";
+    src: local("Oswald");
+    font-weight: 400 700;
+  }
+
+  .viz-root {
+    color-scheme: light;
+    --surface-0:      #f7f9f6;
+    --surface-1:      #ffffff;
+    --surface-2:      #eef1ea;
+    --border:         #dbe1d4;
+    --text-primary:   #101710;
+    --text-secondary: #4c5747;
+    --text-muted:     #7c8677;
+    --accent-points:  #2a78d6;
+    --accent-rank:    #eb6834;
+    --grid:           #dfe5d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-0:      #10140f;
+      --surface-1:      #171c15;
+      --surface-2:      #1e241b;
+      --border:         #2c332a;
+      --text-primary:   #f3f6ef;
+      --text-secondary: #b7c1af;
+      --text-muted:     #7c8677;
+      --accent-points:  #3987e5;
+      --accent-rank:    #d95926;
+      --grid:           #262d23;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-0:      #10140f;
+    --surface-1:      #171c15;
+    --surface-2:      #1e241b;
+    --border:         #2c332a;
+    --text-primary:   #f3f6ef;
+    --text-secondary: #b7c1af;
+    --text-muted:     #7c8677;
+    --accent-points:  #3987e5;
+    --accent-rank:    #d95926;
+    --grid:           #262d23;
+  }
+  :root[data-theme="light"] .viz-root {
+    color-scheme: light;
+    --surface-0:      #f7f9f6;
+    --surface-1:      #ffffff;
+    --surface-2:      #eef1ea;
+    --border:         #dbe1d4;
+    --text-primary:   #101710;
+    --text-secondary: #4c5747;
+    --text-muted:     #7c8677;
+    --accent-points:  #2a78d6;
+    --accent-rank:    #eb6834;
+    --grid:           #dfe5d8;
+  }
+
+  * { box-sizing: border-box; }
+
+  .viz-root {
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+    min-height: 100vh;
+    padding: 40px 20px 64px;
+  }
+
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    font-family: "Oswald", "Arial Narrow", sans-serif;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-family: "Oswald", "Arial Narrow", sans-serif;
+    font-weight: 700;
+    font-size: clamp(28px, 5vw, 40px);
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+
+  .subhead {
+    font-size: 15px;
+    color: var(--text-secondary);
+    max-width: 62ch;
+    line-height: 1.55;
+    margin: 0 0 32px;
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 36px;
+  }
+  .stat-tile {
+    background: var(--surface-1);
+    padding: 16px 18px;
+  }
+  .stat-label {
+    font-family: "Oswald", sans-serif;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+    margin: 0 0 6px;
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 24px 18px;
+    margin-bottom: 20px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .panel-title {
+    font-family: "Oswald", sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.01em;
+  }
+  .legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2.5px;
+    display: inline-block;
+  }
+
+  .chart-wrap {
+    overflow-x: auto;
+  }
+  svg { display: block; }
+
+  .caveat {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .caveat strong { color: var(--text-secondary); font-weight: 600; }
+
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    min-width: 560px;
+  }
+  thead th {
+    text-align: right;
+    font-family: "Oswald", sans-serif;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    padding: 0 10px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child, tbody td:first-child { text-align: left; }
+  tbody td {
+    text-align: right;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+  .season-cell {
+    font-weight: 600;
+  }
+  .best { color: var(--accent-points); font-weight: 700; }
+  .worst { color: var(--text-muted); }
+  .flag {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    opacity: 0;
+    transition: opacity 0.1s ease;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .t-season { font-weight: 700; margin-bottom: 2px; }
+  .tooltip .t-row { color: var(--text-secondary); }
+
+  footer {
+    margin-top: 28px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+
+<div class="viz-root">
+  <div class="page">
+    <p class="eyebrow">FPL Analytics — Manager History</p>
+    <h1>Ten seasons, one squad, a lot of captaincy regret.</h1>
+    <p class="subhead">
+      Season-by-season points and overall rank for Tintumon's Playas (entry 1132016), pulled from the
+      official FPL API's <code>entry/history</code> endpoint — every season since the manager
+      started in 2016/17.
+    </p>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Total points by season</span>
+        <span class="legend-chip"><span class="swatch" style="background:var(--accent-points)"></span>Points</span>
+      </div>
+      <div class="chart-wrap">
+        <svg id="pointsChart" width="832" height="220" role="img" aria-label="Line chart of total FPL points per season from 2016/17 to 2025/26"></svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Overall rank by season</span>
+        <span class="legend-chip"><span class="swatch" style="background:var(--accent-rank)"></span>Rank (lower is better)</span>
+      </div>
+      <div class="chart-wrap">
+        <svg id="rankChart" width="832" height="220" role="img" aria-label="Line chart of overall rank per season from 2016/17 to 2025/26, inverted so better ranks sit higher"></svg>
+      </div>
+      <p class="caveat">
+        <strong>Axis is inverted</strong> — rank 1 sits at the top, so "up" always means "better" on both charts.
+        Ranks range from ~380K to ~2.5M managers; scale is square-root, not linear, so gaps at the sharp end
+        (top 10%) aren't visually crushed by the long tail.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Full record</span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Season</th>
+              <th>Points</th>
+              <th>Rank</th>
+              <th>Top %</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <p class="caveat">
+        <strong>2025/26 is unverified.</strong> The API already returns a points/rank figure for this season
+        even though the first fixture doesn't kick off until 21 Aug 2026 — almost certainly a stale or
+        placeholder value from the API rather than a real result. Treat it as provisional until gameweek 1
+        actually finishes.
+      </p>
+    </div>
+
+    <footer>Source: fantasy.premierleague.com/api/entry/1132016/history — snapshotted via FPL-Analytics collector</footer>
+  </div>
+</div>
+
+<script>
+  const data = [
+    { season: "2016/17", points: 2053, rank: 386166, pct: 9 },
+    { season: "2017/18", points: 2049, rank: 809108, pct: 14 },
+    { season: "2018/19", points: 2094, rank: 898121, pct: 14 },
+    { season: "2019/20", points: 1973, rank: 2207538, pct: 29 },
+    { season: "2020/21", points: 2206, rank: 873796, pct: 11 },
+    { season: "2021/22", points: 2130, rank: 1688770, pct: 18 },
+    { season: "2022/23", points: 2312, rank: 1404045, pct: 12 },
+    { season: "2023/24", points: 2284, rank: 1189768, pct: 11 },
+    { season: "2024/25", points: 2227, rank: 2461833, pct: 22 },
+    { season: "2025/26", points: 2102, rank: 2240945, pct: 17, provisional: true },
+  ];
+
+  const root = document.querySelector('.viz-root');
+  const cs = getComputedStyle(root);
+  const col = (name) => cs.getPropertyValue(name).trim();
+
+  // ---- stat tiles ----
+  const bestPointsIdx = data.reduce((b, d, i) => d.points > data[b].points ? i : b, 0);
+  const bestRankIdx = data.reduce((b, d, i) => d.rank < data[b].rank ? i : b, 0);
+  const worstRankIdx = data.reduce((b, d, i) => d.rank > data[b].rank ? i : b, 0);
+  const avgPoints = Math.round(data.reduce((s, d) => s + d.points, 0) / data.length);
+
+  const stats = [
+    { label: "Seasons tracked", value: data.length, sub: "2016/17 → 2025/26" },
+    { label: "Best points total", value: data[bestPointsIdx].points.toLocaleString(), sub: data[bestPointsIdx].season },
+    { label: "Best overall rank", value: "Top " + data[bestRankIdx].pct + "%", sub: data[bestRankIdx].season + " · rank " + data[bestRankIdx].rank.toLocaleString() },
+    { label: "Toughest season", value: "Top " + data[worstRankIdx].pct + "%", sub: data[worstRankIdx].season + " · rank " + data[worstRankIdx].rank.toLocaleString() },
+    { label: "Avg points / season", value: avgPoints.toLocaleString(), sub: "across 10 seasons" },
+  ];
+
+  document.getElementById('statRow').innerHTML = stats.map(s => `
+    <div class="stat-tile">
+      <p class="stat-label">${s.label}</p>
+      <div class="stat-value">${s.value}</div>
+      <div class="stat-sub">${s.sub}</div>
+    </div>
+  `).join('');
+
+  // ---- shared tooltip ----
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tooltip';
+  document.querySelector('.page').appendChild(tooltip);
+
+  function showTooltip(evt, html) {
+    tooltip.innerHTML = html;
+    tooltip.classList.add('show');
+    const pageRect = document.querySelector('.page').getBoundingClientRect();
+    const x = evt.clientX - pageRect.left + 14;
+    const y = evt.clientY - pageRect.top - 10;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
+  function hideTooltip() { tooltip.classList.remove('show'); }
+
+  // ---- chart geometry ----
+  const W = 832, H = 220;
+  const M = { top: 18, right: 18, bottom: 34, left: 54 };
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+  const n = data.length;
+  const xFor = (i) => M.left + (plotW * i) / (n - 1);
+
+  function drawAxes(svg, yTicks, yLabelFn) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    // gridlines + y labels
+    yTicks.forEach(t => {
+      const y = t.y;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', M.left); line.setAttribute('x2', W - M.right);
+      line.setAttribute('y1', y); line.setAttribute('y2', y);
+      line.setAttribute('stroke', col('--grid'));
+      line.setAttribute('stroke-width', '1');
+      g.appendChild(line);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', M.left - 10);
+      label.setAttribute('y', y + 4);
+      label.setAttribute('text-anchor', 'end');
+      label.setAttribute('font-size', '11');
+      label.setAttribute('font-family', 'Inter, sans-serif');
+      label.setAttribute('fill', col('--text-muted'));
+      label.textContent = t.label;
+      g.appendChild(label);
+    });
+    // x labels (every season, rotated none needed — 10 fits)
+    data.forEach((d, i) => {
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', xFor(i));
+      label.setAttribute('y', H - M.bottom + 20);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('font-size', '10.5');
+      label.setAttribute('font-family', 'Oswald, sans-serif');
+      label.setAttribute('fill', col('--text-muted'));
+      label.textContent = "'" + d.season.slice(2, 4);
+      g.appendChild(label);
+    });
+    svg.appendChild(g);
+  }
+
+  function drawLine(svg, values, color, accessor) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const dAttr = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${v}`).join(' ');
+    path.setAttribute('d', dAttr);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(path);
+
+    values.forEach((v, i) => {
+      const d = data[i];
+      const isProvisional = !!d.provisional;
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', xFor(i));
+      dot.setAttribute('cy', v);
+      dot.setAttribute('r', 4.5);
+      dot.setAttribute('fill', isProvisional ? col('--surface-1') : color);
+      dot.setAttribute('stroke', color);
+      dot.setAttribute('stroke-width', isProvisional ? '2' : '0');
+      dot.style.cursor = 'pointer';
+      svg.appendChild(dot);
+
+      const hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      hit.setAttribute('cx', xFor(i));
+      hit.setAttribute('cy', v);
+      hit.setAttribute('r', 14);
+      hit.setAttribute('fill', 'transparent');
+      hit.style.cursor = 'pointer';
+      hit.addEventListener('mousemove', (e) => showTooltip(e, accessor(d)));
+      hit.addEventListener('mouseleave', hideTooltip);
+      svg.appendChild(hit);
+    });
+  }
+
+  // ---- points chart ----
+  (function () {
+    const svg = document.getElementById('pointsChart');
+    const min = Math.min(...data.map(d => d.points));
+    const max = Math.max(...data.map(d => d.points));
+    const pad = (max - min) * 0.15;
+    const yMin = min - pad, yMax = max + pad;
+    const yFor = (p) => M.top + plotH - ((p - yMin) / (yMax - yMin)) * plotH;
+
+    const ticks = [min, Math.round((min + max) / 2), max].map(v => ({ y: yFor(v), label: v.toLocaleString() }));
+    drawAxes(svg, ticks, null);
+    drawLine(svg, data.map(d => yFor(d.points)), col('--accent-points'), d =>
+      `<div class="t-season">${d.season}${d.provisional ? ' <span class="flag">(provisional)</span>' : ''}</div>
+       <div class="t-row">${d.points.toLocaleString()} points</div>`
+    );
+  })();
+
+  // ---- rank chart (inverted, sqrt scale) ----
+  (function () {
+    const svg = document.getElementById('rankChart');
+    const ranks = data.map(d => d.rank);
+    const min = Math.min(...ranks), max = Math.max(...ranks);
+    const sqrtMin = Math.sqrt(min), sqrtMax = Math.sqrt(max);
+    // inverted: best (lowest) rank -> top of chart
+    const yFor = (r) => M.top + ((Math.sqrt(r) - sqrtMin) / (sqrtMax - sqrtMin)) * plotH;
+
+    const tickVals = [min, 500000, 1000000, 1500000, 2000000, max].filter(v => v >= min && v <= max);
+    const uniqueTicks = [...new Set(tickVals)].sort((a, b) => a - b);
+    const ticks = uniqueTicks.map(v => ({ y: yFor(v), label: (v / 1000000).toFixed(1) + 'M' }));
+    drawAxes(svg, ticks, null);
+    drawLine(svg, data.map(d => yFor(d.rank)), col('--accent-rank'), d =>
+      `<div class="t-season">${d.season}${d.provisional ? ' <span class="flag">(provisional)</span>' : ''}</div>
+       <div class="t-row">Rank ${d.rank.toLocaleString()} · top ${d.pct}%</div>`
+    );
+  })();
+
+  // ---- table ----
+  const bestPts = Math.max(...data.map(d => d.points));
+  const worstPts = Math.min(...data.map(d => d.points));
+  document.getElementById('tableBody').innerHTML = data.map(d => `
+    <tr>
+      <td class="season-cell">${d.season}${d.provisional ? ' <span class="flag">*</span>' : ''}</td>
+      <td class="${d.points === bestPts ? 'best' : d.points === worstPts ? 'worst' : ''}">${d.points.toLocaleString()}</td>
+      <td>${d.rank.toLocaleString()}</td>
+      <td>${d.pct}%</td>
+    </tr>
+  `).join('');
+</script>
