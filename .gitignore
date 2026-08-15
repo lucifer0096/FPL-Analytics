@@ -14,6 +14,11 @@ venv/
 # ever-growing timestamped files.
 data/raw/
 
+# A manager's own manually-entered squad (player-id list only, saved so a
+# browser refresh doesn't silently discard it) -- personal, not league-wide
+# data, so kept out of git same as data/raw/'s manager-entry history.
+data/manual_squad.json
+
 # Processed data is normally gitignored (regenerates via load_historical.py +
 # features.py against the vaastav dataset), EXCEPT features.parquet and
 # historical_gw.parquet, which the dashboard depends on directly and Streamlit

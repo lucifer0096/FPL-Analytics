@@ -34,6 +34,25 @@ FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")
 MANAGER_ENTRY_ID = 1132016
 
+# Streamlit session_state is purely in-memory -- a browser refresh (or the
+# server restarting) wipes it entirely, silently discarding a manually-typed
+# 15-man squad with no way to recover it. Persisting just the player-id list
+# to a small local file lets it survive a refresh; re-picking on a genuinely
+# different machine/session is still expected.
+MANUAL_SQUAD_SAVE_PATH = os.path.join(PROJECT_DIR, "data", "manual_squad.json")
+
+
+def _load_saved_manual_squad_ids() -> list:
+    if os.path.exists(MANUAL_SQUAD_SAVE_PATH):
+        with open(MANUAL_SQUAD_SAVE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def _save_manual_squad_ids(player_ids: list) -> None:
+    with open(MANUAL_SQUAD_SAVE_PATH, "w", encoding="utf-8") as f:
+        json.dump(list(player_ids), f)
+
 SEASON_ORDER = [
     "2016-17", "2017-18", "2018-19", "2019-20",
     "2020-21", "2021-22", "2022-23", "2023-24", "2024-25", "2025-26",
@@ -321,6 +340,13 @@ with tab_squad:
                 lambda r: f"{r['name']} ({r['team']}, {r['position']}, £{r['cost']:.1f}m)", axis=1
             )
             label_to_id = dict(zip(manual_pool["label"], manual_pool["player_id"]))
+            id_to_label = {v: k for k, v in label_to_id.items()}
+
+            if "manual_squad_players" not in st.session_state:
+                saved_ids = _load_saved_manual_squad_ids()
+                st.session_state["manual_squad_players"] = [
+                    id_to_label[pid] for pid in saved_ids if pid in id_to_label
+                ]
 
             chosen_labels = st.multiselect(
                 "Your 15 players (search by name)",
@@ -367,6 +393,7 @@ with tab_squad:
                         manual_squad["in_starting_xi"] = manual_squad["player_id"].isin(starter_ids)
                         st.session_state["built_squad"] = manual_squad
                         st.session_state["built_squad_season_gw"] = None
+                        _save_manual_squad_ids(chosen_df["player_id"].tolist())
 
     if "built_squad" in st.session_state:
         squad = st.session_state["built_squad"]
