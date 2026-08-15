@@ -69,6 +69,53 @@ def add_rolling_form_features(df: pd.DataFrame, windows: list = (3, 5)) -> pd.Da
     return df.drop(columns=["_season_rank"])
 
 
+PRICE_BAND_EDGES = [0, 4.5, 5.5, 6.5, 8.0, 100]
+PRICE_BAND_LABELS = ["budget", "low-mid", "mid", "mid-high", "premium"]
+
+
+def add_new_player_baseline(df: pd.DataFrame) -> pd.DataFrame:
+    """A position x price-band baseline for players with no rolling form yet --
+    newly promoted teams' players and new signings have career_gw_count == 0 and
+    every total_points_avg_last_N feature is null (see build_feature_table), which
+    otherwise leaves the model with no signal for a meaningful chunk of players
+    every season (roughly 70-130 a season, excluding this dataset's own first
+    season where the whole league is naturally "new"). No Championship/lower-
+    league data source is used here -- this is a simple, honest fallback: what did
+    similarly priced players in the same position score on average, using ONLY
+    gameweeks already played before this one across the whole league.
+
+    Leakage-safe by construction: computed as an expanding mean per (season,
+    position, price_band) ordered by GW, shifted by one GW boundary so a
+    gameweek's own results are never included in its own baseline -- this is a
+    league-wide statistic, not a per-player one, so the shift happens at the
+    (season, position, price_band, GW) group level, then the resulting one-row-
+    per-group baseline is merged back onto every player row in that group."""
+    df = df.copy()
+    df["price_band"] = pd.cut(
+        df["value"] / 10.0, bins=PRICE_BAND_EDGES, labels=PRICE_BAND_LABELS
+    )
+
+    group_cols = ["season", "position", "price_band", "GW"]
+    gw_group_avg = (
+        df.groupby(group_cols, observed=True)["total_points"]
+        .mean()
+        .reset_index()
+        .rename(columns={"total_points": "gw_avg"})
+    )
+
+    gw_group_avg = _season_sort_key(gw_group_avg).sort_values(
+        ["position", "price_band", "_season_rank", "GW"]
+    )
+    gw_group_avg["new_player_baseline"] = (
+        gw_group_avg.groupby(["position", "price_band"], observed=True)["gw_avg"]
+        .apply(lambda s: s.shift(1).expanding(min_periods=1).mean())
+        .reset_index(level=[0, 1], drop=True)
+    )
+
+    baseline_lookup = gw_group_avg[group_cols + ["new_player_baseline"]]
+    return df.merge(baseline_lookup, on=group_cols, how="left").drop(columns=["price_band"])
+
+
 def add_availability_features(df: pd.DataFrame) -> pd.DataFrame:
     """Flags a player's recent minutes trend — a player who's barely played the
     last few gameweeks is a materially different bet than one on a run of full
@@ -231,6 +278,7 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     df = add_availability_features(df)
     df = add_team_form_features(df)
     df = add_fixture_difficulty_features(df)
+    df = add_new_player_baseline(df)
     return df
 
 

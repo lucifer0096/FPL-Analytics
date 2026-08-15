@@ -77,6 +77,7 @@ FEATURE_COLUMNS = [
     "opponent_form_goals_for",
     "opponent_form_goals_against",
     "fixture_difficulty",
+    "new_player_baseline",
 ]
 
 CATEGORICAL_FEATURES = ["position"]
