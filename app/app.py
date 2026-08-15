@@ -121,32 +121,35 @@ def _latest_bootstrap_path() -> str:
 
 
 def _player_card_html(row: pd.Series) -> str:
-    """One player's shirt-style card: name, price, predicted points."""
-    return f"""
-    <div style="
-        background: rgba(255,255,255,0.94); border-radius: 8px; padding: 6px 8px;
-        min-width: 92px; max-width: 118px; text-align: center;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;
-    ">
-        <div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2;
-                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            {row['name']}
-        </div>
-        <div style="font-size: 10.5px; color: #555; margin-top: 2px;">
-            £{row['cost']:.1f}m
-        </div>
-        <div style="font-size: 11px; color: #0a6b2f; font-weight: 700; margin-top: 1px;">
-            {row['predicted_points']:.1f} pts
-        </div>
-    </div>
-    """
+    """One player's shirt-style card: name, price, predicted points.
+
+    IMPORTANT: this is passed to st.markdown(unsafe_allow_html=True), which
+    runs the string through Markdown parsing BEFORE rendering HTML -- Markdown
+    treats 4+ leading spaces as a literal code block, so any indentation here
+    (however readable in Python) prints as visible text on the page instead of
+    rendering as HTML. Every line must start at column 0, no exceptions."""
+    return (
+        f'<div style="background: rgba(255,255,255,0.94); border-radius: 8px; '
+        f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
+        f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
+        f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
+        f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
+        f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
+        f'<div style="font-size: 11px; color: #0a6b2f; font-weight: 700; margin-top: 1px;">'
+        f'{row["predicted_points"]:.1f} pts</div>'
+        f'</div>'
+    )
 
 
 def render_pitch(squad: pd.DataFrame) -> None:
     """A real FPL-style pitch layout: starting XI positioned by row (GK at the
     back, then DEF/MID/FWD moving up the pitch, formation read directly from
     the squad rather than assumed), with the 4 bench players shown below in
-    their own strip."""
+    their own strip.
+
+    IMPORTANT: every line of HTML built here must start at column 0 -- see
+    _player_card_html's docstring for why (Markdown-then-HTML rendering via
+    st.markdown(unsafe_allow_html=True) treats indentation as a code block)."""
     starters = squad[squad["in_starting_xi"]]
     bench = squad[~squad["in_starting_xi"]]
 
@@ -156,11 +159,10 @@ def render_pitch(squad: pd.DataFrame) -> None:
         if pos_players.empty:
             continue
         cards = "".join(_player_card_html(r) for _, r in pos_players.iterrows())
-        rows_html += f"""
-        <div style="display: flex; justify-content: center; gap: 14px; margin: 14px 0; flex-wrap: wrap;">
-            {cards}
-        </div>
-        """
+        rows_html += (
+            '<div style="display: flex; justify-content: center; gap: 14px; '
+            f'margin: 14px 0; flex-wrap: wrap;">{cards}</div>'
+        )
 
     formation = "-".join(
         str((starters["position"] == pos).sum()) for pos in ["DEF", "MID", "FWD"]
@@ -168,30 +170,24 @@ def render_pitch(squad: pd.DataFrame) -> None:
 
     bench_cards = "".join(_player_card_html(r) for _, r in bench.iterrows())
 
-    pitch_html = f"""
-    <div style="
-        background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, #1f7a3f 100%);
-        border-radius: 12px; padding: 20px 12px; margin-top: 8px;
-        border: 2px solid rgba(255,255,255,0.3);
-    ">
-        <div style="text-align: center; color: white; font-size: 12px; opacity: 0.85;
-                     margin-bottom: 8px; font-family: sans-serif; letter-spacing: 0.5px;">
-            FORMATION {formation}
-        </div>
-        {rows_html}
-    </div>
-    <div style="
-        background: #222; border-radius: 10px; padding: 14px 12px; margin-top: 10px;
-    ">
-        <div style="text-align: center; color: #aaa; font-size: 11px; margin-bottom: 8px;
-                     font-family: sans-serif; letter-spacing: 0.5px;">
-            BENCH
-        </div>
-        <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
-            {bench_cards}
-        </div>
-    </div>
-    """
+    pitch_html = (
+        '<div style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
+        '#1f7a3f 100%); border-radius: 12px; padding: 20px 12px; margin-top: 8px; '
+        'border: 2px solid rgba(255,255,255,0.3);">'
+        '<div style="text-align: center; color: white; font-size: 12px; opacity: 0.85; '
+        'margin-bottom: 8px; font-family: sans-serif; letter-spacing: 0.5px;">'
+        f'FORMATION {formation}</div>'
+        f'{rows_html}'
+        '</div>'
+        '<div style="background: #222; border-radius: 10px; padding: 14px 12px; '
+        'margin-top: 10px;">'
+        '<div style="text-align: center; color: #aaa; font-size: 11px; margin-bottom: 8px; '
+        'font-family: sans-serif; letter-spacing: 0.5px;">BENCH</div>'
+        '<div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">'
+        f'{bench_cards}'
+        '</div>'
+        '</div>'
+    )
     st.markdown(pitch_html, unsafe_allow_html=True)
 
 
