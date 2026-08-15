@@ -12,7 +12,10 @@ one player's history with another's, and never leaks a gameweek's own outcome
 into its own feature row.
 """
 
+import os
 import pandas as pd
+
+VAASTAV_ROOT = os.environ.get("VAASTAV_DATA_ROOT", r"E:\Fantasy-Premier-League\data")
 
 # Season order matters for rolling windows that span a season boundary (a player's
 # form entering GW1 of a new season should still reflect their last games of the
@@ -80,12 +83,154 @@ def add_availability_features(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=["_season_rank"])
 
 
+def _build_team_match_table(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per (season, GW, team) with that match's goals for/against, derived
+    from team_a_score/team_h_score + was_home. These are POST-match results, so
+    they're only used here to build a lagged team-form feature — never joined in
+    directly as a same-match feature (that would leak the match outcome).
+
+    KNOWN LIMITATION: for 2016-17 to 2019-20, `team` is backfilled from
+    players_raw.csv's END-OF-SEASON snapshot (see load_historical.py), so a player
+    who transferred mid-season shows their final club for every gameweek,
+    including games actually played for a different club earlier that season.
+    This can produce two DIFFERENT score rows for the same (season, GW, team) --
+    e.g. a player who ended the season at Club A but played their GW1 game for
+    Club B shows Club B's GW1 opponent/score under Club A's row. A team genuinely
+    can only play one match per gameweek, so any (season, GW, team) with more than
+    one distinct score is a transfer-driven artifact, not a real double-fixture --
+    dropped here rather than silently corrupting the rolling average with
+    contradictory results. This affects a small minority of rows (players who
+    moved clubs mid-season) and only in the 4 seasons without a native `team`
+    column; 2020-21 onward is unaffected."""
+    matches = df[
+        ["season", "GW", "team", "opponent_team", "was_home", "team_a_score", "team_h_score"]
+    ].drop_duplicates(subset=["season", "GW", "team", "opponent_team", "was_home",
+                               "team_a_score", "team_h_score"])
+
+    ambiguous = matches.duplicated(subset=["season", "GW", "team"], keep=False)
+    if ambiguous.any():
+        n_dropped = ambiguous.sum()
+        print(f"  Dropping {n_dropped} team-match rows with contradictory scores "
+              f"for the same (season, GW, team) — see _build_team_match_table docstring.")
+        matches = matches[~ambiguous]
+
+    matches = matches.copy()
+    matches["goals_for"] = matches["team_h_score"].where(
+        matches["was_home"], matches["team_a_score"]
+    )
+    matches["goals_against"] = matches["team_a_score"].where(
+        matches["was_home"], matches["team_h_score"]
+    )
+    return matches[["season", "GW", "team", "goals_for", "goals_against"]]
+
+
+def add_team_form_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Rolling team-level goals-for/goals-against form, as a fixture-difficulty
+    proxy that works uniformly across all 9 seasons (teams.csv's own strength
+    ratings only exist from 2019-20 onward). Computed once per team-match, shifted
+    by 1 so a match's own result never leaks into its own row, then joined back
+    onto the player table twice: once for the player's own team ("team_form_*")
+    and once for their opponent ("opponent_form_*")."""
+    df = _season_sort_key(df)
+    team_matches = _build_team_match_table(df)
+
+    team_season_rank = {s: i for i, s in enumerate(SEASON_ORDER)}
+    team_matches = team_matches.copy()
+    team_matches["_season_rank"] = team_matches["season"].map(team_season_rank)
+    team_matches = team_matches.sort_values(["team", "_season_rank", "GW"]).reset_index(drop=True)
+
+    grouped = team_matches.groupby("team", sort=False)
+    for col in ["goals_for", "goals_against"]:
+        team_matches[f"{col}_avg_last_5"] = (
+            grouped[col]
+            .apply(lambda s: s.shift(1).rolling(5, min_periods=1).mean())
+            .reset_index(level=0, drop=True)
+        )
+    team_matches = team_matches.drop(columns=["_season_rank", "goals_for", "goals_against"])
+
+    df = df.merge(
+        team_matches.rename(columns={
+            "team": "team",
+            "goals_for_avg_last_5": "team_form_goals_for",
+            "goals_against_avg_last_5": "team_form_goals_against",
+        }),
+        on=["season", "GW", "team"],
+        how="left",
+    )
+    df = df.merge(
+        team_matches.rename(columns={
+            "team": "opponent_team",
+            "goals_for_avg_last_5": "opponent_form_goals_for",
+            "goals_against_avg_last_5": "opponent_form_goals_against",
+        }),
+        on=["season", "GW", "opponent_team"],
+        how="left",
+    )
+
+    return df.drop(columns=["_season_rank"])
+
+
+FIXTURES_AVAILABLE_SEASONS = {
+    "2018-19", "2019-20", "2020-21", "2021-22", "2022-23", "2023-24", "2024-25",
+}
+
+
+def _load_fixture_difficulty(season: str) -> pd.DataFrame:
+    """FPL's own published fixture-difficulty rating (1-5) per match, from
+    fixtures.csv. Not available for 2016-17/2017-18 in this dataset. Unlike the
+    team-form proxy below, this is known ahead of the match (FPL publishes these
+    before kickoff), so no shift/lag is needed — joining it in isn't a leak."""
+    path = os.path.join(VAASTAV_ROOT, season, "fixtures.csv")
+    fx = pd.read_csv(path)[["id", "team_h_difficulty", "team_a_difficulty"]]
+    return fx.rename(columns={"id": "fixture"})
+
+
+def add_fixture_difficulty_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Adds `fixture_difficulty`: the difficulty of the CURRENT player's team in
+    this fixture (their home rating if was_home, else their away rating). Falls
+    back to the team-form proxy (opponent_form_goals_for/against, already built by
+    add_team_form_features) for 2016-17/2017-18, where FPL's own rating doesn't
+    exist in this dataset. Must run after add_team_form_features."""
+    frames = []
+    for season in df["season"].unique():
+        sub = df[df["season"] == season].copy()
+        if season in FIXTURES_AVAILABLE_SEASONS:
+            fx = _load_fixture_difficulty(season)
+            sub = sub.merge(fx, on="fixture", how="left")
+            sub["fixture_difficulty"] = sub["team_h_difficulty"].where(
+                sub["was_home"], sub["team_a_difficulty"]
+            )
+            sub = sub.drop(columns=["team_h_difficulty", "team_a_difficulty"])
+        else:
+            # Fallback for 2016-17/2017-18, where FPL's own rating doesn't exist
+            # in this dataset: approximate difficulty from the opponent's recent
+            # attacking form (opponent_form_goals_for). Rougher than FPL's own
+            # rating (which also weighs defense, home advantage, and non-form
+            # factors) but keeps the full 9-season window intact rather than
+            # leaving these two seasons with no difficulty signal at all.
+            #
+            # Rescaled to the same 1-5 range as FPL's own rating via equal-
+            # frequency quantile bins — the raw proxy has a different scale
+            # entirely (mean ~1.4 on a roughly 0-5 range vs FPL's own ratings
+            # averaging ~2.9), so leaving it unscaled would mean the same numeric
+            # value represents a very different fixture difficulty depending on
+            # which era of data a training row came from.
+            sub["fixture_difficulty"] = pd.qcut(
+                sub["opponent_form_goals_for"], q=5, labels=[1, 2, 3, 4, 5], duplicates="drop"
+            ).astype("Float64")
+        frames.append(sub)
+
+    return pd.concat(frames, ignore_index=True)
+
+
 def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     """Run the full feature pipeline. `total_points` (this row's own outcome) is
     kept as the training target — every added feature column is a lagged/rolling
     stat that only uses information available before this gameweek was played."""
     df = add_rolling_form_features(df)
     df = add_availability_features(df)
+    df = add_team_form_features(df)
+    df = add_fixture_difficulty_features(df)
     return df
 
 
