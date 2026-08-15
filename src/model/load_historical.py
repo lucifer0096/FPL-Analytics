@@ -22,6 +22,15 @@ plus position/team, normalized to consistent types (team as a name string
 everywhere), so the core model can train consistently across all 9 seasons.
 xG/xA fields are NOT included here — they're only available for the 3 most recent
 seasons and would need a separate, narrower training set if used.
+
+IMPORTANT: `element` (the player id used within a season's files) is reassigned
+every season — id 1 is a different real player in every one of the 9 seasons here.
+Grouping by `element` across seasons silently blends unrelated players' stats
+together. `players_raw.csv`'s `code` field is FPL's actual stable, cross-season
+player identifier (verified: Salah's code stayed 118748 across three seasons
+while his `id` changed each year) — joined in here as `player_code`. Any rolling/
+lagged feature spanning gameweeks or seasons MUST group by `player_code`, not
+`element`.
 """
 
 import os
@@ -53,15 +62,19 @@ POSITION_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 _MASTER_TEAM_LIST_PATH = os.path.join(VAASTAV_ROOT, "master_team_list.csv")
 
 
+def _load_players_raw(season: str) -> pd.DataFrame:
+    """Full end-of-season players_raw.csv for one season, with `id` renamed to
+    `element` to match merged_gw.csv's join key."""
+    path = os.path.join(VAASTAV_ROOT, season, "players_raw.csv")
+    return pd.read_csv(path, encoding="latin1").rename(columns={"id": "element"})
+
+
 def _load_position_team(season: str) -> pd.DataFrame:
     """End-of-season position + numeric team-id snapshot per player id, from
     players_raw.csv. Used to backfill position/team for seasons where
     merged_gw.csv lacks both columns (2016-17 to 2019-20)."""
-    path = os.path.join(VAASTAV_ROOT, season, "players_raw.csv")
-    df = pd.read_csv(path, encoding="latin1")
-    return df[["id", "element_type", "team"]].rename(
-        columns={"id": "element", "team": "team_id"}
-    )
+    df = _load_players_raw(season)
+    return df[["element", "element_type", "team"]].rename(columns={"team": "team_id"})
 
 
 def _resolve_team_names(season: str, team_ids: pd.Series) -> pd.Series:
@@ -99,6 +112,15 @@ def load_season(season: str) -> pd.DataFrame:
         df["team"] = _resolve_team_names(season, df["team_id"])
         df = df.drop(columns=["element_type", "team_id"])
 
+    # player_code: the stable cross-season player id (element resets every season).
+    codes = _load_players_raw(season)[["element", "code"]].drop_duplicates(subset="element")
+    df = df.merge(codes.rename(columns={"code": "player_code"}), on="element", how="left")
+
+    unmatched = df["player_code"].isna().sum()
+    if unmatched:
+        print(f"  WARNING [{season}]: {unmatched} rows have no player_code match "
+              f"(player left the game mid-season and dropped from players_raw.csv?)")
+
     df["season"] = season
     return df
 
@@ -117,7 +139,16 @@ def load_all_seasons(seasons: list = None) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    import os
+
     df = load_all_seasons()
     print(df.shape)
     print(df["season"].value_counts().sort_index())
     print(df["position"].value_counts(dropna=False))
+    print("team nulls:", df["team"].isna().sum())
+    print("player_code nulls:", df["player_code"].isna().sum())
+
+    out_path = os.path.join("data", "processed", "historical_gw.parquet")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    df.to_parquet(out_path, index=False)
+    print(f"Saved to {out_path}")
