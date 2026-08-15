@@ -67,12 +67,29 @@ POSITION_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 # 2019-20), so the missing 2024-25 row is never actually looked up.
 _MASTER_TEAM_LIST_PATH = os.path.join(VAASTAV_ROOT, "master_team_list.csv")
 
+# merged_gw.csv's encoding is NOT consistent across the dataset -- verified by
+# inspecting raw bytes directly (not assumed): 2016-17/2017-18/2018-19 are
+# genuinely Latin-1 (accented names appear as single Latin-1 bytes, e.g. \xe9 for
+# "e"), while 2019-20 onward are genuine UTF-8 (accented names appear as the
+# 2-byte UTF-8 sequence, e.g. \xc3\xa9 for "e"). A single fixed encoding for every
+# season is wrong either way -- using latin1 universally (an earlier version of
+# this loader's bug) decodes UTF-8's 2-byte sequences as two separate wrong
+# characters, producing "Ã©" instead of "é" for every UTF-8-era season.
+# players_raw.csv, by contrast, IS UTF-8 in all 10 seasons -- verified the same
+# way -- so it always uses "utf-8" directly, independent of this cutoff.
+_MERGED_GW_LATIN1_SEASONS = {"2016-17", "2017-18", "2018-19"}
+
+
+def _merged_gw_encoding(season: str) -> str:
+    return "latin1" if season in _MERGED_GW_LATIN1_SEASONS else "utf-8"
+
 
 def _load_players_raw(season: str) -> pd.DataFrame:
     """Full end-of-season players_raw.csv for one season, with `id` renamed to
-    `element` to match merged_gw.csv's join key."""
+    `element` to match merged_gw.csv's join key. Always UTF-8 -- see the
+    encoding note above _MERGED_GW_LATIN1_SEASONS."""
     path = os.path.join(VAASTAV_ROOT, season, "players_raw.csv")
-    return pd.read_csv(path, encoding="latin1").rename(columns={"id": "element"})
+    return pd.read_csv(path, encoding="utf-8").rename(columns={"id": "element"})
 
 
 def _load_position_team(season: str) -> pd.DataFrame:
@@ -115,13 +132,14 @@ def load_season(season: str) -> pd.DataFrame:
     """Load one season's gameweek data, unified to COMMON_COLUMNS + position/team,
     with team normalized to a name string in every season."""
     path = os.path.join(VAASTAV_ROOT, season, "gws", "merged_gw.csv")
-    df = pd.read_csv(path, encoding="latin1", low_memory=False)
+    enc = _merged_gw_encoding(season)
+    df = pd.read_csv(path, encoding=enc, low_memory=False)
 
     missing = [c for c in COMMON_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"{season}: merged_gw.csv is missing expected columns {missing}")
 
-    header = pd.read_csv(path, encoding="latin1", nrows=1).columns
+    header = pd.read_csv(path, encoding=enc, nrows=1).columns
     df = df[COMMON_COLUMNS].copy()
 
     # FPL's own pre-match expected-points prediction, used later as a baseline to
@@ -129,14 +147,14 @@ def load_season(season: str) -> pd.DataFrame:
     # absent (not just this dataset's coverage, but never existed) for earlier
     # seasons, so this stays NaN there rather than being backfilled or estimated.
     if "xP" in header:
-        df["fpl_xP"] = pd.read_csv(path, encoding="latin1", low_memory=False)["xP"]
+        df["fpl_xP"] = pd.read_csv(path, encoding=enc, low_memory=False)["xP"]
     else:
         df["fpl_xP"] = pd.NA
 
     if "position" in header:
         # team is already a name string in these seasons (verified 2020-21 to
         # 2024-25) — no resolution needed.
-        pos_team = pd.read_csv(path, encoding="latin1", low_memory=False)[
+        pos_team = pd.read_csv(path, encoding=enc, low_memory=False)[
             ["element", "position", "team"]
         ].drop_duplicates(subset="element")
         df = df.merge(pos_team, on="element", how="left")
