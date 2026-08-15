@@ -646,7 +646,13 @@ with tab_transfers:
 
         if next_pool is not None:
             free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider")
-            st.caption(f"Checking against {pool_label}.")
+            st.caption(
+                f"Checking against {pool_label}. Only recommends a transfer if it clears a real "
+                f"minimum gain on its own (each transfer judged individually, not as a batch average) "
+                f"— a hit is only suggested if the gain clearly outweighs its -4pt cost, not just "
+                f"barely breaks even. Having more free transfers banked never forces more transfers "
+                f"to be used; holding is the answer whenever nothing clears the bar."
+            )
 
             if st.button("Find best transfer(s)", key="find_transfers_btn"):
                 common_ids = set(current_squad["player_id"]) & set(next_pool["player_id"])

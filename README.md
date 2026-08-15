@@ -198,11 +198,17 @@ Verified two ways:
 
 ### Transfer optimizer
 
-`optimize_transfers()` solves for the transfer(s) — if any — that maximize `predicted_points_gained − 4 × paid_transfers`, holding the same squad constraints. Applies the 50%-sell-fee rule via a `sell_price_col` parameter, since FPL doesn't refund a risen player's full current price.
+`optimize_transfers()` solves for the transfer(s) — if any — worth actually making, not just whatever's technically nonnegative. It solves separately for every transfer count (0, 1, 2, ... up to free transfers + a paid cap) and walks up ONE transfer at a time, stopping the first time an individual additional transfer doesn't clear its own bar:
+- **Free transfers** need a real minimum gain on their own (`MIN_GAIN_PER_FREE_TRANSFER`, not just >0) — a free transfer still has a cost (a banked resource spent chasing what may just be noise in a model with ~1 point of validation MAE per player-gameweek), so "positive" and "worth using" aren't the same bar.
+- **Paid transfers** (a -4pt hit each) need their net gain to clear a real safety margin over breaking even (`MIN_NET_GAIN_PER_HIT`), since a marginal net gain is well within the model's own prediction error, not a genuine edge.
+
+Critically, this is judged per-transfer, not as a batch average — a strong 1st transfer can't subsidize a weak 5th one riding along on the average. Having more free transfers banked never forces more of them to be used: holding is always the answer once nothing clears the bar, and the walk starts from 0 every time. Caught directly during testing: with 5 banked free transfers, the un-gated solver proposed a 5th transfer worth only +0.4 predicted points on its own, purely because a free transfer "cost nothing" in the raw objective — now it correctly stops at however many transfers actually pull their weight (2, in that same test case), holding the rest.
+
+Applies the 50%-sell-fee rule via a `sell_price_col` parameter, since FPL doesn't refund a risen player's full current price.
 
 `load_latest_prices()` always pulls the most recent collector-written bootstrap snapshot, never a cached DataFrame — prices move week to week based on transfer momentum, so a transfer's budget math needs current prices, not last week's.
 
-Verified against real data (2025-26 GW20 squad → GW21 pool, 1 free transfer available): correctly proposes swapping James Tarkowski (DEF, £5.7m, rolling avg 4.6 pts) for Nathan Collins (DEF, £4.9m, rolling avg 7.0 pts) — a cheaper upgrade with better recent form — using the free transfer at zero cost, for a net +2.4 predicted points.
+Verified against real data (2025-26 GW20 squad → GW21 pool, 1 free transfer available): correctly proposes swapping James Tarkowski (DEF, £5.7m, rolling avg 4.6 pts) for Nathan Collins (DEF, £4.9m, rolling avg 7.0 pts) — a cheaper upgrade with better recent form — using the free transfer at zero cost, for a net +2.4 predicted points. Also verified the necessity gating: forcing a squad's best starter's predicted points to 0 (simulating an injury) with 0 free transfers correctly triggers a hit (net +4.0 after the -4pt cost, clearly worth it); the same squad with no injury and 0 free transfers correctly recommends nothing, since no available transfer clears the hit safety margin.
 
 ### Chip advisor
 

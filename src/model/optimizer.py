@@ -94,6 +94,22 @@ STARTING_XI_MIN = {"GK": 1, "DEF": 3, "MID": 2, "FWD": 1}
 # Verified live against the FPL API's bootstrap-static game_settings (2026-27
 # season), not assumed:
 POINTS_PER_HIT = 4  # cost per transfer beyond the free ones
+
+# NOT part of FPL's rules -- these are this project's own bar for when a
+# transfer is worth RECOMMENDING, separate from what's merely legal. Without
+# them, optimize_transfers happily proposes every transfer with even a
+# fractional positive gain once free transfers make it "cost nothing" in the
+# objective (e.g. a 5th free transfer for +0.4 predicted points) -- technically
+# optimal, but not something a real manager should act on: churn has its own
+# cost (giving up banked transfers, chasing noise in the prediction) that the
+# raw objective doesn't see. Free transfers get a real but low bar (must beat
+# noise); paid transfers get a materially higher one, since a hit needs the
+# gain to clearly outweigh a real, certain -4pt cost, not just eke past it --
+# the model's own validation MAE (~1 point per player-gameweek, see README) is
+# larger than a marginal net gain would be, so "barely positive after the hit"
+# is well within the model's own error bar, not a genuine edge.
+MIN_GAIN_PER_FREE_TRANSFER = 1.0
+MIN_NET_GAIN_PER_HIT = 2.0
 MAX_FREE_TRANSFERS_BANKED = 4  # max_extra_free_transfers -> 1 (this week) + 4 banked = 5 max
 SELL_ON_FEE = 0.5  # transfers_sell_on_fee: only 50% of a price RISE is kept on sale
 CHIP_HALVES = {
@@ -205,6 +221,55 @@ def select_starting_xi(
     return [pid for pid in player_ids if start[pid].value() == 1]
 
 
+def _solve_transfers_for_k(
+    k: int,
+    current_set: set,
+    player_ids: list,
+    points: dict,
+    cost: dict,
+    sell_price: dict,
+    position: dict,
+    team: dict,
+    is_current: dict,
+    bank: float,
+) -> dict:
+    """Solve for the best squad reachable by making EXACTLY k transfers (0 <= k
+    <= len(current_set)). Factored out of optimize_transfers so the caller can
+    solve across every k and compare -- fixing k directly (rather than letting
+    the solver choose it freely against a hit-adjusted objective) is what makes
+    it possible to apply this project's own minimum-gain bar per transfer
+    afterwards; the raw objective alone has no notion of "not worth the churn,"
+    only "technically nonnegative.\""""
+    prob = pulp.LpProblem(f"fpl_transfer_k{k}", pulp.LpMaximize)
+    pick = pulp.LpVariable.dicts(f"pick_k{k}", player_ids, cat="Binary")
+
+    prob += pulp.lpSum(
+        pick[pid] * (sell_price[pid] if is_current[pid] else cost[pid])
+        for pid in player_ids
+    ) <= bank + pulp.lpSum(sell_price[pid] for pid in player_ids if is_current[pid])
+
+    prob += pulp.lpSum(pick[pid] for pid in player_ids) == SQUAD_SIZE
+    for pos, quota in POSITION_REQUIREMENTS.items():
+        pos_ids = [pid for pid in player_ids if position[pid] == pos]
+        prob += pulp.lpSum(pick[pid] for pid in pos_ids) == quota
+    for club in set(team.values()):
+        club_ids = [pid for pid in player_ids if team[pid] == club]
+        prob += pulp.lpSum(pick[pid] for pid in club_ids) <= MAX_PER_TEAM
+
+    prob += pulp.lpSum(1 - pick[pid] for pid in player_ids if is_current[pid]) == k
+    prob += pulp.lpSum(pick[pid] * points[pid] for pid in player_ids)
+
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
+    if pulp.LpStatus[status] != "Optimal":
+        return None
+
+    new_squad_ids = [pid for pid in player_ids if pick[pid].value() == 1]
+    return {
+        "new_squad_ids": new_squad_ids,
+        "total_points": sum(points[pid] for pid in new_squad_ids),
+    }
+
+
 def optimize_transfers(
     current_squad_ids: list,
     players: pd.DataFrame,
@@ -217,10 +282,32 @@ def optimize_transfers(
     cost_col: str = "cost",
     points_col: str = "predicted_points",
     sell_price_col: str = None,
+    min_gain_per_free_transfer: float = MIN_GAIN_PER_FREE_TRANSFER,
+    min_net_gain_per_hit: float = MIN_NET_GAIN_PER_HIT,
 ) -> dict:
     """Given an existing 15-man squad and a number of banked free transfers,
-    solve for the transfer(s) -- if any -- that maximize
-    total_predicted_points - POINTS_PER_HIT * paid_transfers.
+    solve for the transfer(s) -- if any -- worth actually making.
+
+    Solves separately for every possible transfer count k (0, 1, 2, ... up to
+    free_transfers + max_paid_transfers), then picks the largest k whose gain
+    clears this project's own recommendation bar -- NOT just "the k with the
+    highest raw objective value," which is what a single combined solve would
+    give and is why the old version of this function recommended a 5th free
+    transfer for a +0.4 point gain (technically positive, not something a real
+    manager should act on). The bar:
+      - Within free_transfers: the AVERAGE gain per transfer used must be >=
+        min_gain_per_free_transfer. A free transfer still has a real cost --
+        it's a banked resource, and churn chases noise in a model with ~1 point
+        of validation MAE per player-gameweek (see README) -- so "positive" and
+        "worth using" aren't the same bar.
+      - Beyond free_transfers (paid, taking a -4pt hit each): the NET gain from
+        those specific additional transfers (after their hit cost) must be >=
+        min_net_gain_per_hit, a real safety margin over just "breaks even,"
+        since a marginal net gain is well within the model's own prediction
+        error and isn't a genuine edge worth a certain, real point deduction.
+    k=0 (hold) always clears the bar trivially, so this never fails to return a
+    "no transfer is worth it" result when nothing beats it -- holding is never
+    penalized just because SOME transfer exists with fractional positive value.
 
     IMPORTANT: `players` must carry CURRENT prices, not a stale snapshot -- FPL
     moves individual players' prices week to week based on transfer momentum, so
@@ -274,47 +361,42 @@ def optimize_transfers(
     position = players.set_index(id_col)[position_col].to_dict()
     team = players.set_index(id_col)[team_col].to_dict()
 
-    prob = pulp.LpProblem("fpl_transfer_optimization", pulp.LpMaximize)
-    pick = pulp.LpVariable.dicts("pick", player_ids, cat="Binary")
-    # A "paid hit" indicator per player being brought IN beyond the free
-    # transfers -- modeled via a single aggregate hit count below instead of
-    # per-player, since hits are counted per transfer, not tied to a specific pair.
-    num_transfers = pulp.LpVariable("num_transfers", lowBound=0, upBound=max_paid_transfers + free_transfers, cat="Integer")
-    num_paid = pulp.LpVariable("num_paid", lowBound=0, upBound=max_paid_transfers, cat="Integer")
+    old_points = sum(points[pid] for pid in current_set)
+    max_k = min(free_transfers + max_paid_transfers, SQUAD_SIZE)
 
-    # Budget: total spend on incoming/kept players <= bank + sell value recovered
-    # from anyone transferred out. Kept players "cost" their sell price (already
-    # yours, no new spend); new players cost their buy price.
-    prob += pulp.lpSum(
-        pick[pid] * (sell_price[pid] if is_current[pid] else cost[pid])
-        for pid in player_ids
-    ) <= bank + pulp.lpSum(sell_price[pid] for pid in player_ids if is_current[pid])
-
-    prob += pulp.lpSum(pick[pid] for pid in player_ids) == SQUAD_SIZE
-    for pos, quota in POSITION_REQUIREMENTS.items():
-        pos_ids = [pid for pid in player_ids if position[pid] == pos]
-        prob += pulp.lpSum(pick[pid] for pid in pos_ids) == quota
-    for club in set(team.values()):
-        club_ids = [pid for pid in player_ids if team[pid] == club]
-        prob += pulp.lpSum(pick[pid] for pid in club_ids) <= MAX_PER_TEAM
-
-    # Number of transfers = number of currently-owned players NOT kept.
-    prob += num_transfers == pulp.lpSum(1 - pick[pid] for pid in player_ids if is_current[pid])
-    prob += num_paid >= num_transfers - free_transfers
-    prob += num_paid <= max_paid_transfers
-
-    prob += (
-        pulp.lpSum(pick[pid] * points[pid] for pid in player_ids)
-        - POINTS_PER_HIT * num_paid
-    )
-
-    status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
-    if pulp.LpStatus[status] != "Optimal":
-        raise RuntimeError(
-            f"Transfer solver did not find an optimal solution (status: {pulp.LpStatus[status]})."
+    # Walk k = 1, 2, 3, ... UP from 0, solving for the best squad reachable at
+    # each exact transfer count, and stop the FIRST time the MARGINAL gain of
+    # going from k-1 to k doesn't clear that specific transfer's bar -- not the
+    # average across all transfers so far. This is what stops a strong 1st/2nd
+    # transfer from "subsidizing" a weak 5th one: each additional transfer has
+    # to earn its own place, on top of whatever came before it, using whichever
+    # bar applies to it (free-transfer bar while k <= free_transfers, the
+    # stricter hit safety-margin bar once k goes beyond that).
+    best_k = 0
+    best_result = {"new_squad_ids": list(current_set), "total_points": old_points}
+    prev_points = old_points
+    for k in range(1, max_k + 1):
+        candidate = _solve_transfers_for_k(
+            k, current_set, player_ids, points, cost, sell_price, position, team, is_current, bank
         )
+        if candidate is None:
+            break  # infeasible at this k (e.g. budget/position constraints) -- can't go further
 
-    new_squad_ids = [pid for pid in player_ids if pick[pid].value() == 1]
+        marginal_gain = candidate["total_points"] - prev_points
+        is_paid_step = k > free_transfers
+
+        if is_paid_step:
+            if marginal_gain - POINTS_PER_HIT < min_net_gain_per_hit:
+                break  # this specific hit doesn't clear the safety margin on its own -- stop here
+        else:
+            if marginal_gain < min_gain_per_free_transfer:
+                break  # this specific free transfer doesn't clear the bar on its own -- stop here
+
+        best_k = k
+        best_result = candidate
+        prev_points = candidate["total_points"]
+
+    new_squad_ids = best_result["new_squad_ids"]
     transfers_out = sorted(current_set - set(new_squad_ids))
     transfers_in = sorted(set(new_squad_ids) - current_set)
     num_paid_actual = max(0, len(transfers_out) - free_transfers)
@@ -323,8 +405,7 @@ def optimize_transfers(
     starting_ids = select_starting_xi(new_squad, id_col, position_col, points_col)
     new_squad["in_starting_xi"] = new_squad[id_col].isin(starting_ids)
 
-    old_points = sum(points[pid] for pid in current_set)
-    new_points = sum(points[pid] for pid in new_squad_ids)
+    new_points = best_result["total_points"]
     hit_cost = POINTS_PER_HIT * num_paid_actual
 
     return {
