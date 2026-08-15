@@ -128,6 +128,16 @@ def snapshot_entry(entry_id: int, season: str, current_gw: int) -> None:
     out_dir = os.path.join(RAW_DIR, season, "entry", str(entry_id))
     os.makedirs(out_dir, exist_ok=True)
 
+    # Real name (player_first_name/player_last_name) and team name -- fetched
+    # separately from history/picks below since it's a different endpoint
+    # (entry/{id}/, not entry/{id}/history/), saved once here so the
+    # dashboard can display "Rahul Bhaskaran" instead of a bare numeric id.
+    entry_info = fpl_api.get_entry(entry_id)
+    with open(os.path.join(out_dir, "info.json"), "w", encoding="utf-8") as f:
+        json.dump(entry_info, f, indent=2)
+    print(f"Saved entry {entry_id} info "
+          f"({entry_info.get('player_first_name')} {entry_info.get('player_last_name')})")
+
     history = fpl_api.get_entry_history(entry_id)
     with open(os.path.join(out_dir, "history.json"), "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2)

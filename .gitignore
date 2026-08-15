@@ -19,13 +19,15 @@ data/raw/
 # data, so kept out of git same as data/raw/'s manager-entry history.
 data/manual_squad.json
 
-# data/dashboard_entry_history.json (NOT matched by data/raw/ above, since
-# it's a different path) is a deliberately-committed, non-timestamped copy of
-# ONE specific manager's (this project's own) past-season history.json, for
-# the same reason data/dashboard_bootstrap.json exists: Streamlit Cloud can't
-# run the collector, so the Manager History tab needs a fallback at deploy
-# time. Not a new privacy decision -- this exact data is already published on
-# the public manager-history GitHub Pages page linked throughout the app.
+# data/dashboard_entry_history.json and data/dashboard_entry_info.json (NOT
+# matched by data/raw/ above, since they're a different path) are
+# deliberately-committed, non-timestamped copies of ONE specific manager's
+# (this project's own) history.json / info.json, for the same reason
+# data/dashboard_bootstrap.json exists: Streamlit Cloud can't run the
+# collector, so the Manager History tab (including the manager's real name,
+# shown instead of a bare numeric entry id) needs a fallback at deploy time.
+# Not a new privacy decision -- this exact data is already published on the
+# public manager-history GitHub Pages page linked throughout the app.
 
 # Processed data is normally gitignored (regenerates via load_historical.py +
 # features.py against the vaastav dataset), EXCEPT features.parquet and

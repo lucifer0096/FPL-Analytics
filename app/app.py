@@ -115,8 +115,6 @@ SEASON_ORDER = [
     "2016-17", "2017-18", "2018-19", "2019-20",
     "2020-21", "2021-22", "2022-23", "2023-24", "2024-25", "2025-26",
 ]
-VALIDATION_SEASON = "2024-25"
-FINAL_HOLDOUT_SEASON = "2025-26"
 
 
 @st.cache_data
@@ -331,6 +329,32 @@ def _find_entry_history_path(entry_id: int) -> str:
     if os.path.exists(_DASHBOARD_ENTRY_HISTORY_FALLBACK):
         return _DASHBOARD_ENTRY_HISTORY_FALLBACK
     return None
+
+
+_DASHBOARD_ENTRY_INFO_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_entry_info.json")
+
+
+@st.cache_data
+def load_manager_name(entry_id: int) -> str:
+    """This manager's real name (player_first_name + player_last_name), read
+    from the collector's saved entry/{id}/info.json -- falls back to the bare
+    numeric entry_id if unavailable, rather than failing the whole tab, since
+    a name is a display nicety, not something the rest of this tab depends
+    on. Same gitignored-data/raw + committed-fallback pattern as
+    _find_entry_history_path -- see that function's docstring."""
+    pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "entry", str(entry_id), "info.json")
+    paths = sorted(glob.glob(pattern))
+    path = paths[-1] if paths else (
+        _DASHBOARD_ENTRY_INFO_FALLBACK if os.path.exists(_DASHBOARD_ENTRY_INFO_FALLBACK) else None
+    )
+    if path is None:
+        return str(entry_id)
+    with open(path, encoding="utf-8") as f:
+        info = json.load(f)
+    first, last = info.get("player_first_name"), info.get("player_last_name")
+    if first and last:
+        return f"{first} {last}"
+    return str(entry_id)
 
 
 @st.cache_data
@@ -1262,8 +1286,9 @@ with tab_model:
 # MANAGER HISTORY
 # =============================================================================
 with tab_history:
-    st.header("Manager history")
-    st.caption(f"Season-by-season points and overall rank, entry {MANAGER_ENTRY_ID}.")
+    manager_name = load_manager_name(MANAGER_ENTRY_ID)
+    st.header(f"Manager history — {manager_name}")
+    st.caption(f"Season-by-season points and overall rank (entry {MANAGER_ENTRY_ID}).")
 
     st.subheader("2026-27 live progress")
     current_progress = load_current_season_progress(MANAGER_ENTRY_ID)
