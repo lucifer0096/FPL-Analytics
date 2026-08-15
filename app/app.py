@@ -645,14 +645,32 @@ with tab_transfers:
                 pool_label = f"GW{next_gw} of {built_season}"
 
         if next_pool is not None:
-            free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider")
-            st.caption(
-                f"Checking against {pool_label}. Only recommends a transfer if it clears a real "
-                f"minimum gain on its own (each transfer judged individually, not as a batch average) "
-                f"— a hit is only suggested if the gain clearly outweighs its -4pt cost, not just "
-                f"barely breaks even. Having more free transfers banked never forces more transfers "
-                f"to be used; holding is the answer whenever nothing clears the bar."
+            unlimited = st.checkbox(
+                "Playing Wildcard or Free Hit this gameweek (or this is GW1) — unlimited free transfers",
+                key="unlimited_transfers_checkbox",
+                help="Verified against the live API's game_settings: GW1 allows a transfers_cap of 20 "
+                     "(effectively unlimited) instead of the normal 1-5 banked limit, and every transfer "
+                     "made while Wildcard or Free Hit is active is free by chip definition, with no cap "
+                     "and no -4pt hit ever applying. Check this instead of setting free transfers below.",
             )
+            if not unlimited:
+                free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider")
+
+            if unlimited:
+                st.caption(
+                    f"Checking against {pool_label}. Unlimited transfers this gameweek — every transfer "
+                    f"that improves the squad is included, no hit cost, no per-transfer minimum-gain bar "
+                    f"(that bar only exists to protect a SCARCE resource; it doesn't apply when transfers "
+                    f"aren't scarce this gameweek)."
+                )
+            else:
+                st.caption(
+                    f"Checking against {pool_label}. Only recommends a transfer if it clears a real "
+                    f"minimum gain on its own (each transfer judged individually, not as a batch average) "
+                    f"— a hit is only suggested if the gain clearly outweighs its -4pt cost, not just "
+                    f"barely breaks even. Having more free transfers banked never forces more transfers "
+                    f"to be used; holding is the answer whenever nothing clears the bar."
+                )
 
             if st.button("Find best transfer(s)", key="find_transfers_btn"):
                 common_ids = set(current_squad["player_id"]) & set(next_pool["player_id"])
@@ -667,7 +685,8 @@ with tab_transfers:
                         result = optimize_transfers(
                             current_squad_ids=squad_ids,
                             players=next_pool,
-                            free_transfers=free_transfers,
+                            free_transfers=1 if unlimited else free_transfers,
+                            unlimited_transfers=unlimited,
                         )
 
                     if result["transfers_in"]:

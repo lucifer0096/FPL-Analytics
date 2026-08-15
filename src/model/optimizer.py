@@ -284,28 +284,131 @@ def optimize_transfers(
     sell_price_col: str = None,
     min_gain_per_free_transfer: float = MIN_GAIN_PER_FREE_TRANSFER,
     min_net_gain_per_hit: float = MIN_NET_GAIN_PER_HIT,
+    unlimited_transfers: bool = False,
 ) -> dict:
     """Given an existing 15-man squad and a number of banked free transfers,
     solve for the transfer(s) -- if any -- worth actually making.
 
-    Solves separately for every possible transfer count k (0, 1, 2, ... up to
-    free_transfers + max_paid_transfers), then picks the largest k whose gain
-    clears this project's own recommendation bar -- NOT just "the k with the
-    highest raw objective value," which is what a single combined solve would
-    give and is why the old version of this function recommended a 5th free
-    transfer for a +0.4 point gain (technically positive, not something a real
-    manager should act on). The bar:
-      - Within free_transfers: the AVERAGE gain per transfer used must be >=
+    `unlimited_transfers=True` covers every situation where FPL genuinely
+    doesn't limit or cost transfers at all -- NOT just "a lot of free
+    transfers": GW1 (every manager builds from scratch, verified directly
+    against the live API's `transfers_cap` in game_settings, which is 20 for
+    GW1 rather than the normal 1-5 ban), and a gameweek where Wildcard or Free
+    Hit is being played (every transfer that gameweek is free, no cap, no hit,
+    by chip definition -- not something free_transfers/max_paid_transfers can
+    express, since those model the NORMAL weekly banking rule). When True,
+    free_transfers/max_paid_transfers/the marginal-gain gates below are all
+    bypassed entirely -- this just becomes "build the best squad reachable
+    from the current one under budget/position/club constraints," identical in
+    spirit to optimize_squad() but preserving as many currently-owned players
+    as happen to still be optimal (there's no reason to force a change for
+    its own sake even when transfers are free). Gating marginal gain still
+    matters in the normal case (real transfers are a scarce resource, see
+    below), but doesn't apply when the resource isn't scarce at all -- forcing
+    the same "does this transfer clear a bar" logic onto a genuinely free
+    rebuild would incorrectly leave value on the table."""
+    if unlimited_transfers:
+        return _optimize_transfers_unlimited(
+            current_squad_ids, players, bank, id_col, position_col, team_col,
+            cost_col, points_col, sell_price_col,
+        )
+    return _optimize_transfers_gated(
+        current_squad_ids, players, free_transfers, bank, max_paid_transfers,
+        id_col, position_col, team_col, cost_col, points_col, sell_price_col,
+        min_gain_per_free_transfer, min_net_gain_per_hit,
+    )
+
+
+def _optimize_transfers_unlimited(
+    current_squad_ids: list,
+    players: pd.DataFrame,
+    bank: float,
+    id_col: str,
+    position_col: str,
+    team_col: str,
+    cost_col: str,
+    points_col: str,
+    sell_price_col: str,
+) -> dict:
+    """The unlimited_transfers=True path -- see optimize_transfers' docstring.
+    No hit cost, no transfer-count cap: budget is bank + full sell value of the
+    ENTIRE current squad (every player can be replaced), same shape of result
+    as the gated path so callers don't need to branch on which path ran."""
+    if sell_price_col is None:
+        sell_price_col = cost_col
+
+    current_set = set(current_squad_ids)
+    if not current_set.issubset(set(players[id_col])):
+        missing = current_set - set(players[id_col])
+        raise ValueError(f"current_squad_ids contains ids not present in players: {missing}")
+    if len(current_set) != SQUAD_SIZE:
+        raise ValueError(f"current_squad_ids must have exactly {SQUAD_SIZE} players, got {len(current_set)}")
+
+    sell_price = players.set_index(id_col)[sell_price_col].to_dict()
+    total_budget = bank + sum(sell_price[pid] for pid in current_set)
+
+    new_squad = optimize_squad(
+        players, budget=total_budget, id_col=id_col, position_col=position_col,
+        team_col=team_col, cost_col=cost_col, points_col=points_col,
+    )
+    new_squad_ids = new_squad[id_col].tolist()
+    transfers_out = sorted(current_set - set(new_squad_ids))
+    transfers_in = sorted(set(new_squad_ids) - current_set)
+
+    points = players.set_index(id_col)[points_col].to_dict()
+    old_points = sum(points[pid] for pid in current_set)
+    new_points = sum(points[pid] for pid in new_squad_ids)
+
+    return {
+        "transfers_out": transfers_out,
+        "transfers_in": transfers_in,
+        "num_paid_transfers": 0,
+        "hit_cost": 0,
+        "new_squad": new_squad,
+        "net_points_gain": new_points - old_points,
+    }
+
+
+def _optimize_transfers_gated(
+    current_squad_ids: list,
+    players: pd.DataFrame,
+    free_transfers: int,
+    bank: float = 0.0,
+    max_paid_transfers: int = 3,
+    id_col: str = "player_id",
+    position_col: str = "position",
+    team_col: str = "team",
+    cost_col: str = "cost",
+    points_col: str = "predicted_points",
+    sell_price_col: str = None,
+    min_gain_per_free_transfer: float = MIN_GAIN_PER_FREE_TRANSFER,
+    min_net_gain_per_hit: float = MIN_NET_GAIN_PER_HIT,
+) -> dict:
+    """The normal, gated path (1-5 banked free transfers, hits cost points) --
+    see optimize_transfers' docstring for the full explanation, and for when
+    unlimited_transfers=True should be used instead of this path.
+
+    Solves separately for every transfer count k (0, 1, 2, ... up to
+    free_transfers + max_paid_transfers), walking k UP one at a time and
+    stopping the FIRST time the MARGINAL gain of going from k-1 to k doesn't
+    clear that specific transfer's own bar -- NOT the average across all
+    transfers made so far, and NOT just "the k with the highest raw objective
+    value" (what a single combined solve gives, and why the old version of
+    this function recommended a 5th free transfer for a +0.4 point gain --
+    technically positive, not something a real manager should act on, and not
+    something an average could catch either, since a strong 1st transfer can
+    subsidize a weak 5th one's average without either check on its own):
+      - While k <= free_transfers: that step's MARGINAL gain must be >=
         min_gain_per_free_transfer. A free transfer still has a real cost --
         it's a banked resource, and churn chases noise in a model with ~1 point
         of validation MAE per player-gameweek (see README) -- so "positive" and
         "worth using" aren't the same bar.
-      - Beyond free_transfers (paid, taking a -4pt hit each): the NET gain from
-        those specific additional transfers (after their hit cost) must be >=
-        min_net_gain_per_hit, a real safety margin over just "breaks even,"
-        since a marginal net gain is well within the model's own prediction
-        error and isn't a genuine edge worth a certain, real point deduction.
-    k=0 (hold) always clears the bar trivially, so this never fails to return a
+      - Beyond free_transfers (paid, taking a -4pt hit): that step's MARGINAL
+        gain minus the hit must be >= min_net_gain_per_hit, a real safety
+        margin over just "breaks even," since a marginal net gain is well
+        within the model's own prediction error and isn't a genuine edge worth
+        a certain, real point deduction.
+    k=0 (hold) is always the starting point, so this never fails to return a
     "no transfer is worth it" result when nothing beats it -- holding is never
     penalized just because SOME transfer exists with fractional positive value.
 
