@@ -482,6 +482,21 @@ def _latest_bootstrap_path() -> str:
     )
 
 
+@st.cache_data
+def _team_name_to_badge_code() -> dict:
+    """Team name (e.g. "Arsenal", the string every pool already carries as
+    `team`) -> FPL's team `code` (e.g. 3), the id FPL's own real badge CDN
+    uses: https://resources.premierleague.com/premierleague/badges/70/t{code}.png
+    -- checked directly, returns a real 200 for Arsenal (t3) and Bournemouth
+    (t91). Used as a fallback visual for a player with no headshot on FPL's
+    CDN (confirmed some current signings genuinely have none yet -- a real
+    403 from FPL's own servers, not a bug here), so the placeholder at least
+    shows the player's real team instead of a blank box."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    return {t["name"]: t["code"] for t in raw["teams"]}
+
+
 def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     """One player's shirt-style card: name, price, predicted points, and an
     optional corner badge (e.g. MVP / Player of the Week) for the single
@@ -540,23 +555,36 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # a genuine 220x280 PNG (2x the "110x140" the URL implies) -- checked
     # PIXEL DIMENSIONS directly from the file header, not assumed. A player
     # with no real photo on FPL's CDN gets a 403, not a 404 or placeholder
-    # image, confirmed directly against a fabricated player code.
+    # image, confirmed directly against a fabricated player code -- genuinely
+    # missing for some current signings (e.g. Adrien Truffert, Enzo Le Fée
+    # both 403 at every resolution checked), not something wrong on this
+    # project's end.
     #
     # `onerror` (a JS event handler) turned out to NOT fire reliably through
     # Streamlit's sanitized st.markdown(unsafe_allow_html=True) rendering --
     # broken photos were showing the browser's ugly broken-image icon
     # instead of being hidden. Fixed with a CSS-only approach instead: a
-    # wrapping div carries a neutral placeholder background BEHIND the
-    # image, and object-fit: contain (not cover, which was cropping heads
-    # off at a mismatched box height -- the box was 52px tall against a
-    # photo shaped roughly 5:6.4) at a box matched to the real aspect ratio
-    # means the whole photo fits inside its box without distortion or crop.
-    # A failed <img> renders with no visible content of its own, so the
-    # wrapping div's background shows through automatically -- no JS needed.
+    # wrapping div carries a fallback BEHIND the image via CSS
+    # background-image (the player's real team badge, also from FPL's own
+    # CDN -- checked directly, t{code}.png returns 200 for Arsenal/
+    # Bournemouth), and object-fit: contain (not cover, which was cropping
+    # heads off at a mismatched box height -- the box was 52px tall against
+    # a photo shaped roughly 5:6.4) at a box matched to the real aspect
+    # ratio means the whole photo fits inside its box without distortion or
+    # crop. A failed <img> renders with no visible content of its own, so
+    # the wrapping div's own background-image shows through automatically
+    # -- no JS needed, and the fallback is the player's correct real team,
+    # not a generic gray box.
     photo_code = row["player_code"] if "player_code" in row.index and pd.notna(row.get("player_code")) else row["player_id"]
+    team_code = _team_name_to_badge_code().get(row["team"])
+    badge_fallback_css = (
+        f'background-image: url(https://resources.premierleague.com/premierleague/badges/70/t{team_code}.png); '
+        f'background-size: 44px; background-repeat: no-repeat; background-position: center;'
+        if team_code else ""
+    )
     img_html = (
-        f'<div style="width: 100%; height: 68px; background: #d8dde3; border-radius: 6px; '
-        f'margin-bottom: 2px; overflow: hidden;">'
+        f'<div style="width: 100%; height: 68px; background-color: #d8dde3; {badge_fallback_css} '
+        f'border-radius: 6px; margin-bottom: 2px; overflow: hidden;">'
         f'<img src="https://resources.premierleague.com/premierleague/photos/players/110x140/p{photo_code}.png" '
         f'style="width: 100%; height: 100%; object-fit: contain;" loading="lazy" />'
         f'</div>'
