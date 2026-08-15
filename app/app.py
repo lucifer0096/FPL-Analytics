@@ -235,6 +235,92 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
 
 
 @st.cache_data
+def load_model_metrics() -> dict:
+    """Real validation metrics from the last train.py run, read from
+    models/metrics.json -- NOT hardcoded numbers. train.py writes this file
+    itself each time it runs, so retraining (e.g. once live 2026-27 data joins
+    the training set) automatically keeps this tab honest without anyone
+    needing to remember to hand-edit numbers here too. Returns None if
+    train.py has never been run in this environment."""
+    path = os.path.join(PROJECT_DIR, "models", "metrics.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _find_entry_history_path(entry_id: int) -> str:
+    """Most recent data/raw/{season}/entry/{entry_id}/history.json the collector
+    has written -- checks every season folder (not just the latest), since a
+    manager's PAST-season totals (what this tab shows) don't change once a
+    season ends, so whichever collector run captured them is still valid."""
+    pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "entry", str(entry_id), "history.json")
+    paths = sorted(glob.glob(pattern))
+    return paths[-1] if paths else None
+
+
+@st.cache_data
+def load_manager_history(entry_id: int) -> pd.DataFrame:
+    """Real season-by-season totals for one manager, read directly from the
+    collector's own saved entry/{id}/history.json -- NOT a hardcoded table.
+    Returns an empty DataFrame (not an error) if the collector has never
+    snapshotted this entry, which is an expected state (FPL_ENTRY_ID is
+    optional -- see snapshot.py), not a bug to raise on."""
+    path = _find_entry_history_path(entry_id)
+    if path is None:
+        return pd.DataFrame(columns=["season", "points", "rank", "top_pct"])
+
+    with open(path, encoding="utf-8") as f:
+        history = json.load(f)
+
+    past = history.get("past", [])
+    df = pd.DataFrame([
+        {
+            "season": s["season_name"],
+            "points": s["total_points"],
+            "rank": s["rank"],
+            "top_pct": int(s["rank_percentage"]),
+        }
+        for s in past
+    ])
+    return df
+
+
+@st.cache_data
+def load_current_season_progress(entry_id: int) -> pd.DataFrame:
+    """This manager's GAMEWEEK-BY-GAMEWEEK progress for the CURRENT (in
+    progress) season -- distinct from load_manager_history's PAST, season-
+    total-only rows, which the live API never updates mid-season for old
+    seasons (see fpl_api.get_entry_history's docstring: the public API only
+    exposes gw-by-gw detail for the season actually happening right now).
+    Returns an empty DataFrame before the first gameweek finishes, which is
+    the correct/expected state right now (2026-27 hasn't started), not a bug."""
+    path = _find_entry_history_path(entry_id)
+    if path is None:
+        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value"])
+
+    with open(path, encoding="utf-8") as f:
+        history = json.load(f)
+
+    current = history.get("current", [])
+    if not current:
+        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value"])
+
+    df = pd.DataFrame([
+        {
+            "gw": g["event"],
+            "points": g["points"],
+            "total_points": g["total_points"],
+            "overall_rank": g["overall_rank"],
+            "bank": g["bank"] / 10.0,
+            "value": g["value"] / 10.0,
+        }
+        for g in current
+    ])
+    return df.sort_values("gw").reset_index(drop=True)
+
+
+@st.cache_data
 def scout_picks_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
     """This project's own 'Scout Picks' -- a pre-season recommended squad in
     the spirit of FPL's official editorial Scout Picks article, but built from
@@ -473,9 +559,11 @@ with tab_overview:
 
     col1, col2, col3, col4 = st.columns(4)
     df = load_features()
+    overview_metrics = load_model_metrics()
+    mae_display = f"{overview_metrics['single_stage']['mae']:.3f}" if overview_metrics else "N/A"
     col1.metric("Seasons tracked", f"{df['season'].nunique()}")
     col2.metric("Player-gameweek rows", f"{len(df):,}")
-    col3.metric("Model validation MAE", "0.986")
+    col3.metric("Model validation MAE", mae_display)
     col4.metric("Squad rules encoded", "8")
 
     st.markdown("""
@@ -906,33 +994,59 @@ with tab_chips:
 # =============================================================================
 with tab_model:
     st.header("Model performance")
-    st.caption(f"Validated on {VALIDATION_SEASON} (chronological split — trained only on earlier seasons). {FINAL_HOLDOUT_SEASON} is held out entirely and untouched.")
 
-    perf = pd.DataFrame({
-        "Model": ["Single-stage", "Two-stage", "Naive baseline (rolling-5 avg)", "FPL's own xP*"],
-        "MAE": [0.986, 0.984, 1.052, 0.904],
-        "RMSE": [1.914, 1.914, 2.069, 1.757],
-    })
-    st.dataframe(perf, use_container_width=True, hide_index=True)
-    st.caption(
-        "*FPL's own xP carries a caveat from the data source's maintainer: it may contain "
-        "post-match information for some gameweeks (scraper runs after each gameweek ends, "
-        "FPL's update cadence for the underlying field is undocumented). Treated as an "
-        "informative but not fully leak-free comparison — see the README's Model Training section."
-    )
+    metrics = load_model_metrics()
 
-    st.subheader("Where the model does well vs. FPL's xP")
-    played_perf = pd.DataFrame({
-        "Model": ["Single-stage (played rows only)", "Naive baseline (played only)", "FPL's own xP (played only)"],
-        "MAE": [1.832, 2.053, 1.759],
-    })
-    st.dataframe(played_perf, use_container_width=True, hide_index=True)
-    st.markdown(
-        "Restricting to rows where the player actually played, the model closes most of "
-        "the gap to FPL's xP. Most of the remaining full-dataset gap is concentrated in "
-        "non-playing rows — FPL's xP likely has access to real injury/team-news signals "
-        "this project's historical-stats-only feature set can't replicate."
-    )
+    if metrics is None:
+        st.info(
+            "No models/metrics.json found — run `python src/model/train.py` to train the "
+            "model and generate real validation metrics. (This section used to show "
+            "hardcoded numbers from a past run; now it reads train.py's own output "
+            "directly, so it can't silently go stale after a retrain.)"
+        )
+    else:
+        st.caption(
+            f"Validated on {metrics['validation_season']} (chronological split — trained "
+            f"only on earlier seasons). {metrics['final_holdout_season']} is held out "
+            f"entirely and untouched. Read live from models/metrics.json, written by "
+            f"train.py's last run — not hardcoded."
+        )
+
+        rows = [
+            {"Model": "Single-stage", "MAE": metrics["single_stage"]["mae"], "RMSE": metrics["single_stage"]["rmse"]},
+            {"Model": "Two-stage", "MAE": metrics["two_stage"]["mae"], "RMSE": metrics["two_stage"]["rmse"]},
+            {"Model": "Naive baseline (rolling-5 avg)", "MAE": metrics["naive_baseline"]["mae"], "RMSE": metrics["naive_baseline"]["rmse"]},
+        ]
+        if "fpl_xp_baseline" in metrics:
+            rows.append({"Model": "FPL's own xP*", "MAE": metrics["fpl_xp_baseline"]["mae"], "RMSE": metrics["fpl_xp_baseline"]["rmse"]})
+        perf = pd.DataFrame(rows)
+        perf["MAE"] = perf["MAE"].round(3)
+        perf["RMSE"] = perf["RMSE"].round(3)
+        st.dataframe(perf, use_container_width=True, hide_index=True)
+        st.caption(
+            "*FPL's own xP carries a caveat from the data source's maintainer: it may contain "
+            "post-match information for some gameweeks (scraper runs after each gameweek ends, "
+            "FPL's update cadence for the underlying field is undocumented). Treated as an "
+            "informative but not fully leak-free comparison — see the README's Model Training section."
+        )
+
+        if "single_stage_played_only" in metrics:
+            st.subheader("Where the model does well vs. FPL's xP")
+            played_rows = [
+                {"Model": "Single-stage (played rows only)", "MAE": metrics["single_stage_played_only"]["mae"]},
+                {"Model": "Naive baseline (played only)", "MAE": metrics["naive_baseline_played_only"]["mae"]},
+            ]
+            if "fpl_xp_baseline_played_only" in metrics:
+                played_rows.append({"Model": "FPL's own xP (played only)", "MAE": metrics["fpl_xp_baseline_played_only"]["mae"]})
+            played_perf = pd.DataFrame(played_rows)
+            played_perf["MAE"] = played_perf["MAE"].round(3)
+            st.dataframe(played_perf, use_container_width=True, hide_index=True)
+            st.markdown(
+                "Restricting to rows where the player actually played, the model closes most of "
+                "the gap to FPL's xP. Most of the remaining full-dataset gap is concentrated in "
+                "non-playing rows — FPL's xP likely has access to real injury/team-news signals "
+                "this project's historical-stats-only feature set can't replicate."
+            )
 
 # =============================================================================
 # MANAGER HISTORY
@@ -941,29 +1055,71 @@ with tab_history:
     st.header("Manager history")
     st.caption(f"Season-by-season points and overall rank, entry {MANAGER_ENTRY_ID}.")
 
-    manager_data = pd.DataFrame({
-        "season": ["2016/17", "2017/18", "2018/19", "2019/20", "2020/21",
-                   "2021/22", "2022/23", "2023/24", "2024/25", "2025/26"],
-        "points": [2053, 2049, 2094, 1973, 2206, 2130, 2312, 2284, 2227, 2102],
-        "rank": [386166, 809108, 898121, 2207538, 873796, 1688770, 1404045, 1189768, 2461833, 2240945],
-    })
-    manager_data["top_pct"] = [9, 14, 14, 29, 11, 18, 12, 11, 22, 17]
+    st.subheader("2026-27 live progress")
+    current_progress = load_current_season_progress(MANAGER_ENTRY_ID)
+    if current_progress.empty:
+        st.info(
+            "No 2026-27 gameweeks finished yet (first fixture 21 Aug 2026) — this section "
+            "fills in automatically, gameweek by gameweek, once the collector captures real "
+            "results. Unlike the past-seasons table below (which the live API only ever gives "
+            "as season totals, never gameweek detail, for an already-finished season — see "
+            "load_current_season_progress), this IS gameweek-by-gameweek, live, for the "
+            "season actually in progress."
+        )
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.caption("Overall rank by gameweek (lower is better)")
+            st.line_chart(current_progress.set_index("gw")["overall_rank"])
+        with col2:
+            st.caption("Cumulative points by gameweek")
+            st.line_chart(current_progress.set_index("gw")["total_points"])
+        latest = current_progress.iloc[-1]
+        mcol1, mcol2, mcol3 = st.columns(3)
+        mcol1.metric("Total points", f"{latest['total_points']:.0f}")
+        mcol2.metric("Overall rank", f"{latest['overall_rank']:,.0f}")
+        mcol3.metric("Bank", f"£{latest['bank']:.1f}m")
+        st.dataframe(
+            current_progress.rename(columns={
+                "gw": "GW", "points": "GW points", "total_points": "Total points",
+                "overall_rank": "Overall rank", "bank": "Bank (£m)", "value": "Squad value (£m)",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Points by season")
-        st.bar_chart(manager_data.set_index("season")["points"])
-    with col2:
-        st.subheader("Overall rank by season (lower is better)")
-        st.line_chart(manager_data.set_index("season")["rank"])
+    st.subheader("Past seasons")
+    manager_data = load_manager_history(MANAGER_ENTRY_ID)
 
-    st.dataframe(
-        manager_data.rename(columns={"season": "Season", "points": "Points", "rank": "Rank", "top_pct": "Top %"}),
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.caption(
-        "2025/26 figures may be provisional if pulled before that season's final gameweek "
-        "was confirmed finished. Full interactive version: "
-        "[my-fpl-history.html](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)."
-    )
+    if manager_data.empty:
+        st.info(
+            f"No collected history found for entry {MANAGER_ENTRY_ID} — the collector "
+            f"snapshots this automatically when `FPL_ENTRY_ID` is set (see README's "
+            f"'Running the Collector'), but hasn't been run with it yet in this "
+            f"environment. Run `python src/collector/snapshot.py` with `FPL_ENTRY_ID` "
+            f"set to populate this tab."
+        )
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Points by season")
+            st.bar_chart(manager_data.set_index("season")["points"])
+        with col2:
+            st.subheader("Overall rank by season (lower is better)")
+            st.line_chart(manager_data.set_index("season")["rank"])
+
+        st.dataframe(
+            manager_data.rename(columns={"season": "Season", "points": "Points", "rank": "Rank", "top_pct": "Top %"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "Read live from this project's own collector snapshot "
+            f"(`data/raw/*/entry/{MANAGER_ENTRY_ID}/history.json`), not a hardcoded table — "
+            "refreshes automatically whenever the collector re-runs. The most recent "
+            "season's figures may be provisional if pulled before that season's final "
+            "gameweek was confirmed finished. Full interactive version: "
+            "[my-fpl-history.html](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html) "
+            "(a separate, statically-hosted page — still carries its own hardcoded copy of this "
+            "same data, since GitHub Pages can't run this project's Python collector)."
+        )

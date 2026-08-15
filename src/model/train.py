@@ -113,6 +113,9 @@ def evaluate(name: str, y_true: pd.Series, y_pred: np.ndarray) -> dict:
     return {"mae": mae, "rmse": rmse}
 
 
+METRICS_PATH = os.path.join("models", "metrics.json")
+
+
 # ============================================================================
 # Single-stage model (predicts total_points directly for every row)
 # ============================================================================
@@ -167,6 +170,8 @@ def train_points_given_played(X_train_played: pd.DataFrame, y_train_played: pd.S
 
 
 if __name__ == "__main__":
+    import json
+
     df = load_training_data()
     print(f"Loaded {len(df):,} rows (after excluding {EXCLUDED_SEASONS})")
 
@@ -179,13 +184,15 @@ if __name__ == "__main__":
     y_train = train_df[TARGET_COLUMN].astype(float)
     y_val = val_df[TARGET_COLUMN].astype(float)
 
+    metrics = {"validation_season": VALIDATION_SEASON, "final_holdout_season": FINAL_HOLDOUT_SEASON}
+
     # ---- Single-stage model ----
     print("\nTraining single-stage model...")
     single_model = train_single_stage(X_train, y_train)
     single_pred = np.clip(single_model.predict(X_val), 0, None)
 
     print("\n=== Validation results (season", VALIDATION_SEASON, ") ===")
-    evaluate("Single-stage model", y_val, single_pred)
+    metrics["single_stage"] = evaluate("Single-stage model", y_val, single_pred)
 
     # ---- Two-stage model ----
     print("\nTraining two-stage model (play classifier + conditional points)...")
@@ -203,20 +210,23 @@ if __name__ == "__main__":
 
     play_auc = roc_auc_score(val_df[PLAYED_COLUMN], play_proba_val)
     print(f"Play classifier AUC: {play_auc:.3f}")
-    evaluate("Two-stage model (P(plays) x E[points|plays])", y_val, two_stage_pred)
+    metrics["two_stage"] = evaluate("Two-stage model (P(plays) x E[points|plays])", y_val, two_stage_pred)
+    metrics["two_stage"]["play_classifier_auc"] = play_auc
 
     # ---- Baselines ----
     naive_pred = val_df["total_points_avg_last_5"].fillna(0).clip(lower=0)
-    evaluate("Naive baseline (player's own rolling-5 average)", y_val, naive_pred)
+    metrics["naive_baseline"] = evaluate("Naive baseline (player's own rolling-5 average)", y_val, naive_pred)
 
     has_baseline = val_df["fpl_xP"].notna()
     n_baseline = has_baseline.sum()
     if n_baseline > 0:
-        evaluate(
+        metrics["fpl_xp_baseline"] = evaluate(
             f"FPL's own xP, own leakage caveat noted by data source "
             f"(n={n_baseline:,}/{len(val_df):,})",
             y_val[has_baseline], val_df.loc[has_baseline, "fpl_xP"].astype(float)
         )
+        metrics["fpl_xp_baseline"]["n_rows"] = int(n_baseline)
+        metrics["fpl_xp_baseline"]["n_rows_total"] = int(len(val_df))
         evaluate(
             f"Single-stage model (same {n_baseline:,} rows, for direct comparison)",
             y_val[has_baseline], single_pred[has_baseline.values]
@@ -232,11 +242,17 @@ if __name__ == "__main__":
     # the player didn't play at all (minutes == 0), vs. rows where they did?
     played_mask = val_df[PLAYED_COLUMN] == 1
     print(f"\n=== Diagnostic: error on PLAYED rows only (n={played_mask.sum():,}/{len(val_df):,}) ===")
-    evaluate("Single-stage model (played only)", y_val[played_mask], single_pred[played_mask.values])
-    evaluate("Naive baseline (played only)", y_val[played_mask], naive_pred[played_mask])
+    metrics["single_stage_played_only"] = evaluate(
+        "Single-stage model (played only)", y_val[played_mask], single_pred[played_mask.values]
+    )
+    metrics["naive_baseline_played_only"] = evaluate(
+        "Naive baseline (played only)", y_val[played_mask], naive_pred[played_mask]
+    )
     fx_played = has_baseline & played_mask
     if fx_played.sum() > 0:
-        evaluate("FPL's own xP (played only)", y_val[fx_played], val_df.loc[fx_played, "fpl_xP"].astype(float))
+        metrics["fpl_xp_baseline_played_only"] = evaluate(
+            "FPL's own xP (played only)", y_val[fx_played], val_df.loc[fx_played, "fpl_xP"].astype(float)
+        )
 
     print("\n=== Feature importance (single-stage model) ===")
     importance = pd.Series(single_model.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=False)
@@ -250,4 +266,6 @@ if __name__ == "__main__":
     single_model.booster_.save_model(os.path.join("models", "xp_model_single_stage.txt"))
     play_clf.booster_.save_model(os.path.join("models", "xp_model_play_classifier.txt"))
     points_model.booster_.save_model(os.path.join("models", "xp_model_points_given_played.txt"))
-    print(f"\nSaved 3 model files to models/")
+    with open(METRICS_PATH, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"\nSaved 3 model files and metrics.json to models/")

@@ -1,0 +1,35 @@
+{
+  "validation_season": "2024-25",
+  "final_holdout_season": "2025-26",
+  "single_stage": {
+    "mae": 0.9861243348916496,
+    "rmse": 1.9136457850035857
+  },
+  "two_stage": {
+    "mae": 0.9835203181941649,
+    "rmse": 1.913610576376657,
+    "play_classifier_auc": 0.9338458284028619
+  },
+  "naive_baseline": {
+    "mae": 1.0523549463035589,
+    "rmse": 2.068719478370801
+  },
+  "fpl_xp_baseline": {
+    "mae": 0.9039768353920024,
+    "rmse": 1.7572557600777083,
+    "n_rows": 27283,
+    "n_rows_total": 27283
+  },
+  "single_stage_played_only": {
+    "mae": 1.8319672211615163,
+    "rmse": 2.8128960488634585
+  },
+  "naive_baseline_played_only": {
+    "mae": 2.053444002536169,
+    "rmse": 3.0178006599983482
+  },
+  "fpl_xp_baseline_played_only": {
+    "mae": 1.7587411378177416,
+    "rmse": 2.5890703914647033
+  }
+}
