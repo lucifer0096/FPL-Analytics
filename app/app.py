@@ -536,23 +536,30 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     )
     # Real FPL player headshot -- checked directly against the live CDN:
     # https://resources.premierleague.com/premierleague/photos/players/110x140/p{code}.png
-    # returns 200 for a real player code (confirmed with Raya, code 154561).
-    # `code` is FPL's stable cross-season id (see load_historical.py's
-    # caveat on `element`) -- gw_pool/season_pool already use it AS
-    # player_id directly, so those fall back to player_id below; only the
-    # live-pool functions (preseason_pool/scout_picks_pool) carry a
-    # separate player_code column, since their player_id is FPL's raw
-    # current-season numeric id instead. object-fit: cover crops to the
-    # card's fixed size without distorting a photo's real aspect ratio; a
-    # missing/broken image (some low-profile players have no real photo,
-    # FPL serves a generic placeholder for those, which still loads fine)
-    # is handled by onerror hiding the tag rather than showing a broken-
-    # image icon.
+    # returns 200 for a real player code (confirmed with Raya, code 154561),
+    # a genuine 220x280 PNG (2x the "110x140" the URL implies) -- checked
+    # PIXEL DIMENSIONS directly from the file header, not assumed. A player
+    # with no real photo on FPL's CDN gets a 403, not a 404 or placeholder
+    # image, confirmed directly against a fabricated player code.
+    #
+    # `onerror` (a JS event handler) turned out to NOT fire reliably through
+    # Streamlit's sanitized st.markdown(unsafe_allow_html=True) rendering --
+    # broken photos were showing the browser's ugly broken-image icon
+    # instead of being hidden. Fixed with a CSS-only approach instead: a
+    # wrapping div carries a neutral placeholder background BEHIND the
+    # image, and object-fit: contain (not cover, which was cropping heads
+    # off at a mismatched box height -- the box was 52px tall against a
+    # photo shaped roughly 5:6.4) at a box matched to the real aspect ratio
+    # means the whole photo fits inside its box without distortion or crop.
+    # A failed <img> renders with no visible content of its own, so the
+    # wrapping div's background shows through automatically -- no JS needed.
     photo_code = row["player_code"] if "player_code" in row.index and pd.notna(row.get("player_code")) else row["player_id"]
     img_html = (
+        f'<div style="width: 100%; height: 68px; background: #d8dde3; border-radius: 6px; '
+        f'margin-bottom: 2px; overflow: hidden;">'
         f'<img src="https://resources.premierleague.com/premierleague/photos/players/110x140/p{photo_code}.png" '
-        f'style="width: 100%; height: 52px; object-fit: cover; border-radius: 6px; margin-bottom: 2px;" '
-        f'onerror="this.style.display=\'none\'" loading="lazy" />'
+        f'style="width: 100%; height: 100%; object-fit: contain;" loading="lazy" />'
+        f'</div>'
     )
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
