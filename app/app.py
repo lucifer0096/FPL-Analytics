@@ -104,11 +104,20 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
 
 
 def _latest_bootstrap_path() -> str:
+    """Same fallback logic as optimizer.py's load_latest_prices(): data/raw/ is
+    gitignored, so a fresh deploy has no timestamped snapshot -- falls back to
+    the deliberately-committed data/dashboard_bootstrap.json."""
     pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "bootstrap", "bootstrap_*.json")
     paths = sorted(glob.glob(pattern))
-    if not paths:
-        raise FileNotFoundError("No bootstrap snapshot found -- run the collector first.")
-    return paths[-1]
+    if paths:
+        return paths[-1]
+    fallback = os.path.join(PROJECT_DIR, "data", "dashboard_bootstrap.json")
+    if os.path.exists(fallback):
+        return fallback
+    raise FileNotFoundError(
+        f"No bootstrap snapshot found, and no fallback at {fallback} -- "
+        f"run the collector (src/collector/snapshot.py) at least once first."
+    )
 
 
 def _player_card_html(row: pd.Series) -> str:

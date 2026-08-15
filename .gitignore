@@ -4,8 +4,14 @@ __pycache__/
 .venv/
 venv/
 
-# Raw data snapshots regenerate from the FPL API via the collector.
-# Personal manager history/picks also live here — keep this out of git.
+# Raw collector snapshots (timestamped, one new file per run) fully regenerate
+# from the FPL API and data/raw/*/entry/ holds a manager's personal history/
+# picks -- keep all of data/raw/ out of git. The dashboard's pre-season/manual
+# squad modes need a bootstrap snapshot at deploy time, but Streamlit Cloud has
+# no way to run the collector itself -- so a single, STABLE (non-timestamped)
+# copy lives at data/dashboard_bootstrap.json instead (see below), committed
+# deliberately and refreshed by hand/CI, decoupled from data/raw/'s
+# ever-growing timestamped files.
 data/raw/
 
 # Processed data is normally gitignored (regenerates via load_historical.py +
