@@ -4,10 +4,20 @@ __pycache__/
 .venv/
 venv/
 
-# Raw and processed data snapshots regenerate from the FPL API via the collector.
+# Raw data snapshots regenerate from the FPL API via the collector.
 # Personal manager history/picks also live here — keep this out of git.
 data/raw/
-data/processed/
+
+# Processed data is normally gitignored (regenerates via load_historical.py +
+# features.py against the vaastav dataset), EXCEPT features.parquet and
+# historical_gw.parquet, which the dashboard depends on directly and Streamlit
+# Cloud has no way to regenerate (that needs a local clone of a separate repo
+# at a hardcoded path) -- committed deliberately so the deployed app has data
+# to read. ~14MB combined, no personal data (league-wide historical stats only).
+data/processed/*
+!data/processed/features.parquet
+!data/processed/historical_gw.parquet
+!data/processed/.gitkeep
 models/*.pkl
 models/*.joblib
 models/*.txt
