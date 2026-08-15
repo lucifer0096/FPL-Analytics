@@ -154,7 +154,7 @@ Deliberately decoupled from the trained model — it takes a plain DataFrame of 
 
 Verified two ways:
 - Against the full 587-player live bootstrap pool: correct squad size, exact position quotas, under budget, ≤3 per team, valid starting XI formation. Pre-season `form` is 0 for every player right now (no gameweeks played yet), so this only proves the solver logic is correct — not that it picks good players.
-- Against real historical data (2024-25 GW20, using each player's rolling-5 average as a stand-in for predicted points): correctly selects genuine stars — Salah (13.8 pts), Isak (10.2 pts), Palmer (7.2 pts) — within budget (£98m/£100m), with the highest scorers in the starting XI and lower scorers correctly benched.
+- Against real historical data (2025-26 GW20, using each player's rolling-5 average as a stand-in for predicted points) — 2025-26 rather than the 2024-25 validation season deliberately, since it's the untouched final-holdout season and its player pool is far closer to who's actually in the Premier League now: correctly selects strong current picks — Hugo Ekitiké (8.4 pts, Liverpool), Rayan Cherki (8.0 pts, Man City), Matheus Nunes (8.0 pts, Man City) — within budget (£91.7m/£100m), with the highest scorers in the starting XI and lower scorers correctly benched.
 
 ## Manager History
 
