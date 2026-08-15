@@ -6,21 +6,27 @@ A Fantasy Premier League expected-points model, squad optimizer, and dashboard, 
 
 ## Status
 
-**Stage 1 (in progress): data collector.** A lightweight client for the official FPL API (`bootstrap-static`, `element-summary`, `fixtures`, `entry`) that snapshots each gameweek's data to disk as the season progresses, since the live API only exposes current state, not history.
+**Stage 1 (done): data collector.** A lightweight client for the official FPL API (`bootstrap-static`, `element-summary`, `fixtures`, `entry`) that snapshots each gameweek's data to disk as the season progresses, since the live API only exposes current state, not history. Runs dynamically via GitHub Actions — see [Automated collection](#automated-collection) below.
 
-Planned next: an expected-points (xP) model trained on 2022-23 through 2024-25 data (the seasons with full xG/xA fields), then a squad optimizer, then a live dashboard.
+**Stage 2 (in progress): expected-points (xP) model.** Historical data loading is done — 205,835 player-gameweek rows unified across all 9 tracked seasons (2016-17 to 2024-25). See [Historical Training Data](#historical-training-data) below. Feature engineering and training are next.
+
+Planned after that: a squad optimizer, then a live dashboard.
 
 ## Project Structure
 
 ```text
 FPL-Analytics/
 ├── src/
-│   └── collector/
-│       ├── fpl_api.py     # Thin client for the FPL API endpoints
-│       └── snapshot.py    # Snapshots current season data to data/raw/
+│   ├── collector/
+│   │   ├── fpl_api.py         # Thin client for the FPL API endpoints
+│   │   └── snapshot.py        # Snapshots current season data to data/raw/
+│   └── model/
+│       └── load_historical.py # Loads/unifies 9 seasons of vaastav data for training
 ├── data/
 │   ├── raw/                # Gitignored — raw API snapshots, regenerate anytime
-│   └── processed/          # Gitignored — cleaned/feature-engineered data
+│   └── processed/          # Gitignored — historical_gw.parquet, regenerate anytime
+├── docs/
+│   └── my-fpl-history.html # Manager history page, served via GitHub Pages
 ├── notebooks/               # EDA and model development
 ├── models/                  # Gitignored — trained model artifacts
 └── requirements.txt
@@ -29,7 +35,7 @@ FPL-Analytics/
 ## Data Sources
 
 - **Official FPL API** (free, public, no auth): `bootstrap-static` for all players/teams, `element-summary/{id}` for per-gameweek player history, `fixtures` for the season schedule, `entry/{id}` for a manager's team/history/picks.
-- **Historical seasons (2022-23 to 2024-25, full xG/xA fields)**: sourced from the vaastav dataset (`E:\Fantasy-Premier-League`, cloned separately, not part of this repo) for model training, since the FPL API itself only exposes the current season's gameweek-by-gameweek data.
+- **Historical seasons (2016-17 to 2024-25)**: sourced from the vaastav dataset (`E:\Fantasy-Premier-League`, cloned separately, not part of this repo) for model training, since the FPL API itself only exposes the current season's gameweek-by-gameweek data — past seasons only exist in point-in-time archives like this one. Only the official FPL API can be scraped live going forward; there's no way to retroactively scrape data for seasons that have already ended.
 
 ## Running the Collector
 
@@ -63,13 +69,27 @@ python src/collector/snapshot.py --force       # always snapshot, ignoring saved
 
 `.github/workflows/weekly-collector.yml` runs daily (06:00 UTC) via GitHub Actions: it runs `--check-only` first, and only does a full snapshot when a new gameweek is ready, uploading the result as a 90-day build artifact. Collector state is cached between runs so the check works across separate CI runs, not just locally. To also capture your own team's history/picks, add an `FPL_ENTRY_ID` repository secret.
 
+## Historical Training Data
+
+```bash
+python src/model/load_historical.py
+```
+
+Loads and unifies all 9 seasons (2016-17 to 2024-25) of vaastav's per-season `merged_gw.csv` files into one table, saved to `data/processed/historical_gw.parquet` (205,835 player-gameweek rows). Uses the 33 columns present in every season (minutes, goals, assists, bonus, BPS, ICT index, value, etc.) — xG/xA fields are excluded, since they only exist for 2022-23 onward and including them would mean dropping two-thirds of the training data.
+
+Two real data-quality issues surfaced and fixed while building this loader, both silent-corruption risks if missed:
+- **`team` was two different types across seasons** — a numeric, season-scoped id pre-2020-21, a name string from 2020-21 onward. Concatenating as-is broke parquet serialization; older seasons' ids are now resolved to the same name strings via `master_team_list.csv`.
+- **`element` (the in-file player id) is reassigned every season** — id `1` is a different real player in each of the 9 seasons. Verified directly: Salah's `element` changed every year (234, 253, 191, 254, 233, 283, 308, 328) while `players_raw.csv`'s `code` field stayed fixed at 118748 throughout. `player_code` is now joined in as the stable cross-season identifier — any rolling/lagged feature must group by this, not `element`.
+
 ## Manager History
 
 **[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
 
 ## Future Improvements
 
-- Build the xP model (gradient boosting or similar) on 2022-23–2024-25 data, validated against the FPL API's own naive `xP` field as a baseline.
+- Feature engineering: rolling form, fixture difficulty, home/away, minutes trend — grouped by `player_code` (see caveat above), not raw per-gameweek stats.
+- Train the xP model (gradient boosting or similar) on the unified 9-season dataset, validated against the FPL API's own naive `xP` field as a baseline.
+- Consider a secondary model or extra features using xG/xA for 2022-23 onward once the core model is validated, since that signal is only available for a third of the training window.
 - Build a squad optimizer (integer/linear programming) that picks the best 15-man squad under budget and formation constraints using model predictions.
 - Build a live dashboard (Streamlit) showing current-gameweek predictions, transfer suggestions, and how a manager's actual picks compare to what the model would have chosen.
 - Once there's a processed, league-wide dataset (no personal data), commit it back to the repo each run like NZ-Jobs-Dashboard's sync workflow does, rather than only uploading artifacts.
