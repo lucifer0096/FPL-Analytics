@@ -8,6 +8,8 @@ chip tools can be pointed at live predictions instead (see this repo's README,
 Future Improvements).
 """
 
+import glob
+import json
 import os
 import sys
 
@@ -58,6 +60,55 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
     return sub.drop_duplicates(subset="player_id")[
         ["player_id", "name", "position", "team", "cost", "predicted_points"]
     ]
+
+
+@st.cache_data
+def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
+    """Build a 2026-27 pre-season player pool: each player's LIVE current price
+    (this season's actual cost, pulled from the latest collector snapshot) paired
+    with their predicted_points estimated from their own rolling-5 average at
+    the END of the prior season -- their most recent known real form, not
+    diluted by a full-season average that includes early-season benching/injury
+    spells. Joined on player_code (the stable cross-season id -- see
+    load_historical.py), NOT element (resets every season).
+
+    Players present in the live pool with no prior_season record at all (new
+    signings from outside the league, promoted-team players with no top-flight
+    history) get predicted_points = 0 rather than a guess -- same honest
+    treatment as new_player_baseline's fallback for genuinely unknown players,
+    just without that feature's league-wide price-band averaging here (a
+    simpler stand-in, since this is a demo view, not a training feature)."""
+    prior = _features_df[_features_df["season"] == prior_season].copy()
+    last_gw = prior["GW"].max()
+    closing_form = (
+        prior[prior["GW"] == last_gw]
+        .drop_duplicates(subset="player_code")
+        .set_index("player_code")["total_points_avg_last_5"]
+    )
+
+    # load_latest_prices() returns FPL's raw numeric `id` as player_id -- that
+    # resets every season (see load_historical.py's caveat on `element`), so it
+    # can't be used to look up prior_season data directly. Map it to the stable
+    # `code` field via the same bootstrap snapshot, same pattern used throughout
+    # this project wherever cross-season identity matters.
+    live = load_latest_prices()
+
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    code_by_id = {p["id"]: p["code"] for p in raw["elements"]}
+    live["player_code"] = live["player_id"].map(code_by_id)
+
+    live["predicted_points"] = live["player_code"].map(closing_form).fillna(0).clip(lower=0)
+
+    return live[["player_id", "name", "position", "team", "cost", "predicted_points"]]
+
+
+def _latest_bootstrap_path() -> str:
+    pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "bootstrap", "bootstrap_*.json")
+    paths = sorted(glob.glob(pattern))
+    if not paths:
+        raise FileNotFoundError("No bootstrap snapshot found -- run the collector first.")
+    return paths[-1]
 
 
 st.title("⚽ FPL Analytics")
@@ -116,20 +167,42 @@ with tab_squad:
         "real constraints (2 GK / 5 DEF / 5 MID / 3 FWD, £100m budget, max 3 per club)."
     )
 
-    col_a, col_b = st.columns(2)
-    season = col_a.selectbox("Season", SEASON_ORDER, index=SEASON_ORDER.index("2025-26"), key="squad_season")
+    mode = st.radio(
+        "Player pool",
+        ["Historical gameweek", "2026-27 pre-season (live prices)"],
+        key="squad_mode",
+        horizontal=True,
+    )
+
     df = load_features()
-    max_gw = int(df[df["season"] == season]["GW"].max())
-    gw = col_b.slider("Gameweek", 1, max_gw, min(20, max_gw), key="squad_gw")
 
-    pool = gw_pool(df, season, gw)
-    st.caption(f"Player pool: {len(pool)} players, using each player's rolling-5 average as a predicted-points stand-in.")
+    if mode == "Historical gameweek":
+        col_a, col_b = st.columns(2)
+        season = col_a.selectbox("Season", SEASON_ORDER, index=SEASON_ORDER.index("2025-26"), key="squad_season")
+        max_gw = int(df[df["season"] == season]["GW"].max())
+        gw = col_b.slider("Gameweek", 1, max_gw, min(20, max_gw), key="squad_gw")
+        pool = gw_pool(df, season, gw)
+        pool_source = (season, gw)
+        st.caption(f"Player pool: {len(pool)} players, using each player's rolling-5 average as a predicted-points stand-in.")
+    else:
+        try:
+            pool = preseason_pool(df)
+            pool_source = None  # no "next gameweek" exists yet -- Transfers/Chips need real gameweek data
+            st.caption(
+                f"Player pool: {len(pool)} players, at their LIVE current 2026-27 price, "
+                f"using each player's rolling-5 average at the END of 2025-26 as a predicted-points "
+                f"stand-in (their most recent known real form). Players with no 2025-26 Premier League "
+                f"record (new signings, promoted-team players) get 0 rather than a guess."
+            )
+        except FileNotFoundError as e:
+            st.error(str(e))
+            pool = None
 
-    if st.button("Build optimal squad", key="build_squad_btn"):
+    if pool is not None and st.button("Build optimal squad", key="build_squad_btn"):
         with st.spinner("Solving..."):
             squad = optimize_squad(pool)
         st.session_state["built_squad"] = squad
-        st.session_state["built_squad_season_gw"] = (season, gw)
+        st.session_state["built_squad_season_gw"] = pool_source
 
     if "built_squad" in st.session_state:
         squad = st.session_state["built_squad"]
@@ -159,6 +232,13 @@ with tab_transfers:
 
     if "built_squad" not in st.session_state:
         st.warning("Build a squad in the **Squad Builder** tab first.")
+    elif st.session_state["built_squad_season_gw"] is None:
+        st.info(
+            "The current squad was built in **2026-27 pre-season** mode, which has no "
+            "'next gameweek' to check transfers against yet — that only exists once the "
+            "collector has captured real 2026-27 results. Build a squad from a historical "
+            "gameweek in the Squad Builder tab to try this tool now."
+        )
     else:
         built_season, built_gw = st.session_state["built_squad_season_gw"]
         next_gw = built_gw + 1
@@ -216,6 +296,13 @@ with tab_chips:
 
     if "built_squad" not in st.session_state:
         st.warning("Build a squad in the **Squad Builder** tab first.")
+    elif st.session_state["built_squad_season_gw"] is None:
+        st.info(
+            "The current squad was built in **2026-27 pre-season** mode, which has no "
+            "upcoming gameweeks to project chip timing against yet — that only exists "
+            "once the collector has captured real 2026-27 results. Build a squad from a "
+            "historical gameweek in the Squad Builder tab to try this tool now."
+        )
     else:
         built_season, built_gw = st.session_state["built_squad_season_gw"]
         df = load_features()
