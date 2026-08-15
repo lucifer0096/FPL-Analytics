@@ -31,6 +31,12 @@ player identifier (verified: Salah's code stayed 118748 across three seasons
 while his `id` changed each year) — joined in here as `player_code`. Any rolling/
 lagged feature spanning gameweeks or seasons MUST group by `player_code`, not
 `element`.
+
+IMPORTANT: `opponent_team` is a numeric, season-scoped team id in EVERY season
+(verified: id 4 is Chelsea in 2016-17, Burnley in 2020-21, Brentford in 2022-23)
+— same class of bug as `team`, but present even in seasons where `team` is
+already a string. Resolved to a name string here via teams.csv (2019-20 onward,
+including 2024-25) or master_team_list.csv (2016-17 to 2018-19 fallback).
 """
 
 import os
@@ -77,12 +83,31 @@ def _load_position_team(season: str) -> pd.DataFrame:
     return df[["element", "element_type", "team"]].rename(columns={"team": "team_id"})
 
 
+def _season_team_id_to_name(season: str) -> pd.Series:
+    """A season's numeric team id -> team name mapping. Prefers teams.csv (exists
+    for 2019-20 onward, including 2024-25 which master_team_list.csv lacks);
+    falls back to master_team_list.csv for 2016-17 to 2018-19, the only seasons
+    where teams.csv isn't present in this dataset."""
+    teams_csv_path = os.path.join(VAASTAV_ROOT, season, "teams.csv")
+    if os.path.exists(teams_csv_path):
+        teams = pd.read_csv(teams_csv_path)
+        return teams.set_index("id")["name"]
+
+    master = pd.read_csv(_MASTER_TEAM_LIST_PATH)
+    season_rows = master[master["season"] == season]
+    if season_rows.empty:
+        raise ValueError(
+            f"{season}: no teams.csv and no master_team_list.csv row — "
+            f"can't resolve team ids to names for this season."
+        )
+    return season_rows.set_index("team")["team_name"]
+
+
 def _resolve_team_names(season: str, team_ids: pd.Series) -> pd.Series:
     """Map a season's numeric team ids to team name strings, so `team` is a
     consistent name (e.g. "Brighton") across every season, matching what
     merged_gw.csv already provides natively from 2020-21 onward."""
-    master = pd.read_csv(_MASTER_TEAM_LIST_PATH)
-    season_map = master[master["season"] == season].set_index("team")["team_name"]
+    season_map = _season_team_id_to_name(season)
     return team_ids.map(season_map)
 
 
@@ -111,6 +136,10 @@ def load_season(season: str) -> pd.DataFrame:
         df["position"] = df["element_type"].map(POSITION_MAP)
         df["team"] = _resolve_team_names(season, df["team_id"])
         df = df.drop(columns=["element_type", "team_id"])
+
+    # opponent_team is a numeric, season-scoped id in EVERY season (unlike `team`,
+    # which is a string from 2020-21 onward) -- resolved to a name unconditionally.
+    df["opponent_team"] = _resolve_team_names(season, df["opponent_team"])
 
     # player_code: the stable cross-season player id (element resets every season).
     codes = _load_players_raw(season)[["element", "code"]].drop_duplicates(subset="element")
@@ -146,6 +175,7 @@ if __name__ == "__main__":
     print(df["season"].value_counts().sort_index())
     print(df["position"].value_counts(dropna=False))
     print("team nulls:", df["team"].isna().sum())
+    print("opponent_team nulls:", df["opponent_team"].isna().sum())
     print("player_code nulls:", df["player_code"].isna().sum())
 
     out_path = os.path.join("data", "processed", "historical_gw.parquet")
