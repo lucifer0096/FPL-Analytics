@@ -97,12 +97,14 @@ Builds the actual predictive features on top of the unified historical table, sa
 - Career and season-to-date gameweek counts (season count resets at each season boundary; career count doesn't)
 - Rolling 5-match team-level goals-for/against, for both the player's own team and their opponent
 - `fixture_difficulty`: prefers FPL's own published 1-5 rating (`fixtures.csv`, 2018-19 through 2025-26) over a hand-built proxy, since it's a materially better signal (also weighs defense, home advantage, and other factors this project doesn't have data for) — the proxy is used only for 2016-17/2017-18, where FPL's rating doesn't exist in this dataset
+- `new_player_baseline`: a position/price-band fallback for players with no rolling form yet — newly promoted teams' players and new signings (~70-130 players every season) have every rolling-average feature null at their first tracked gameweek, leaving the model with no signal for exactly the players a manager most needs guidance on early in a season. No Championship/lower-league data source is used (that would need a separate third-party API with unverified free-tier depth); instead this is what similarly priced players in the same position scored on average league-wide, using only gameweeks already played.
 
 Player-level features are grouped by `player_code` (not `element` — see the caveat above) and shifted by one gameweek before any rolling calculation, so a gameweek's own outcome can never leak into its own feature row. `fixture_difficulty` is the one exception that's joined in directly without a shift — FPL publishes it before kickoff, so using it isn't a leak. Verified multiple ways, not just by confirming the code runs without erroring:
 - A built-in check confirms zero rows at a player's first-ever tracked gameweek still carry a non-null rolling average (would indicate leakage).
 - Salah's first five gameweeks of 2017-18 were hand-checked against the actual output (e.g. `total_points_avg_last_3` at GW5 = 4.33, matching (1+11+1)/3 from GW2–4). Rolling form also correctly carries across season boundaries rather than resetting to null.
 - Building team-form features initially exploded the row count — traced to `players_raw.csv`'s end-of-season team snapshot misattributing a transferred player's early-season games to their later club, producing two contradictory score rows for the same (season, GW, team). Fixed by dropping any team-match row with more than one distinct score before building the rolling average, rather than silently keeping the corruption.
 - The 2016-17/2017-18 `fixture_difficulty` fallback was on a different scale entirely from FPL's real rating (mean ~1.4 vs ~2.9) — caught by comparing per-season distributions after the row-count fix, not assumed correct. Rescaled via quantile binning so the column means roughly the same thing regardless of era.
+- `new_player_baseline` is a league-wide (not per-player) statistic, so its leakage-safety shift happens at the `(season, position, price_band, GW)` group level rather than per player. Verified: 100% of zero-history rows (1,940 across all seasons except 2016-17, which has no prior data to draw on at all) get a non-null baseline with sensible values (cheap defenders/mids around 0.5–0.7 pts), while 2016-17's true first gameweek correctly has zero coverage — confirming no leakage at the actual start of history, not just trusted by construction.
 
 ## Model Training
 
@@ -114,7 +116,7 @@ Trains LightGBM models on a fixed allowlist of pre-match-known features (not an 
 
 **Two model architectures, compared directly:**
 - **Single-stage** — one LightGBM regressor predicts `total_points` for every row.
-- **Two-stage** — since ~64% of rows are players who didn't play that gameweek at all, this splits the problem into a play classifier (P(plays), AUC 0.931) and a points-conditional-on-playing regressor, combined as `P(plays) × E[points | plays]`, on the hypothesis that a single regressor was spending most of its error budget on the play/didn't-play distinction. **Result: this didn't help** — two-stage MAE (1.001) barely beat single-stage (1.003). The single model was already implicitly learning that distinction well via its existing minutes-based features. Kept in the pipeline and reported on every run as a documented negative result, not discarded.
+- **Two-stage** — since ~64% of rows are players who didn't play that gameweek at all, this splits the problem into a play classifier (P(plays), AUC 0.934) and a points-conditional-on-playing regressor, combined as `P(plays) × E[points | plays]`, on the hypothesis that a single regressor was spending most of its error budget on the play/didn't-play distinction. **Result: this didn't help much** — two-stage MAE (0.984) barely beat single-stage (0.986). The single model was already implicitly learning that distinction well via its existing minutes-based features. Kept in the pipeline and reported on every run as a documented negative result, not discarded.
 
 **Two baselines, reported with different confidence:**
 - A genuinely leak-free naive baseline — the player's own rolling 5-gameweek average (already a model feature, shifted by 1 gameweek).
@@ -124,8 +126,8 @@ Trains LightGBM models on a fixed allowlist of pre-match-known features (not an 
 
 | | MAE | RMSE |
 |---|---|---|
-| Single-stage model | 1.003 | 1.921 |
-| Two-stage model | 1.001 | 1.922 |
+| Single-stage model | 0.986 | 1.914 |
+| Two-stage model | 0.984 | 1.914 |
 | Naive baseline (rolling-5 average) | 1.052 | 2.069 |
 | FPL's own xP (caveat above) | 0.904 | 1.757 |
 
@@ -133,13 +135,15 @@ Both models beat the clean naive baseline. Neither yet beats FPL's own xP overal
 
 | (played rows only, n=11,566) | MAE |
 |---|---|
-| Single-stage model | 1.839 |
+| Single-stage model | 1.832 |
 | Naive baseline | 2.053 |
 | FPL's own xP | 1.759 |
 
-The gap to FPL's xP shrinks from ~0.10 (full dataset) to ~0.08 (played only) — most of the overall gap is concentrated in non-playing rows, where FPL's xP likely draws on real injury/team-news signals (press conferences, training reports) that a model built purely on historical box-score stats has no way to see. This reframes the next step: closing the remaining gap isn't primarily a modeling problem, it's a data problem — see Future Improvements.
+The gap to FPL's xP shrinks from ~0.08 (full dataset) to ~0.07 (played only) — most of the overall gap is concentrated in non-playing rows, where FPL's xP likely draws on real injury/team-news signals (press conferences, training reports) that a model built purely on historical box-score stats has no way to see. This reframes the next step: closing the remaining gap isn't primarily a modeling problem, it's a data problem — see Future Improvements.
 
-Highest-importance features in the single-stage model: `ict_index_avg_last_5`, `bps_avg_last_5`, `ict_index_avg_last_3`, `career_gw_count`, `bps_avg_last_3` — the rolling advanced-stat averages dominate over the newer team-form and fixture-difficulty features.
+Adding `new_player_baseline` (see Feature Engineering) improved both models measurably: single-stage MAE 1.003 → 0.986, two-stage 1.001 → 0.984 — real, verified gains from giving the model signal for the ~70-130 players every season who otherwise had no rolling history to draw on.
+
+Highest-importance features in the single-stage model: `new_player_baseline` is now the single most important feature in the model (ahead of `ict_index_avg_last_5`, `ict_index_avg_last_3`, `bps_avg_last_5`, `bps_avg_last_3`) — a stronger confirmation of its value than the MAE improvement alone.
 
 ## Squad Optimizer
 
