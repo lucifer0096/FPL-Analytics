@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Raw and processed data snapshots regenerate from the FPL API via the collector.
+# Personal manager history/picks also live here — keep this out of git.
+data/raw/
+data/processed/
+models/*.pkl
+models/*.joblib
