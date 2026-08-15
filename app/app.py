@@ -106,30 +106,45 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
 MIN_MINUTES_FOR_SEASON_RATE = 450  # ~5 full matches -- below this, a per-90 rate is too noisy to trust (a single 1-minute cameo goal would otherwise show as an absurd rate)
 
 
+def min_minutes_for_window(gw_start: int, gw_end: int) -> int:
+    """Scale the minimum-minutes floor to the window size -- MIN_MINUTES_FOR_SEASON_RATE
+    (450, ~5 full matches) only makes sense across a full ~38-week season. A
+    single-gameweek window can have at most 90 minutes played, so demanding 450
+    there would exclude every player. Scaled proportionally (min 1 full match),
+    same "needs a few real minutes to trust the rate" reasoning, just for a
+    shorter window."""
+    n_gws = max(gw_end - gw_start + 1, 1)
+    return max(round(MIN_MINUTES_FOR_SEASON_RATE * n_gws / 38), 90)
+
+
 @st.cache_data
-def season_pool(df: pd.DataFrame, season: str) -> pd.DataFrame:
-    """Build a 'Team of the Season' player pool for an ALREADY-COMPLETED season --
+def season_pool(df: pd.DataFrame, season: str, gw_start: int = None, gw_end: int = None) -> pd.DataFrame:
+    """Build a 'Team of the Season' (or 'Team of the Week(s)', if gw_start/gw_end
+    narrow it to a window) player pool for an ALREADY-COMPLETED season/window --
     this is a look-back at who actually performed best, not a prediction, so it
-    uses each player's real total_points and minutes across every gameweek
-    played, not a rolling window or the xP model (which exist to estimate an
+    uses each player's real total_points and minutes across the gameweeks in
+    question, not a rolling window or the xP model (which exist to estimate an
     UNKNOWN future gameweek; there's nothing unknown here).
 
-    predicted_points here is actually points-per-90-minutes over the full
-    season, not a total -- dividing by 38 (or by however many GWs the dataset
-    has) would unfairly punish a player who missed matches to injury/rotation
-    relative to one who started every game, when both may have been equally
-    effective per minute on the pitch. Players below MIN_MINUTES_FOR_SEASON_RATE
-    total minutes are excluded entirely, not just down-weighted -- a small
-    sample produces an unreliable rate (e.g. one 1-minute cameo goal would
-    otherwise look like a 90-point-per-90 season)."""
+    predicted_points here is actually points-per-90-minutes over the window,
+    not a total -- dividing by the number of gameweeks would unfairly punish a
+    player who missed matches to injury/rotation relative to one who started
+    every game, when both may have been equally effective per minute on the
+    pitch. Players below the window's minutes floor (see min_minutes_for_window)
+    are excluded entirely, not just down-weighted -- too small a sample
+    produces an unreliable rate (e.g. one cameo goal would otherwise look like
+    a huge points-per-90 rate)."""
     sub = df[df["season"] == season].copy()
+    if gw_start is not None:
+        sub = sub[(sub["GW"] >= gw_start) & (sub["GW"] <= gw_end)]
     last_gw = sub["GW"].max()
+    min_minutes = min_minutes_for_window(gw_start or 1, gw_end or last_gw)
 
     totals = sub.groupby("player_code").agg(
         total_points_sum=("total_points", "sum"),
         minutes_sum=("minutes", "sum"),
     )
-    totals = totals[totals["minutes_sum"] >= MIN_MINUTES_FOR_SEASON_RATE]
+    totals = totals[totals["minutes_sum"] >= min_minutes]
     totals["points_per_90"] = totals["total_points_sum"] / (totals["minutes_sum"] / 90.0)
 
     latest = (
@@ -231,6 +246,16 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'font-size: 12px; display: flex; align-items: center; justify-content: center; '
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">⭐</div>'
     ) if badge_label else ""
+    # total_points_sum only exists on Team of the Season pool rows (see
+    # season_pool) -- shown alongside the pts/90 rate there so the real season
+    # total isn't hidden behind a rate figure most people don't think in.
+    has_season_total = "total_points_sum" in row.index and pd.notna(row["total_points_sum"])
+    points_label = f'{row["predicted_points"]:.2f} pts/90' if has_season_total else f'{row["predicted_points"]:.1f} pts'
+    total_points_html = (
+        f'<div style="font-size: 9.5px; color: #777; margin-top: 0px;">'
+        f'{int(row["total_points_sum"])} pts total</div>'
+        if has_season_total else ""
+    )
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
         f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
@@ -240,7 +265,8 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
         f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
         f'<div style="font-size: 11px; color: #0a6b2f; font-weight: 700; margin-top: 1px;">'
-        f'{row["predicted_points"]:.1f} pts</div>'
+        f'{points_label}</div>'
+        f'{total_points_html}'
         f'</div>'
     )
 
@@ -401,21 +427,37 @@ with tab_squad:
 
     elif mode == "Team of the Season":
         season = st.selectbox("Season", SEASON_ORDER, index=SEASON_ORDER.index("2025-26"), key="tots_season")
-        pool = season_pool(df, season)
-        pool_source = None  # a full-season squad isn't tied to one gameweek -- Transfers/Chips need that, so treat this like pre-season/manual mode
+        max_gw = int(df[df["season"] == season]["GW"].max())
+        gw_start, gw_end = st.slider(
+            "Gameweek range (full season by default — narrow it to build a Team of the Week instead)",
+            1, max_gw, (1, max_gw), key="tots_gw_range",
+        )
+        is_full_season = (gw_start, gw_end) == (1, max_gw)
+        pool = season_pool(df, season, gw_start, gw_end)
+        min_minutes = min_minutes_for_window(gw_start, gw_end)
+        window_desc = f"the full {season} season" if is_full_season else f"GW{gw_start}–GW{gw_end} of {season}"
         st.caption(
-            f"Player pool: {len(pool)} players who played at least {MIN_MINUTES_FOR_SEASON_RATE} minutes in {season}. "
-            f"This is a LOOK BACK at who actually performed best that season (real points-per-90-minutes over every "
-            f"gameweek played, at their final-gameweek price), not a prediction — the season is already complete, "
-            f"so there's nothing to predict. Points-per-90 (not points-per-38-gameweeks) so a player who missed "
-            f"matches to injury/rotation isn't unfairly penalized against one who started every game."
+            f"Player pool: {len(pool)} players who played at least {min_minutes} minutes across {window_desc}. "
+            f"This is a LOOK BACK at who actually performed best in this window (real points-per-90-minutes over "
+            f"every gameweek played, at the window's final-gameweek price), not a prediction — these gameweeks are "
+            f"already complete, so there's nothing to predict. Points-per-90 (not points-per-gameweek) so a player "
+            f"who missed matches to injury/rotation isn't unfairly penalized against one who started every game. "
+            f"No budget cap here — this is the best XI the window actually produced, not a squad you could have "
+            f"afforded on day one."
         )
 
-        if pool is not None and st.button("Build team of the season", key="build_tots_btn"):
+        build_label = "Build team of the season" if is_full_season else f"Build team of GW{gw_start}–{gw_end}"
+        if pool is not None and st.button(build_label, key="build_tots_btn"):
             with st.spinner("Solving..."):
-                squad = optimize_squad(pool)
+                # No budget constraint: Team of the Season is "who were the best
+                # performers", not a squad buildable on a real £100m budget --
+                # a giant budget cap effectively disables the constraint while
+                # reusing the same optimizer (still bound by position quotas
+                # and max-3-per-club).
+                squad = optimize_squad(pool, budget=10_000.0)
             st.session_state["built_squad"] = squad
             st.session_state["built_squad_season_gw"] = "completed_season"  # distinct from pre-season/manual's None -- there's no live pool to fall back to for an already-finished season
+            st.session_state["built_squad_window_label"] = "this season" if is_full_season else f"GW{gw_start}–{gw_end}"
 
     elif mode == "2026-27 pre-season (live prices)":
         try:
@@ -514,18 +556,22 @@ with tab_squad:
 
     if "built_squad" in st.session_state:
         squad = st.session_state["built_squad"]
-        st.success(
-            f"Squad: £{squad['cost'].sum():.1f}m / £{DEFAULT_BUDGET}m · "
-            f"{squad['predicted_points'].sum():.1f} total predicted points"
-        )
-
         squad_source = st.session_state["built_squad_season_gw"]
+
         if squad_source == "completed_season":
-            badge_label = "MVP — highest points-per-90 this season"
-        elif isinstance(squad_source, tuple):
-            badge_label = "Player of the Week — top predicted scorer this gameweek"
+            # predicted_points here is a per-90 RATE, not a per-gameweek total --
+            # summing it across 15 players isn't a meaningful "total predicted
+            # points" the way it is for the other modes, and there's no £100m
+            # cap to report against either (see the "no budget cap" note above).
+            window_label = st.session_state.get("built_squad_window_label", "this window")
+            st.success(f"Squad: £{squad['cost'].sum():.1f}m · avg {squad['predicted_points'].mean():.2f} pts/90 across the squad ({window_label})")
+            badge_label = f"MVP — highest points-per-90 in {window_label}"
         else:
-            badge_label = None  # pre-season/manual mode -- predicted_points is last season's closing form, not a real per-GW or full-season figure, so an MVP/POTW label would overstate what it means
+            st.success(
+                f"Squad: £{squad['cost'].sum():.1f}m / £{DEFAULT_BUDGET}m · "
+                f"{squad['predicted_points'].sum():.1f} total predicted points"
+            )
+            badge_label = "Player of the Week — top predicted scorer this gameweek" if isinstance(squad_source, tuple) else None
         render_pitch(squad, top_player_badge=badge_label)
 
         with st.expander("Full squad table"):
