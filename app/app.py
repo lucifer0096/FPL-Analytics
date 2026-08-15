@@ -103,18 +103,18 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
     ]
 
 
-MIN_MINUTES_FOR_SEASON_RATE = 450  # ~5 full matches -- below this, a per-90 rate is too noisy to trust (a single 1-minute cameo goal would otherwise show as an absurd rate)
+MIN_GAMES_FOR_SEASON_RATE = 5  # below this, points-per-game is too noisy to trust as a DISPLAYED rate (a single big haul would otherwise look like a huge per-game rate) -- doesn't affect selection, which ranks by total points regardless of appearances
 
 
-def min_minutes_for_window(gw_start: int, gw_end: int) -> int:
-    """Scale the minimum-minutes floor to the window size -- MIN_MINUTES_FOR_SEASON_RATE
-    (450, ~5 full matches) only makes sense across a full ~38-week season. A
-    single-gameweek window can have at most 90 minutes played, so demanding 450
-    there would exclude every player. Scaled proportionally (min 1 full match),
-    same "needs a few real minutes to trust the rate" reasoning, just for a
+def min_games_for_window(gw_start: int, gw_end: int) -> int:
+    """Scale the minimum-appearances floor to the window size -- MIN_GAMES_FOR_SEASON_RATE
+    (5, out of a ~38-week season) only makes sense across a full season. A
+    single-gameweek window can have at most 1 appearance, so demanding 5 there
+    would exclude every player. Scaled proportionally (min 1 game), same
+    "needs a few real appearances to trust the rate" reasoning, just for a
     shorter window."""
     n_gws = max(gw_end - gw_start + 1, 1)
-    return max(round(MIN_MINUTES_FOR_SEASON_RATE * n_gws / 38), 90)
+    return max(round(MIN_GAMES_FOR_SEASON_RATE * n_gws / 38), 1)
 
 
 @st.cache_data
@@ -122,30 +122,43 @@ def season_pool(df: pd.DataFrame, season: str, gw_start: int = None, gw_end: int
     """Build a 'Team of the Season' (or 'Team of the Week(s)', if gw_start/gw_end
     narrow it to a window) player pool for an ALREADY-COMPLETED season/window --
     this is a look-back at who actually performed best, not a prediction, so it
-    uses each player's real total_points and minutes across the gameweeks in
-    question, not a rolling window or the xP model (which exist to estimate an
-    UNKNOWN future gameweek; there's nothing unknown here).
+    uses each player's real total_points and appearances across the gameweeks
+    in question, not a rolling window or the xP model (which exist to estimate
+    an UNKNOWN future gameweek; there's nothing unknown here).
 
-    predicted_points here is actually points-per-90-minutes over the window,
-    not a total -- dividing by the number of gameweeks would unfairly punish a
-    player who missed matches to injury/rotation relative to one who started
-    every game, when both may have been equally effective per minute on the
-    pitch. Players below the window's minutes floor (see min_minutes_for_window)
-    are excluded entirely, not just down-weighted -- too small a sample
-    produces an unreliable rate (e.g. one cameo goal would otherwise look like
-    a huge points-per-90 rate)."""
+    predicted_points (what the optimizer actually selects on) is the player's
+    real TOTAL points across the window, not a rate -- ranking by a per-game/
+    per-90 rate instead would let a player with a great rate over just 5-6
+    appearances outrank someone who played 35 games and produced 200+ points,
+    which isn't what "who actually performed best for a squad this season"
+    means. total_points_sum's own presence with no games-played floor makes
+    that impossible: a player who only played 1 game and scored big still only
+    contributes that 1 game's points to the squad total, same as reality.
+
+    points_per_game is still computed and returned as a separate, DISPLAY-ONLY
+    column -- matches FPL's OWN published `points_per_game` field exactly
+    (checked directly against bootstrap-static): total_points / appearances,
+    where an "appearance" is any gameweek with minutes > 0 -- NOT minutes
+    played (FPL doesn't publish a points-per-90 stat anywhere; a 3-minute
+    cameo and a full 90 both count as one game here, same as FPL's own number
+    does). Only null for players below the window's appearance floor (see
+    min_games_for_window) -- too small a sample makes the RATE unreliable
+    (e.g. one big haul off the bench would otherwise look like a huge
+    points-per-game rate), even though it doesn't affect selection."""
     sub = df[df["season"] == season].copy()
     if gw_start is not None:
         sub = sub[(sub["GW"] >= gw_start) & (sub["GW"] <= gw_end)]
     last_gw = sub["GW"].max()
-    min_minutes = min_minutes_for_window(gw_start or 1, gw_end or last_gw)
+    min_games = min_games_for_window(gw_start or 1, gw_end or last_gw)
 
+    sub["_appeared"] = sub["minutes"] > 0
     totals = sub.groupby("player_code").agg(
         total_points_sum=("total_points", "sum"),
-        minutes_sum=("minutes", "sum"),
+        games_played=("_appeared", "sum"),
     )
-    totals = totals[totals["minutes_sum"] >= min_minutes]
-    totals["points_per_90"] = totals["total_points_sum"] / (totals["minutes_sum"] / 90.0)
+    totals["points_per_game"] = (totals["total_points_sum"] / totals["games_played"]).where(
+        totals["games_played"] >= min_games
+    )
 
     latest = (
         sub[sub["GW"] == last_gw]
@@ -156,11 +169,11 @@ def season_pool(df: pd.DataFrame, season: str, gw_start: int = None, gw_end: int
     merged = totals.join(latest, how="inner").reset_index()
     merged["player_id"] = merged["player_code"]
     merged["cost"] = merged["value"] / 10.0
-    merged["predicted_points"] = merged["points_per_90"]
+    merged["predicted_points"] = merged["total_points_sum"]
 
     return merged[
         ["player_id", "name", "position", "team", "cost", "predicted_points",
-         "total_points_sum", "minutes_sum"]
+         "total_points_sum", "games_played", "points_per_game"]
     ]
 
 
@@ -246,15 +259,16 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'font-size: 12px; display: flex; align-items: center; justify-content: center; '
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">⭐</div>'
     ) if badge_label else ""
-    # total_points_sum only exists on Team of the Season pool rows (see
-    # season_pool) -- shown alongside the pts/90 rate there so the real season
-    # total isn't hidden behind a rate figure most people don't think in.
-    has_season_total = "total_points_sum" in row.index and pd.notna(row["total_points_sum"])
-    points_label = f'{row["predicted_points"]:.2f} pts/90' if has_season_total else f'{row["predicted_points"]:.1f} pts'
-    total_points_html = (
+    # points_per_game only exists on Team of the Season pool rows (see
+    # season_pool) -- predicted_points there is already the real season/window
+    # total (what selection is ranked on), so points_per_game (FPL's own rate
+    # metric) is shown underneath as extra context, not a replacement label.
+    is_season_pool = "points_per_game" in row.index
+    points_label = f'{row["predicted_points"]:.0f} pts' if is_season_pool else f'{row["predicted_points"]:.1f} pts'
+    ppg_html = (
         f'<div style="font-size: 9.5px; color: #777; margin-top: 0px;">'
-        f'{int(row["total_points_sum"])} pts total</div>'
-        if has_season_total else ""
+        f'{row["points_per_game"]:.1f} pts/game</div>'
+        if is_season_pool and pd.notna(row["points_per_game"]) else ""
     )
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
@@ -266,7 +280,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
         f'<div style="font-size: 11px; color: #0a6b2f; font-weight: 700; margin-top: 1px;">'
         f'{points_label}</div>'
-        f'{total_points_html}'
+        f'{ppg_html}'
         f'</div>'
     )
 
@@ -434,14 +448,15 @@ with tab_squad:
         )
         is_full_season = (gw_start, gw_end) == (1, max_gw)
         pool = season_pool(df, season, gw_start, gw_end)
-        min_minutes = min_minutes_for_window(gw_start, gw_end)
         window_desc = f"the full {season} season" if is_full_season else f"GW{gw_start}–GW{gw_end} of {season}"
         st.caption(
-            f"Player pool: {len(pool)} players who played at least {min_minutes} minutes across {window_desc}. "
-            f"This is a LOOK BACK at who actually performed best in this window (real points-per-90-minutes over "
-            f"every gameweek played, at the window's final-gameweek price), not a prediction — these gameweeks are "
-            f"already complete, so there's nothing to predict. Points-per-90 (not points-per-gameweek) so a player "
-            f"who missed matches to injury/rotation isn't unfairly penalized against one who started every game. "
+            f"Player pool: {len(pool)} players who appeared at least once across {window_desc}, at the window's "
+            f"final-gameweek price. This is a LOOK BACK at who actually produced the most REAL points in this "
+            f"window, not a prediction — these gameweeks are already complete, so there's nothing to predict. "
+            f"Ranked by total points scored, not a per-game rate — a great rate over a handful of games can't "
+            f"outrank someone who played most of the window and produced far more for a real squad. "
+            f"Points-per-game (FPL's own metric: total points ÷ appearances, shown once a player has a few games "
+            f"to make it trustworthy) is shown on each card as context, not as what drives selection. "
             f"No budget cap here — this is the best XI the window actually produced, not a squad you could have "
             f"afforded on day one."
         )
@@ -559,13 +574,12 @@ with tab_squad:
         squad_source = st.session_state["built_squad_season_gw"]
 
         if squad_source == "completed_season":
-            # predicted_points here is a per-90 RATE, not a per-gameweek total --
-            # summing it across 15 players isn't a meaningful "total predicted
-            # points" the way it is for the other modes, and there's no £100m
-            # cap to report against either (see the "no budget cap" note above).
+            # predicted_points here is each player's real total points across
+            # the window -- no £100m cap to report against either (see the
+            # "no budget cap" note above).
             window_label = st.session_state.get("built_squad_window_label", "this window")
-            st.success(f"Squad: £{squad['cost'].sum():.1f}m · avg {squad['predicted_points'].mean():.2f} pts/90 across the squad ({window_label})")
-            badge_label = f"MVP — highest points-per-90 in {window_label}"
+            st.success(f"Squad: £{squad['cost'].sum():.1f}m · {squad['predicted_points'].sum():.0f} total points scored ({window_label})")
+            badge_label = f"MVP — most points scored in {window_label}"
         else:
             st.success(
                 f"Squad: £{squad['cost'].sum():.1f}m / £{DEFAULT_BUDGET}m · "
