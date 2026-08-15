@@ -117,7 +117,7 @@ def optimize_squad(
 
     Returns the input DataFrame filtered to the selected 15 players, with an
     added `in_starting_xi` column marking the optimal starting XI within that
-    squad (a separate, nested optimization -- see _select_starting_xi)."""
+    squad (a separate, nested optimization -- see select_starting_xi)."""
     required_cols = {id_col, position_col, team_col, cost_col, points_col}
     missing = required_cols - set(players.columns)
     if missing:
@@ -166,17 +166,20 @@ def optimize_squad(
     selected_ids = [pid for pid in player_ids if pick[pid].value() == 1]
     squad = players[players[id_col].isin(selected_ids)].copy()
 
-    starting_ids = _select_starting_xi(squad, id_col, position_col, points_col)
+    starting_ids = select_starting_xi(squad, id_col, position_col, points_col)
     squad["in_starting_xi"] = squad[id_col].isin(starting_ids)
 
     return squad.sort_values([position_col, points_col], ascending=[True, False]).reset_index(drop=True)
 
 
-def _select_starting_xi(
+def select_starting_xi(
     squad: pd.DataFrame, id_col: str, position_col: str, points_col: str
 ) -> list:
     """Given a fixed 15-man squad, pick the 11 starters that maximize predicted
-    points subject to FPL's formation rule (1 GK, >=3 DEF, >=2 MID, >=1 FWD)."""
+    points subject to FPL's formation rule (1 GK, >=3 DEF, >=2 MID, >=1 FWD).
+    Public (not module-private) since callers outside this module legitimately
+    need it too -- e.g. a manually-entered squad still wants an optimal
+    starting XI computed for it, not the manager picking one by hand."""
     prob = pulp.LpProblem("fpl_starting_xi", pulp.LpMaximize)
 
     player_ids = squad[id_col].tolist()
@@ -317,7 +320,7 @@ def optimize_transfers(
     num_paid_actual = max(0, len(transfers_out) - free_transfers)
 
     new_squad = players[players[id_col].isin(new_squad_ids)].copy()
-    starting_ids = _select_starting_xi(new_squad, id_col, position_col, points_col)
+    starting_ids = select_starting_xi(new_squad, id_col, position_col, points_col)
     new_squad["in_starting_xi"] = new_squad[id_col].isin(starting_ids)
 
     old_points = sum(points[pid] for pid in current_set)

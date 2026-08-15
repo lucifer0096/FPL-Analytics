@@ -20,7 +20,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 
-from optimizer import optimize_squad, optimize_transfers, load_latest_prices, POSITION_REQUIREMENTS, DEFAULT_BUDGET
+from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
 
 st.set_page_config(
@@ -254,6 +254,16 @@ with tab_squad:
         horizontal=True,
     )
 
+    # A squad built in one mode otherwise stays visible after switching to
+    # another (e.g. a historical-gameweek squad still shown once you switch to
+    # "My squad (enter manually)", even though you haven't picked anything
+    # yet) -- session_state persists across reruns by design, but that reads as
+    # "already pre-filled" here. Clear it on a genuine mode change.
+    if st.session_state.get("_last_squad_mode") != mode:
+        st.session_state.pop("built_squad", None)
+        st.session_state.pop("built_squad_season_gw", None)
+        st.session_state["_last_squad_mode"] = mode
+
     df = load_features()
 
     if mode == "Historical gameweek":
@@ -293,10 +303,11 @@ with tab_squad:
 
     else:  # My squad (enter manually)
         st.caption(
-            "Pick your actual 15-man squad from the live 2026-27 player pool, mark your starting XI, "
-            "and see it laid out on the pitch. Uses each player's live current price and their "
-            "rolling-5 average at the end of 2025-26 as a predicted-points estimate — same basis as "
-            "pre-season mode, but for the squad YOU picked, not the optimizer's choice."
+            "Pick your actual 15-man squad from the live 2026-27 player pool and see it laid out "
+            "on the pitch, with the optimal starting XI worked out automatically. Uses each player's "
+            "live current price and their rolling-5 average at the end of 2025-26 as a predicted-points "
+            "estimate — same basis as pre-season mode, but for the 15 players YOU picked, not the "
+            "optimizer's choice of who to buy."
         )
         try:
             manual_pool = preseason_pool(df)
@@ -344,34 +355,18 @@ with tab_squad:
                     st.warning("Squad issues: " + "; ".join(issues))
 
                 if len(chosen_df) == 15 and not issues:
-                    starter_labels = st.multiselect(
-                        "Pick your starting XI (11 of the 15 above)",
-                        options=sorted(chosen_labels),
-                        key="manual_starting_xi",
+                    st.caption(
+                        "Starting XI is picked automatically to maximize predicted points, "
+                        "same solver as Squad Builder's other modes — not something you pick by hand."
                     )
-                    starter_ids = [label_to_id[l] for l in starter_labels]
-
-                    if len(starter_ids) == 11:
-                        starter_pos = chosen_df[chosen_df["player_id"].isin(starter_ids)]["position"]
-                        xi_issues = []
-                        if (starter_pos == "GK").sum() != 1:
-                            xi_issues.append("need exactly 1 starting GK")
-                        if (starter_pos == "DEF").sum() < 3:
-                            xi_issues.append("need at least 3 starting DEF")
-                        if (starter_pos == "MID").sum() < 2:
-                            xi_issues.append("need at least 2 starting MID")
-                        if (starter_pos == "FWD").sum() < 1:
-                            xi_issues.append("need at least 1 starting FWD")
-
-                        if xi_issues:
-                            st.warning("Invalid formation: " + "; ".join(xi_issues))
-                        elif st.button("Show my squad", key="show_manual_squad_btn"):
-                            manual_squad = chosen_df.copy()
-                            manual_squad["in_starting_xi"] = manual_squad["player_id"].isin(starter_ids)
-                            st.session_state["built_squad"] = manual_squad
-                            st.session_state["built_squad_season_gw"] = None
-                    elif len(starter_labels) > 0:
-                        st.caption(f"{len(starter_labels)}/11 starters picked.")
+                    if st.button("Show my squad", key="show_manual_squad_btn"):
+                        manual_squad = chosen_df.copy()
+                        starter_ids = select_starting_xi(
+                            manual_squad, "player_id", "position", "predicted_points"
+                        )
+                        manual_squad["in_starting_xi"] = manual_squad["player_id"].isin(starter_ids)
+                        st.session_state["built_squad"] = manual_squad
+                        st.session_state["built_squad_season_gw"] = None
 
     if "built_squad" in st.session_state:
         squad = st.session_state["built_squad"]
