@@ -648,17 +648,30 @@ with tab_overview:
     col3.metric("Model validation MAE", mae_display)
     col4.metric("Squad rules encoded", "8")
 
-    st.markdown("""
-    **Pipeline:** live FPL API collector → 10 seasons of unified historical data →
-    engineered features (rolling form, team form, fixture difficulty, new-player
-    baseline) → trained LightGBM model → squad/transfer optimizer (PuLP integer
-    programming) → chip-timing advisor.
+    st.subheader("Pipeline")
+    pipeline_steps = [
+        "FPL API collector", "Historical dataset", "Feature engineering",
+        "LightGBM model", "Squad / transfer optimizer", "Chip advisor",
+    ]
+    pills = "".join(
+        f'<span style="background: linear-gradient(135deg, #2a9650, #5a3cb4); '
+        f'color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; '
+        f'font-weight: 600; white-space: nowrap;">{step}</span>'
+        + ('<span style="color: #888; font-size: 1.1rem;">→</span>' if i < len(pipeline_steps) - 1 else '')
+        for i, step in enumerate(pipeline_steps)
+    )
+    st.markdown(
+        f'<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; '
+        f'margin: 4px 0 18px 0;">{pills}</div>',
+        unsafe_allow_html=True,
+    )
 
-    All of FPL's real rules used here (squad composition, budget, transfer costs,
-    the 50% sell-fee, chip-per-half structure) were verified directly against the
-    live API's `bootstrap-static` `game_settings` and `chips` fields — see the
-    project README for the full rules table and how each was confirmed.
-    """)
+    st.markdown(
+        "All of FPL's real rules used here (squad composition, budget, transfer costs, "
+        "the 50% sell-fee, chip-per-half structure) were verified directly against the "
+        "live API's `bootstrap-static` `game_settings` and `chips` fields — see the "
+        "project README for the full rules table and how each was confirmed."
+    )
 
     st.subheader("Why historical data, not live predictions, right now")
     st.info(
@@ -881,13 +894,15 @@ with tab_squad:
             # the window -- no £100m cap to report against either (see the
             # "no budget cap" note above).
             window_label = st.session_state.get("built_squad_window_label", "this window")
-            st.success(f"Squad: £{squad['cost'].sum():.1f}m · {squad['predicted_points'].sum():.0f} total points scored ({window_label})")
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.metric("Squad cost", f"£{squad['cost'].sum():.1f}m")
+            sc2.metric("Points scored", f"{squad['predicted_points'].sum():.0f}")
+            sc3.metric("Window", window_label)
             badge_label = f"MVP — most points scored in {window_label}"
         else:
-            st.success(
-                f"Squad: £{squad['cost'].sum():.1f}m / £{DEFAULT_BUDGET}m · "
-                f"{squad['predicted_points'].sum():.1f} total predicted points"
-            )
+            sc1, sc2 = st.columns(2)
+            sc1.metric("Squad cost", f"£{squad['cost'].sum():.1f}m", f"of £{DEFAULT_BUDGET}m budget")
+            sc2.metric("Predicted points", f"{squad['predicted_points'].sum():.1f}")
             badge_label = "Player of the Week — top predicted scorer this gameweek" if isinstance(squad_source, tuple) else None
         render_pitch(squad, top_player_badge=badge_label)
 
@@ -999,8 +1014,22 @@ with tab_transfers:
                         col1.metric("Transfers suggested", len(result["transfers_in"]))
                         col2.metric("Hit cost", f"-{result['hit_cost']} pts")
                         col3.metric("Net points gain", f"{result['net_points_gain']:+.1f}")
-                        st.write(f"**Out:** {', '.join(out_names)}")
-                        st.write(f"**In:** {', '.join(in_names)}")
+
+                        out_col, in_col = st.columns(2)
+                        with out_col:
+                            st.markdown(
+                                '<div style="background: rgba(200,50,50,0.12); border-left: 4px solid #c83232; '
+                                'border-radius: 6px; padding: 10px 14px;"><b style="color:#e05555;">OUT</b><br>'
+                                + "<br>".join(out_names) + "</div>",
+                                unsafe_allow_html=True,
+                            )
+                        with in_col:
+                            st.markdown(
+                                '<div style="background: rgba(42,150,80,0.12); border-left: 4px solid #2a9650; '
+                                'border-radius: 6px; padding: 10px 14px;"><b style="color:#3fb96a;">IN</b><br>'
+                                + "<br>".join(in_names) + "</div>",
+                                unsafe_allow_html=True,
+                            )
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
                 else:
@@ -1057,19 +1086,38 @@ with tab_chips:
                         future_points_by_gw[g] = dict(zip(pool["player_id"], pool["predicted_points"]))
                         optimal_points_by_gw[g] = optimize_squad(pool)["predicted_points"].sum()
 
+                def _chip_card_html(icon: str, title: str, suggestions: list) -> str:
+                    rows = ""
+                    for i, s in enumerate(suggestions[:3]):
+                        is_best = i == 0
+                        rows += (
+                            f'<div style="padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; '
+                            f'background: {"rgba(42,150,80,0.15)" if is_best else "rgba(255,255,255,0.04)"}; '
+                            f'border-left: 3px solid {"#2a9650" if is_best else "transparent"};">'
+                            f'<b>GW{s.gameweek}</b>{" ⭐" if is_best else ""}<br>'
+                            f'<span style="font-size: 0.85rem; opacity: 0.85;">{s.detail}</span></div>'
+                        )
+                    return (
+                        f'<div style="background: rgba(255,255,255,0.03); border-radius: 10px; '
+                        f'padding: 14px;"><h4 style="margin-top:0;">{icon} {title}</h4>{rows}</div>'
+                    )
+
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.subheader("Bench Boost")
-                    for s in suggest_bench_boost(squad, future_points_by_gw, gw_range)[:3]:
-                        st.write(f"**GW{s.gameweek}** — {s.detail}")
+                    st.markdown(
+                        _chip_card_html("🪑", "Bench Boost", suggest_bench_boost(squad, future_points_by_gw, gw_range)),
+                        unsafe_allow_html=True,
+                    )
                 with col2:
-                    st.subheader("Triple Captain")
-                    for s in suggest_triple_captain(squad, future_points_by_gw, gw_range)[:3]:
-                        st.write(f"**GW{s.gameweek}** — {s.detail}")
+                    st.markdown(
+                        _chip_card_html("👑", "Triple Captain", suggest_triple_captain(squad, future_points_by_gw, gw_range)),
+                        unsafe_allow_html=True,
+                    )
                 with col3:
-                    st.subheader("Free Hit")
-                    for s in suggest_free_hit_or_wildcard(squad, future_points_by_gw, optimal_points_by_gw, gw_range, chip="free_hit")[:3]:
-                        st.write(f"**GW{s.gameweek}** — {s.detail}")
+                    st.markdown(
+                        _chip_card_html("🔄", "Free Hit", suggest_free_hit_or_wildcard(squad, future_points_by_gw, optimal_points_by_gw, gw_range, chip="free_hit")),
+                        unsafe_allow_html=True,
+                    )
 
 # =============================================================================
 # MODEL PERFORMANCE
@@ -1182,6 +1230,13 @@ with tab_history:
             f"set to populate this tab."
         )
     else:
+        best_points_row = manager_data.loc[manager_data["points"].idxmax()]
+        best_rank_row = manager_data.loc[manager_data["rank"].idxmin()]
+        scol1, scol2, scol3 = st.columns(3)
+        scol1.metric("Seasons played", len(manager_data))
+        scol2.metric("Best points season", f"{best_points_row['points']:,} pts", best_points_row["season"])
+        scol3.metric("Best overall rank", f"{best_rank_row['rank']:,}", best_rank_row["season"])
+
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Points by season")
