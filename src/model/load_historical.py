@@ -121,9 +121,19 @@ def load_season(season: str) -> pd.DataFrame:
     if missing:
         raise ValueError(f"{season}: merged_gw.csv is missing expected columns {missing}")
 
+    header = pd.read_csv(path, encoding="latin1", nrows=1).columns
     df = df[COMMON_COLUMNS].copy()
 
-    if "position" in pd.read_csv(path, encoding="latin1", nrows=1).columns:
+    # FPL's own pre-match expected-points prediction, used later as a baseline to
+    # compare the trained model against. Only published from ~2020-21 onward --
+    # absent (not just this dataset's coverage, but never existed) for earlier
+    # seasons, so this stays NaN there rather than being backfilled or estimated.
+    if "xP" in header:
+        df["fpl_xP"] = pd.read_csv(path, encoding="latin1", low_memory=False)["xP"]
+    else:
+        df["fpl_xP"] = pd.NA
+
+    if "position" in header:
         # team is already a name string in these seasons (verified 2020-21 to
         # 2024-25) — no resolution needed.
         pos_team = pd.read_csv(path, encoding="latin1", low_memory=False)[
