@@ -244,7 +244,7 @@ with tab_squad:
 
     mode = st.radio(
         "Player pool",
-        ["Historical gameweek", "2026-27 pre-season (live prices)"],
+        ["Historical gameweek", "2026-27 pre-season (live prices)", "My squad (enter manually)"],
         key="squad_mode",
         horizontal=True,
     )
@@ -259,7 +259,14 @@ with tab_squad:
         pool = gw_pool(df, season, gw)
         pool_source = (season, gw)
         st.caption(f"Player pool: {len(pool)} players, using each player's rolling-5 average as a predicted-points stand-in.")
-    else:
+
+        if pool is not None and st.button("Build optimal squad", key="build_squad_btn"):
+            with st.spinner("Solving..."):
+                squad = optimize_squad(pool)
+            st.session_state["built_squad"] = squad
+            st.session_state["built_squad_season_gw"] = pool_source
+
+    elif mode == "2026-27 pre-season (live prices)":
         try:
             pool = preseason_pool(df)
             pool_source = None  # no "next gameweek" exists yet -- Transfers/Chips need real gameweek data
@@ -273,11 +280,93 @@ with tab_squad:
             st.error(str(e))
             pool = None
 
-    if pool is not None and st.button("Build optimal squad", key="build_squad_btn"):
-        with st.spinner("Solving..."):
-            squad = optimize_squad(pool)
-        st.session_state["built_squad"] = squad
-        st.session_state["built_squad_season_gw"] = pool_source
+        if pool is not None and st.button("Build optimal squad", key="build_squad_btn"):
+            with st.spinner("Solving..."):
+                squad = optimize_squad(pool)
+            st.session_state["built_squad"] = squad
+            st.session_state["built_squad_season_gw"] = pool_source
+
+    else:  # My squad (enter manually)
+        st.caption(
+            "Pick your actual 15-man squad from the live 2026-27 player pool, mark your starting XI, "
+            "and see it laid out on the pitch. Uses each player's live current price and their "
+            "rolling-5 average at the end of 2025-26 as a predicted-points estimate — same basis as "
+            "pre-season mode, but for the squad YOU picked, not the optimizer's choice."
+        )
+        try:
+            manual_pool = preseason_pool(df)
+        except FileNotFoundError as e:
+            st.error(str(e))
+            manual_pool = None
+
+        if manual_pool is not None:
+            manual_pool = manual_pool.copy()
+            manual_pool["label"] = manual_pool.apply(
+                lambda r: f"{r['name']} ({r['team']}, {r['position']}, £{r['cost']:.1f}m)", axis=1
+            )
+            label_to_id = dict(zip(manual_pool["label"], manual_pool["player_id"]))
+
+            chosen_labels = st.multiselect(
+                "Your 15 players (search by name)",
+                options=sorted(manual_pool["label"]),
+                key="manual_squad_players",
+            )
+
+            if chosen_labels:
+                chosen_ids = [label_to_id[l] for l in chosen_labels]
+                chosen_df = manual_pool[manual_pool["player_id"].isin(chosen_ids)]
+
+                pos_counts = chosen_df["position"].value_counts().to_dict()
+                total_cost = chosen_df["cost"].sum()
+                team_counts = chosen_df["team"].value_counts()
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Players picked", f"{len(chosen_df)} / 15")
+                col2.metric("Total cost", f"£{total_cost:.1f}m / £{DEFAULT_BUDGET}m")
+                col3.metric("Max from one club", f"{team_counts.max() if len(team_counts) else 0} / 3")
+
+                issues = []
+                for pos, quota in POSITION_REQUIREMENTS.items():
+                    got = pos_counts.get(pos, 0)
+                    if len(chosen_df) == 15 and got != quota:
+                        issues.append(f"{pos}: need {quota}, have {got}")
+                if len(chosen_df) == 15 and total_cost > DEFAULT_BUDGET + 1e-6:
+                    issues.append(f"Over budget by £{total_cost - DEFAULT_BUDGET:.1f}m")
+                if team_counts.max() > 3 if len(team_counts) else False:
+                    issues.append(f"Too many players from one club (max 3)")
+
+                if issues:
+                    st.warning("Squad issues: " + "; ".join(issues))
+
+                if len(chosen_df) == 15 and not issues:
+                    starter_labels = st.multiselect(
+                        "Pick your starting XI (11 of the 15 above)",
+                        options=sorted(chosen_labels),
+                        key="manual_starting_xi",
+                    )
+                    starter_ids = [label_to_id[l] for l in starter_labels]
+
+                    if len(starter_ids) == 11:
+                        starter_pos = chosen_df[chosen_df["player_id"].isin(starter_ids)]["position"]
+                        xi_issues = []
+                        if (starter_pos == "GK").sum() != 1:
+                            xi_issues.append("need exactly 1 starting GK")
+                        if (starter_pos == "DEF").sum() < 3:
+                            xi_issues.append("need at least 3 starting DEF")
+                        if (starter_pos == "MID").sum() < 2:
+                            xi_issues.append("need at least 2 starting MID")
+                        if (starter_pos == "FWD").sum() < 1:
+                            xi_issues.append("need at least 1 starting FWD")
+
+                        if xi_issues:
+                            st.warning("Invalid formation: " + "; ".join(xi_issues))
+                        elif st.button("Show my squad", key="show_manual_squad_btn"):
+                            manual_squad = chosen_df.copy()
+                            manual_squad["in_starting_xi"] = manual_squad["player_id"].isin(starter_ids)
+                            st.session_state["built_squad"] = manual_squad
+                            st.session_state["built_squad_season_gw"] = None
+                    elif len(starter_labels) > 0:
+                        st.caption(f"{len(starter_labels)}/11 starters picked.")
 
     if "built_squad" in st.session_state:
         squad = st.session_state["built_squad"]
