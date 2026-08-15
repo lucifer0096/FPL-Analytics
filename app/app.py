@@ -87,7 +87,13 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
     comes from the trained single-stage xP model (incorporates fixture_difficulty,
     opponent/team form, recent minutes/form -- see train.py's FEATURE_COLUMNS),
     falling back to the player's own rolling-5 average only if no trained model
-    file is present."""
+    file is present.
+
+    in_dreamteam (FPL's own official "Team of the Week" flag) is carried
+    through when present -- only true for gameweeks this project's own
+    collector captured live (see load_live.py); vaastav's historical seasons
+    never have this column at all, so it's simply absent there, not False for
+    every player (that would misrepresent "no data" as "not selected")."""
     sub = df[(df["season"] == season) & (df["GW"] == gw)].copy()
     sub["player_id"] = sub["player_code"]
     sub["cost"] = sub["value"] / 10.0
@@ -98,9 +104,11 @@ def gw_pool(df: pd.DataFrame, season: str, gw: int) -> pd.DataFrame:
     else:
         sub["predicted_points"] = sub["total_points_avg_last_5"].fillna(0).clip(lower=0)
 
-    return sub.drop_duplicates(subset="player_id")[
-        ["player_id", "name", "position", "team", "cost", "predicted_points"]
-    ]
+    cols = ["player_id", "name", "position", "team", "cost", "predicted_points"]
+    if "in_dreamteam" in sub.columns:
+        cols.append("in_dreamteam")
+
+    return sub.drop_duplicates(subset="player_id")[cols]
 
 
 MIN_GAMES_FOR_SEASON_RATE = 5  # below this, points-per-game is too noisy to trust as a DISPLAYED rate (a single big haul would otherwise look like a huge per-game rate) -- doesn't affect selection, which ranks by total points regardless of appearances
@@ -226,6 +234,77 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
     return live[["player_id", "name", "position", "team", "cost", "predicted_points"]]
 
 
+@st.cache_data
+def scout_picks_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
+    """This project's own 'Scout Picks' -- a pre-season recommended squad in
+    the spirit of FPL's official editorial Scout Picks article, but built from
+    real, checkable signals instead of human commentary (which isn't
+    structured API data and has no stable weekly URL to fetch -- checked
+    directly: article ids are unpredictable and the listing page needs JS
+    rendering this project's lightweight collector can't do). Starts from
+    preseason_pool()'s predicted_points (live price + prior-season closing
+    form) and adds two real, verified boosts on top:
+
+    1. EASY GW1 FIXTURE: a real boost for players whose actual GW1 opponent
+       (from the collector's own fixtures.csv, resolved via the matching
+       bootstrap snapshot's team-id mapping) is a team newly promoted to the
+       Premier League this season -- verified directly by diffing this
+       season's team list against last season's (features.parquet), not
+       assumed from names: confirmed {Hull City, Ipswich Town, Coventry City}
+       are the actual 2026-27 new arrivals, matching what FPL's own Scout
+       Picks article names for exactly this reason.
+    2. SET-PIECE DUTY: a real boost for players FPL's own bootstrap-static
+       flags as a club's primary penalty taker (penalties_order == 1) --
+       genuine set-piece priority data, not a guess.
+
+    Returns the same shape as preseason_pool() plus a `scout_reasons` column
+    (a short string explaining why a player got a boost, or empty if none
+    applied) so the dashboard can show its own reasoning per player, same
+    spirit as the real article's player-by-player commentary."""
+    pool = preseason_pool(_features_df, prior_season)
+
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
+    penalty_takers = {p["id"] for p in raw["elements"] if p.get("penalties_order") == 1}
+
+    prior_teams = set(_features_df[_features_df["season"] == prior_season]["team"].unique())
+    current_teams = set(team_id_to_name.values())
+    promoted_teams = current_teams - prior_teams
+
+    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    gw1_opponent_by_team = {}
+    if os.path.exists(fixtures_path):
+        fx = pd.read_csv(fixtures_path)
+        gw1 = fx[fx["event"] == 1]
+        for _, row in gw1.iterrows():
+            home, away = team_id_to_name.get(row["team_h"]), team_id_to_name.get(row["team_a"])
+            if home and away:
+                gw1_opponent_by_team[home] = away
+                gw1_opponent_by_team[away] = home
+
+    EASY_FIXTURE_BOOST = 1.5
+    PENALTY_TAKER_BOOST = 1.0
+
+    pool = pool.copy()
+    pool["scout_reasons"] = ""
+    boosted = pool["predicted_points"].copy()
+
+    for idx, row in pool.iterrows():
+        reasons = []
+        opponent = gw1_opponent_by_team.get(row["team"])
+        if opponent and opponent in promoted_teams:
+            boosted[idx] += EASY_FIXTURE_BOOST
+            reasons.append(f"GW1 vs promoted {opponent}")
+        if row["player_id"] in penalty_takers:
+            boosted[idx] += PENALTY_TAKER_BOOST
+            reasons.append("club's #1 penalty taker")
+        pool.at[idx, "scout_reasons"] = ", ".join(reasons)
+
+    pool["predicted_points"] = boosted
+    return pool
+
+
 def _latest_bootstrap_path() -> str:
     """Same fallback logic as optimizer.py's load_latest_prices(): data/raw/ is
     gitignored, so a fresh deploy has no timestamped snapshot -- falls back to
@@ -259,6 +338,20 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'font-size: 12px; display: flex; align-items: center; justify-content: center; '
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">⭐</div>'
     ) if badge_label else ""
+    # FPL's own official Team of the Week flag (in_dreamteam) -- distinct from
+    # the ⭐ MVP/POTW badge above (this project's OWN top-pick call, which can
+    # only ever mark one player), since FPL's real Dream Team has up to 11
+    # players and is a fact about that gameweek, not a recommendation. Only
+    # present at all for live-collected gameweeks (see gw_pool's docstring) --
+    # absent (not False) for historical seasons, so nothing is shown rather
+    # than a wrong "not selected" implication for data that doesn't exist.
+    dreamteam_html = (
+        f'<div title="FPL official Team of the Week pick" style="position: absolute; top: -8px; left: -6px; '
+        f'background: #2a9650; color: white; border-radius: 50%; width: 20px; height: 20px; '
+        f'font-size: 11px; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">✓</div>'
+        if "in_dreamteam" in row.index and pd.notna(row["in_dreamteam"]) and row["in_dreamteam"] else ""
+    )
     # points_per_game only exists on Team of the Season pool rows (see
     # season_pool) -- predicted_points there is already the real season/window
     # total (what selection is ranked on), so points_per_game (FPL's own rate
@@ -270,11 +363,24 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'{row["points_per_game"]:.1f} pts/game</div>'
         if is_season_pool and pd.notna(row["points_per_game"]) else ""
     )
+    # scout_reasons only exists on Scout Picks pool rows (see
+    # scout_picks_pool) -- a real, checkable reason (easy GW1 fixture vs a
+    # verified promoted team, or confirmed set-piece duty) this project's own
+    # boost was applied, shown as a hover tooltip since card space is tight.
+    scout_html = (
+        f'<div title="{row["scout_reasons"]}" style="position: absolute; bottom: -6px; right: -6px; '
+        f'background: #1a1a1a; color: #ffb300; border-radius: 50%; width: 16px; height: 16px; '
+        f'font-size: 10px; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">🔍</div>'
+        if "scout_reasons" in row.index and row["scout_reasons"] else ""
+    )
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
         f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
         f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
         f'{badge_html}'
+        f'{dreamteam_html}'
+        f'{scout_html}'
         f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
         f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
         f'<div style="font-size: 10.5px; color: #555; margin-top: 2px;">£{row["cost"]:.1f}m</div>'
@@ -406,7 +512,8 @@ with tab_squad:
 
     mode = st.radio(
         "Player pool",
-        ["Historical gameweek", "Team of the Season", "2026-27 pre-season (live prices)", "My squad (enter manually)"],
+        ["Historical gameweek", "Team of the Season", "2026-27 pre-season (live prices)",
+         "Scout Picks (2026-27 season opener)", "My squad (enter manually)"],
         key="squad_mode",
         horizontal=True,
     )
@@ -494,7 +601,33 @@ with tab_squad:
             st.session_state["built_squad"] = squad
             st.session_state["built_squad_season_gw"] = pool_source
 
-    else:  # My squad (enter manually)
+    elif mode == "Scout Picks (2026-27 season opener)":
+        try:
+            pool = scout_picks_pool(df)
+            pool_source = None
+            n_reasons = (pool["scout_reasons"] != "").sum()
+            st.caption(
+                f"This project's own take on FPL's editorial 'Scout Picks' — not a scrape of "
+                f"their article (checked: it's not structured API data, and has no stable weekly "
+                f"URL to fetch, only unpredictable per-article ids). Built from real signals instead: "
+                f"same pre-season pool as above, PLUS a boost for a genuinely easy GW1 fixture "
+                f"(against one of this season's actual promoted teams — Hull City, Ipswich Town, "
+                f"Coventry City, verified by diffing this season's team list against last season's) "
+                f"and for confirmed set-piece duty (FPL's own `penalties_order` field). "
+                f"{n_reasons} of {len(pool)} players got a real, shown reason for their boost — "
+                f"see the pitch view once built."
+            )
+        except FileNotFoundError as e:
+            st.error(str(e))
+            pool = None
+
+        if pool is not None and st.button("Build Scout Picks squad", key="build_scout_btn"):
+            with st.spinner("Solving..."):
+                squad = optimize_squad(pool)
+            st.session_state["built_squad"] = squad
+            st.session_state["built_squad_season_gw"] = pool_source
+
+    elif mode == "My squad (enter manually)":
         st.caption(
             "Pick your actual 15-man squad from the live 2026-27 player pool and see it laid out "
             "on the pitch, with the optimal starting XI worked out automatically. Uses each player's "
