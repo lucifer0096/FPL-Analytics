@@ -141,6 +141,21 @@ The gap to FPL's xP shrinks from ~0.10 (full dataset) to ~0.08 (played only) —
 
 Highest-importance features in the single-stage model: `ict_index_avg_last_5`, `bps_avg_last_5`, `ict_index_avg_last_3`, `career_gw_count`, `bps_avg_last_3` — the rolling advanced-stat averages dominate over the newer team-form and fixture-difficulty features.
 
+## Squad Optimizer
+
+```bash
+python src/model/optimizer.py       # library — see test_optimizer.py for usage
+python src/model/test_optimizer.py  # ad-hoc sanity check against a real player pool
+```
+
+`optimize_squad()` (integer programming via PuLP) solves for the 15-man squad that maximizes total predicted points under FPL's real rules: exactly 2 GK / 5 DEF / 5 MID / 3 FWD, a budget (default £100m), and at most 3 players from any one club. A nested optimization then picks the best valid starting XI (1 GK, ≥3 DEF, ≥2 MID, ≥1 FWD) from within that squad.
+
+Deliberately decoupled from the trained model — it takes a plain DataFrame of `(player_id, position, team, cost, predicted_points)`, so it's usable and testable independent of where those predictions come from (the trained xP model, FPL's own xP, or a manual watchlist).
+
+Verified two ways:
+- Against the full 587-player live bootstrap pool: correct squad size, exact position quotas, under budget, ≤3 per team, valid starting XI formation. Pre-season `form` is 0 for every player right now (no gameweeks played yet), so this only proves the solver logic is correct — not that it picks good players.
+- Against real historical data (2024-25 GW20, using each player's rolling-5 average as a stand-in for predicted points): correctly selects genuine stars — Salah (13.8 pts), Isak (10.2 pts), Palmer (7.2 pts) — within budget (£98m/£100m), with the highest scorers in the starting XI and lower scorers correctly benched.
+
 ## Manager History
 
 **[Live page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)** — a static page charting one manager's points and overall rank across all 10 tracked seasons (2016/17–2025/26), pulled from `entry/{id}/history`. Source: [`docs/my-fpl-history.html`](docs/my-fpl-history.html). The season figures are hardcoded from a point-in-time snapshot rather than fetched live — it'll be superseded by the planned dashboard, which will read directly from the collector's saved history instead.
@@ -151,7 +166,8 @@ Highest-importance features in the single-stage model: `ict_index_avg_last_5`, `
 - Try adding `value` (price) as a feature and tuning LightGBM's hyperparameters on the played-only subset, where the model is already closer to FPL's baseline.
 - Consider a secondary model or extra features using xG/xA for 2022-23 onward once the core model is validated, since that signal is only available for a third of the training window.
 - Run the model against the 2025-26 final holdout only once no further tuning decisions remain, to get an honest read on generalization.
-- Build a squad optimizer (integer/linear programming) that picks the best 15-man squad under budget and formation constraints using model predictions.
+- Wire the trained model's live-gameweek predictions into the optimizer once the 2026-27 season starts and the collector has real per-gameweek data to predict from — currently only tested against historical data and a meaningless pre-season player pool.
+- Add a transfer-optimization mode (given an existing squad + free transfers, suggest the highest-value swap) rather than only "build from scratch."
 - Build a live dashboard (Streamlit) showing current-gameweek predictions, transfer suggestions, and how a manager's actual picks compare to what the model would have chosen.
 - Once there's a processed, league-wide dataset (no personal data), commit it back to the repo each run like NZ-Jobs-Dashboard's sync workflow does, rather than only uploading artifacts.
 - Once the model and dashboard are solid, port a clean version of this project into the main [data-portfolio](https://github.com/lucifer0096/data-portfolio) repo.
