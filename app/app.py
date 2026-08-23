@@ -321,10 +321,13 @@ with tab_transfers:
                     if diffs.empty:
                         st.caption("No qualifying differentials right now.")
                     else:
+                        display_diffs = diffs.copy()
+                        display_diffs["is_penalty_taker"] = display_diffs["is_penalty_taker"].map({True: "✓", False: ""})
                         st.dataframe(
-                            diffs.rename(columns={
+                            display_diffs.rename(columns={
                                 "name": "Player", "position": "Pos", "team": "Team", "cost": "Cost (£m)",
                                 "selected_by_percent": "Owned (%)", "ep_next": "Expected pts (next GW)",
+                                "is_penalty_taker": "Penalty taker",
                             }),
                             use_container_width=True, hide_index=True,
                         )

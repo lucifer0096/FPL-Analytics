@@ -631,6 +631,12 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             # captain from THIS squad using the same real number FPL itself
             # publishes, rather than a separate homegrown estimate.
             "ep_next": float(player.get("ep_next") or 0),
+            # Real, confirmed set-piece duty -- FPL's own penalties_order
+            # field (== 1 means this player is their club's PRIMARY penalty
+            # taker, not a guess). Shown as a badge on the pitch card by
+            # _player_card_html, same pattern as the captain/dreamteam
+            # badges already there.
+            "is_penalty_taker": player.get("penalties_order") == 1,
         })
     return pd.DataFrame(rows)
 
@@ -887,7 +893,11 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
     perform isn't a useful pick regardless of how low-owned they are.
 
     Returns up to top_n players sorted by ep_next descending, with columns:
-    name, position, team, cost, selected_by_percent, ep_next."""
+    name, position, team, cost, selected_by_percent, ep_next,
+    is_penalty_taker (FPL's own penalties_order == 1 -- confirmed set-piece
+    duty is a real reason a low-owned player's upside is more trustworthy
+    than ep_next alone would suggest, same signal build_live_squad_df's
+    penalty-taker badge already surfaces on squad cards)."""
     with open(_latest_bootstrap_path(), encoding="utf-8") as f:
         raw = json.load(f)
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
@@ -905,8 +915,9 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
             "cost": p["now_cost"] / 10.0,
             "selected_by_percent": owned,
             "ep_next": ep_next,
+            "is_penalty_taker": p.get("penalties_order") == 1,
         })
-    df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "selected_by_percent", "ep_next"])
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "selected_by_percent", "ep_next", "is_penalty_taker"])
     return df.sort_values("ep_next", ascending=False).head(top_n).reset_index(drop=True)
 
 
@@ -1053,6 +1064,17 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">🔍</div>'
         if "scout_reasons" in row.index and row["scout_reasons"] else ""
     )
+    # Real, confirmed set-piece duty (FPL's own penalties_order == 1, see
+    # build_live_squad_df) -- shares the bottom-right corner with scout_html
+    # since the two never co-occur (scout_reasons only exists on the
+    # now-removed Scout Picks pool; is_penalty_taker only on live squads).
+    penalty_taker_html = (
+        f'<div title="Club\'s #1 penalty taker" style="position: absolute; bottom: -6px; right: -6px; '
+        f'background: #1a1a1a; color: #ffb300; border-radius: 50%; width: 16px; height: 16px; '
+        f'font-size: 10px; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">P</div>'
+        if "is_penalty_taker" in row.index and row["is_penalty_taker"] else ""
+    )
     # Real captain/vice-captain marker for a manager's own live squad (see
     # build_live_squad_df) -- distinct from the MVP ⭐ badge, which marks the
     # single highest-SCORING player, not necessarily who was actually made
@@ -1136,6 +1158,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'{badge_html}'
         f'{dreamteam_html}'
         f'{scout_html}'
+        f'{penalty_taker_html}'
         f'{captain_html}'
         f'{img_html}'
         f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
