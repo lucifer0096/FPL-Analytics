@@ -120,6 +120,28 @@ def refresh_current_squad(entry_id: str) -> bool:
     return True
 
 
+def refresh_fixtures() -> bool:
+    """Copies data/raw/2026-27/fixtures.csv straight to
+    data/dashboard_fixtures.csv (not glob-latest like the others -- there's
+    only ever one live fixtures.csv per season, re-fetched in place, not a
+    new timestamped file per run). data/raw/ is gitignored, so without this
+    a fresh Streamlit Cloud deploy has no fixtures data at all -- silently
+    breaking the PL Table tab and every fixture-difficulty feature (see
+    shared.py's _fixtures_path()) until the next scheduled collector run
+    happens to also be a same-day deploy."""
+    path = os.path.join(RAW_DIR, "2026-27", "fixtures.csv")
+    if not os.path.exists(path):
+        print("No 2026-27 fixtures.csv found -- skipping dashboard_fixtures.csv")
+        return False
+    with open(path, encoding="utf-8") as f:
+        contents = f.read()
+    out_path = os.path.join(DATA_DIR, "dashboard_fixtures.csv")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(contents)
+    print(f"Refreshed {out_path} from {path}")
+    return True
+
+
 def refresh_leagues(entry_id: str) -> bool:
     leagues_dir = os.path.join(RAW_DIR, "2026-27", "entry", entry_id, "leagues")
     if not os.path.isdir(leagues_dir):
@@ -146,6 +168,7 @@ def refresh_leagues(entry_id: str) -> bool:
 
 def main():
     any_refreshed = refresh_bootstrap()
+    any_refreshed = refresh_fixtures() or any_refreshed
     if ENTRY_ID:
         any_refreshed = refresh_entry_info_and_history(ENTRY_ID) or any_refreshed
         any_refreshed = refresh_current_squad(ENTRY_ID) or any_refreshed

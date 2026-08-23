@@ -11,7 +11,11 @@ venv/
 # no way to run the collector itself -- so a single, STABLE (non-timestamped)
 # copy lives at data/dashboard_bootstrap.json instead (see below), committed
 # deliberately and refreshed by hand/CI, decoupled from data/raw/'s
-# ever-growing timestamped files.
+# ever-growing timestamped files. Same reasoning applies to
+# data/dashboard_fixtures.csv (a stable copy of data/raw/2026-27/fixtures.csv)
+# -- without it, PL Table and every fixture-difficulty feature silently show
+# nothing on a fresh deploy, since data/raw/2026-27/fixtures.csv itself is
+# gitignored here.
 data/raw/
 
 # A manager's own manually-entered squad (player-id list only, saved so a

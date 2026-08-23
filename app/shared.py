@@ -789,6 +789,26 @@ def _latest_bootstrap_path() -> str:
     )
 
 
+def _fixtures_path() -> str:
+    """Same fallback pattern as _latest_bootstrap_path(): data/raw/2026-27/
+    fixtures.csv is gitignored (lives under data/raw/), so a fresh Streamlit
+    Cloud deploy has none of it and every fixture-dependent feature (PL
+    Table, fixture-difficulty strips/adjustments) would silently show
+    nothing. Falls back to the deliberately-committed, non-timestamped
+    data/dashboard_fixtures.csv (refreshed by
+    src/collector/refresh_dashboard_fallbacks.py, same day-stale bound
+    already accepted for data/dashboard_bootstrap.json). Returns None (not
+    an exception) if neither exists -- these features already treat a
+    missing fixtures file as "nothing collected yet," not an error."""
+    live_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    if os.path.exists(live_path):
+        return live_path
+    fallback = os.path.join(PROJECT_DIR, "data", "dashboard_fixtures.csv")
+    if os.path.exists(fallback):
+        return fallback
+    return None
+
+
 @st.cache_data
 def live_price_changes() -> pd.DataFrame:
     """Real 2026-27 price movement SO FAR this season, straight from FPL's
@@ -977,8 +997,8 @@ def premier_league_table() -> pd.DataFrame:
     Returns team, played, won, drawn, lost, gf, ga, gd, points, sorted by
     points then goal difference descending -- the real, standard PL
     table-ordering rule."""
-    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
-    if not os.path.exists(fixtures_path):
+    fixtures_path = _fixtures_path()
+    if fixtures_path is None:
         return pd.DataFrame(columns=["team", "played", "won", "drawn", "lost", "gf", "ga", "gd", "points"])
     with open(_latest_bootstrap_path(), encoding="utf-8") as f:
         raw = json.load(f)
@@ -1031,8 +1051,8 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
 
     Returns an empty dict if no 2026-27 fixtures.csv has been collected yet
     in this environment (expected before the collector's first run)."""
-    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
-    if not os.path.exists(fixtures_path):
+    fixtures_path = _fixtures_path()
+    if fixtures_path is None:
         return {}
 
     with open(_latest_bootstrap_path(), encoding="utf-8") as f:

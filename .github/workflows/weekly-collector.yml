@@ -104,7 +104,8 @@ jobs:
           # `git add` on a path that doesn't exist (e.g. dashboard_leagues.json
           # when FPL_ENTRY_ID is unset, so the league fallback was never
           # written) errors out -- so add only the files that actually exist.
-          for f in data/dashboard_bootstrap.json data/dashboard_entry_info.json \
+          for f in data/dashboard_bootstrap.json data/dashboard_fixtures.csv \
+                   data/dashboard_entry_info.json \
                    data/dashboard_entry_history.json data/dashboard_current_squad.json \
                    data/dashboard_leagues.json; do
             [ -f "$f" ] && git add "$f"
