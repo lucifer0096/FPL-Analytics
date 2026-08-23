@@ -419,15 +419,16 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     (correct/expected before the season's first deadline has passed, not a
     bug after that)."""
     path = _find_entry_history_path(entry_id)
+    empty_cols = ["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost", "points_on_bench"]
     if path is None:
-        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost"])
+        return pd.DataFrame(columns=empty_cols)
 
     with open(path, encoding="utf-8") as f:
         history = json.load(f)
 
     current = history.get("current", [])
     if not current:
-        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost"])
+        return pd.DataFrame(columns=empty_cols)
 
     df = pd.DataFrame([
         {
@@ -439,6 +440,7 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
             "value": g["value"] / 10.0,
             "event_transfers": g["event_transfers"],
             "event_transfers_cost": g["event_transfers_cost"],
+            "points_on_bench": g["points_on_bench"],
         }
         for g in current
     ])

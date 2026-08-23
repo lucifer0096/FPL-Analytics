@@ -160,15 +160,23 @@ with tab_squad:
             st.caption("Cumulative points by gameweek")
             st.line_chart(current_progress.set_index("gw")["total_points"])
         latest = current_progress.iloc[-1]
-        mcol1, mcol2, mcol3 = st.columns(3)
+        total_bench_points = current_progress["points_on_bench"].sum()
+        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
         mcol1.metric("Total points", f"{latest['total_points']:.0f}")
         mcol2.metric("Overall rank", f"{latest['overall_rank']:,.0f}")
         mcol3.metric("Bank", f"£{latest['bank']:.1f}m")
+        mcol4.metric(
+            "Points left on bench", f"{total_bench_points:.0f}",
+            help="Real, running total of points_on_bench (FPL's own field) across every "
+                 "gameweek so far this season — points your bench scored that never counted "
+                 "toward your total, since only your starting XI's points count.",
+        )
         st.dataframe(
             current_progress.rename(columns={
                 "gw": "GW", "points": "GW points", "total_points": "Total points",
                 "overall_rank": "Overall rank", "bank": "Bank (£m)", "value": "Squad value (£m)",
-            }),
+                "points_on_bench": "Bench points",
+            }).drop(columns=["event_transfers", "event_transfers_cost"]),
             use_container_width=True,
             hide_index=True,
         )
