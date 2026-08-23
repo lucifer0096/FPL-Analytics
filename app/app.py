@@ -20,7 +20,7 @@ from shared import (
     PROJECT_DIR, MANAGER_ENTRY_ID,
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
-    load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes,
+    load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -519,3 +519,32 @@ with tab_prices:
                     }),
                     use_container_width=True, hide_index=True,
                 )
+
+    st.divider()
+    st.subheader("🔮 Likely to move next")
+    st.caption(
+        "Players with real, current transfer MOMENTUM (net transfers this gameweek — a real, "
+        "public leading indicator FPL's price-change algorithm reacts to) who haven't had "
+        "their price move yet — distinct from the risers/fallers above, which already happened."
+    )
+    movers = likely_price_movers()
+    if movers.empty:
+        st.caption("No significant transfer momentum on unmoved players right now.")
+    else:
+        mcol1, mcol2 = st.columns(2)
+        likely_risers = movers[movers["net_transfers"] > 0].head(5)
+        likely_fallers = movers[movers["net_transfers"] < 0].sort_values("net_transfers").head(5)
+        with mcol1:
+            st.caption("Likely risers (heavy net transfers IN)")
+            st.dataframe(
+                likely_risers[["name", "position", "team", "cost", "net_transfers"]]
+                .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers in"}),
+                use_container_width=True, hide_index=True,
+            )
+        with mcol2:
+            st.caption("Likely fallers (heavy net transfers OUT)")
+            st.dataframe(
+                likely_fallers[["name", "position", "team", "cost", "net_transfers"]]
+                .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
+                use_container_width=True, hide_index=True,
+            )

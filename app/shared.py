@@ -798,9 +798,54 @@ def live_price_changes() -> pd.DataFrame:
             "cost": p["now_cost"] / 10.0,
             "price_change": change / 10.0,
             "start_cost": (p["now_cost"] - change) / 10.0,
+            "net_transfers": p["transfers_in_event"] - p["transfers_out_event"],
         })
-    df = pd.DataFrame(rows, columns=["name", "position", "team", "start_cost", "cost", "price_change"])
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "start_cost", "cost", "price_change", "net_transfers"])
     return df.sort_values("price_change", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data
+def likely_price_movers(top_n: int = 10) -> pd.DataFrame:
+    """Players with real, current transfer MOMENTUM (net transfers this
+    gameweek: transfers_in_event - transfers_out_event, both real FPL fields
+    verified directly against bootstrap-static) who HAVEN'T had their price
+    move yet -- a real, public leading indicator of who's likely to rise or
+    fall soon, distinct from live_price_changes() (which shows movement that
+    has ALREADY happened). Excludes anyone already in live_price_changes()'s
+    output, since a player already moving doesn't need a "likely to move"
+    flag -- links the two features together rather than letting them overlap
+    silently.
+
+    Returns up to top_n risers (positive net transfers) and top_n fallers
+    (negative net transfers) combined, sorted by |net_transfers| descending,
+    with columns: name, position, team, cost, net_transfers. Real momentum
+    numbers reset each gameweek (transfers_in_event is THIS gameweek's
+    activity, not cumulative), so this naturally refreshes automatically as
+    the collector runs -- same "no separate wiring needed" property as
+    live_price_changes()."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    already_moved = set(live_price_changes()["name"])
+
+    rows = []
+    for p in raw["elements"]:
+        net = p["transfers_in_event"] - p["transfers_out_event"]
+        if net == 0:
+            continue
+        name = f"{p['first_name']} {p['second_name']}"
+        if name in already_moved:
+            continue
+        rows.append({
+            "name": name,
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "net_transfers": net,
+        })
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "net_transfers"])
+    df["_abs"] = df["net_transfers"].abs()
+    return df.sort_values("_abs", ascending=False).drop(columns=["_abs"]).head(top_n * 2).reset_index(drop=True)
 
 
 @st.cache_data
