@@ -356,22 +356,47 @@ with tab_transfers:
 with tab_chips:
     st.header("Chip-timing advisor")
     st.caption(
-        "Ranks upcoming gameweeks for Bench Boost, Triple Captain, and Free Hit, "
-        "given your real squad. Each FPL chip is usable once per season half — see "
-        "the README for how that was verified against the live API."
+        "A genuine multi-gameweek chip-timing projection (ranking several upcoming gameweeks "
+        "against each other) needs real per-gameweek predictions for MULTIPLE future "
+        "gameweeks — checked directly: FPL's own API only ever publishes `ep_next` (expected "
+        "points for the SINGLE next gameweek), never anything further out. So this can't "
+        "honestly rank \"which of the next 5 gameweeks is best\" yet. What it CAN do "
+        "honestly, right now, is check whether each chip is worth it for the ONE real next "
+        "gameweek, using that same real `ep_next` field — see below."
     )
 
     if "built_squad" not in st.session_state or st.session_state.get("built_squad_season_gw") != "live_squad":
         st.warning("Build your real squad in the **My Squad** tab first (requires at least one collected gameweek).")
     else:
-        st.info(
-            "Chip timing needs a run of several **upcoming** gameweeks to project against, "
-            "which doesn't exist yet this early in a live season — once the collector has "
-            "captured enough 2026-27 gameweeks, this tool will project forward using real "
-            "upcoming fixtures. For a demonstration of how this tool works against a completed "
-            "run of gameweeks, see the **Historical & Model** page's Squad Builder → "
-            "Historical gameweek mode, then this same Chip Advisor logic there."
+        squad_df = st.session_state["built_squad"]
+        bench = squad_df[~squad_df["in_starting_xi"]]
+        starters = squad_df[squad_df["in_starting_xi"]]
+
+        st.subheader("🪑 Bench Boost — next gameweek only")
+        bench_total = bench["ep_next"].sum()
+        st.metric("Your bench's real expected points next gameweek", f"{bench_total:.1f}")
+        st.caption(
+            "Sum of FPL's own `ep_next` across your 4 bench players. Worth using Bench Boost "
+            "this specific gameweek if that number looks high relative to a normal week for "
+            "your bench — there's no multi-week comparison to rank it against yet (see above), "
+            "so this is a single data point, not a \"best gameweek\" recommendation."
         )
+
+        st.subheader("👑 Triple Captain — next gameweek only")
+        best_captain = suggest_captain(squad_df)
+        if best_captain is not None:
+            extra_value = best_captain["ep_next"]
+            st.metric(
+                f"Best starter: {best_captain['name']}",
+                f"+{extra_value:.1f} pts extra vs normal captaincy",
+            )
+            st.caption(
+                "Same player suggest_captain() recommends above (FPL's own `ep_next`, "
+                "starters only) — Triple Captain's real extra value is exactly one more "
+                "multiple of that same real number."
+            )
+        else:
+            st.caption("No starter with a positive `ep_next` right now — nothing to suggest.")
 
 # =============================================================================
 # LEAGUE TRACKER
