@@ -21,11 +21,13 @@ import streamlit as st
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
+sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "collector"))
 
 from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
+import fpl_api
 
 FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet")
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")
@@ -285,8 +287,7 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
     # this project wherever cross-season identity matters.
     live = load_latest_prices()
 
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     code_by_id = {p["id"]: p["code"] for p in raw["elements"]}
     live["player_code"] = live["player_id"].map(code_by_id)
 
@@ -355,17 +356,51 @@ def _find_entry_history_path(entry_id: int) -> str:
     return None
 
 
+@st.cache_data(ttl=60)
+def _load_entry_history(entry_id: int) -> dict:
+    """Live-first replacement for reading _find_entry_history_path() as a
+    file: calls the real FPL API directly (fpl_api.get_entry_history(), the
+    same endpoint the collector uses) so the CURRENT season's gameweek-by-
+    gameweek progress (points, rank, bench points, etc.) is genuinely live
+    (60s ttl) rather than a once-a-day batch snapshot -- this is what makes
+    My Squad's "2026-27 progress" section update live during/after a match
+    instead of waiting on the next scheduled collector run.
+
+    Falls back to _find_entry_history_path()'s file (local data/raw/
+    snapshot, then the committed data/dashboard_entry_history.json) if the
+    live call fails. Returns an empty dict (not an exception) if neither is
+    available -- callers already treat that as "nothing collected yet.\""""
+    try:
+        return fpl_api.get_entry_history(entry_id)
+    except Exception:
+        pass
+    path = _find_entry_history_path(entry_id)
+    if path is None:
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 _DASHBOARD_ENTRY_INFO_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_entry_info.json")
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_manager_name(entry_id: int) -> str:
-    """This manager's real name (player_first_name + player_last_name), read
-    from the collector's saved entry/{id}/info.json -- falls back to the bare
-    numeric entry_id if unavailable, rather than failing the whole tab, since
-    a name is a display nicety, not something the rest of this tab depends
-    on. Same gitignored-data/raw + committed-fallback pattern as
-    _find_entry_history_path -- see that function's docstring."""
+    """This manager's real name (player_first_name + player_last_name).
+    Tries the real FPL API directly first (fpl_api.get_entry()) so this
+    stays live rather than a batch snapshot -- falls back to the bare
+    numeric entry_id if unavailable, rather than failing the whole tab,
+    since a name is a display nicety, not something the rest of this tab
+    depends on. Falls back, in order, to the collector's saved
+    entry/{id}/info.json, then the committed data/dashboard_entry_info.json
+    if the live call fails."""
+    try:
+        info = fpl_api.get_entry(entry_id)
+        first, last = info.get("player_first_name"), info.get("player_last_name")
+        if first and last:
+            return f"{first} {last}"
+    except Exception:
+        pass
     pattern = os.path.join(PROJECT_DIR, "data", "raw", "*", "entry", str(entry_id), "info.json")
     paths = sorted(glob.glob(pattern))
     path = paths[-1] if paths else (
@@ -383,17 +418,14 @@ def load_manager_name(entry_id: int) -> str:
 
 @st.cache_data
 def load_manager_history(entry_id: int) -> pd.DataFrame:
-    """Real season-by-season totals for one manager, read directly from the
-    collector's own saved entry/{id}/history.json -- NOT a hardcoded table.
-    Returns an empty DataFrame (not an error) if the collector has never
-    snapshotted this entry, which is an expected state (FPL_ENTRY_ID is
-    optional -- see snapshot.py), not a bug to raise on."""
-    path = _find_entry_history_path(entry_id)
-    if path is None:
+    """Real season-by-season totals for one manager -- NOT a hardcoded
+    table. Reads via _load_entry_history() (live API first, file fallback).
+    Returns an empty DataFrame (not an error) if nothing's available for
+    this entry, which is an expected state (FPL_ENTRY_ID is optional -- see
+    snapshot.py), not a bug to raise on."""
+    history = _load_entry_history(entry_id)
+    if not history:
         return pd.DataFrame(columns=["season", "points", "rank", "top_pct"])
-
-    with open(path, encoding="utf-8") as f:
-        history = json.load(f)
 
     past = history.get("past", [])
     df = pd.DataFrame([
@@ -408,23 +440,22 @@ def load_manager_history(entry_id: int) -> pd.DataFrame:
     return df
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     """This manager's GAMEWEEK-BY-GAMEWEEK progress for the CURRENT (in
     progress) season -- distinct from load_manager_history's PAST, season-
     total-only rows, which the live API never updates mid-season for old
     seasons (see fpl_api.get_entry_history's docstring: the public API only
     exposes gw-by-gw detail for the season actually happening right now).
-    Returns an empty DataFrame before the collector has captured a gameweek
-    (correct/expected before the season's first deadline has passed, not a
-    bug after that)."""
-    path = _find_entry_history_path(entry_id)
+    Reads via _load_entry_history() (live API first, 60s ttl, file fallback)
+    so this genuinely live-updates during/after a match rather than waiting
+    on the next scheduled collector run. Returns an empty DataFrame before
+    the collector/live API has any data for a gameweek (correct/expected
+    before the season's first deadline has passed, not a bug after that)."""
     empty_cols = ["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost", "points_on_bench", "overall_rank_percentage", "average_entry_score"]
-    if path is None:
+    history = _load_entry_history(entry_id)
+    if not history:
         return pd.DataFrame(columns=empty_cols)
-
-    with open(path, encoding="utf-8") as f:
-        history = json.load(f)
 
     current = history.get("current", [])
     if not current:
@@ -438,8 +469,7 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     # failing the whole function over a context nicety.
     average_by_gw = {}
     try:
-        with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-            bootstrap = json.load(f)
+        bootstrap = _load_bootstrap()
         average_by_gw = {e["id"]: e.get("average_entry_score") for e in bootstrap["events"]}
     except FileNotFoundError:
         pass
@@ -502,23 +532,32 @@ def calculate_free_transfers(entry_id: int) -> int:
 _DASHBOARD_CURRENT_SQUAD_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_current_squad.json")
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_current_squad_picks(entry_id: int, gw: int) -> dict:
     """This manager's REAL picks for one gameweek of the season actually in
-    progress, read from the collector's saved entry/{id}/picks/gw{n}.json --
-    snapshot_entry() now fetches this the moment a gameweek's deadline has
-    passed (see snapshot.py's _latest_live_gw), not gated on data_checked
-    like the league-wide stats are, since a manager's own picks/points are
-    correct (if provisional -- bonus points can still shift for a day or
-    two) well before that flag flips.
+    progress. Tries the real FPL API directly first (fpl_api.get_entry_picks,
+    the same endpoint the collector itself uses) so a squad/points refresh
+    is genuinely live (at most 60s old, st.cache_data's ttl) rather than
+    waiting on the collector's own daily batch run -- this is what makes
+    "live synced" real instead of a once-a-day snapshot. get_entry_picks()
+    itself already returns None (not an exception) for a gameweek whose
+    deadline hasn't passed yet, matching this function's existing contract.
 
-    Falls back to data/dashboard_current_squad.json (a single, deliberately
-    committed copy this manager's own picks + that gameweek's live points,
-    refreshed automatically by the scheduled collector workflow -- see
-    .github/workflows/weekly-collector.yml -- since it's regenerated daily
-    while the season's live, it's never more than a day stale, same
-    staleness bound already accepted for the bootstrap-price fallback).
+    Falls back, in order, to: the collector's saved
+    entry/{id}/picks/gw{n}.json (local dev environment with a recent
+    snapshot), then data/dashboard_current_squad.json (a single,
+    deliberately committed copy of this manager's own picks + that
+    gameweek's live points, refreshed daily by the scheduled collector
+    workflow -- see .github/workflows/weekly-collector.yml). Only reached
+    if the live API call itself fails (network hiccup, FPL API down,
+    offline dev environment) -- normal operation never needs these.
     Returns None if genuinely nothing's available in this environment."""
+    try:
+        live_picks = fpl_api.get_entry_picks(entry_id, gw)
+        if live_picks is not None:
+            return live_picks
+    except Exception:
+        pass
     path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "picks", f"gw{gw}.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -533,15 +572,26 @@ def load_current_squad_picks(entry_id: int, gw: int) -> dict:
 _POSITION_MAP_APP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_live_gw_points(gw: int) -> dict:
-    """Every player's real points for one gameweek in progress (or finished),
-    read from the collector's saved data/raw/2026-27/live/gw{n}.json --
-    fpl_api.get_event_live(), one call for every player rather than N
-    per-player element-summary calls. Falls back to the same
-    data/dashboard_current_squad.json bundle load_current_squad_picks uses
-    (see that function's docstring) if data/raw/ is unavailable. Returns an
-    empty dict if genuinely nothing's collected for this gameweek."""
+    """Every player's real points for one gameweek in progress (or finished).
+    Tries the real FPL API directly first (fpl_api.get_event_live(), the
+    same endpoint the collector uses, one call for every player rather than
+    N per-player requests) -- refreshed at most 60s old (st.cache_data's
+    ttl) so gameweek points genuinely update live during a match, matching
+    how FPL's own app itself only refreshes provisional bonus/live points
+    roughly once a minute.
+
+    Falls back, in order, to the collector's saved
+    data/raw/2026-27/live/gw{n}.json, then the same
+    data/dashboard_current_squad.json bundle load_current_squad_picks uses.
+    Only reached if the live API call fails. Returns an empty dict if
+    genuinely nothing's available for this gameweek in any form."""
+    try:
+        live = fpl_api.get_event_live(gw)
+        return {e["id"]: e["stats"]["total_points"] for e in live["elements"]}
+    except Exception:
+        pass
     path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -555,18 +605,27 @@ def load_live_gw_points(gw: int) -> dict:
     return {}
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_live_gw_minutes(gw: int) -> dict:
-    """Every player's real MINUTES for one gameweek, same source as
-    load_live_gw_points (data/raw/2026-27/live/gw{n}.json) -- used to tell
-    apart "played and scored 0" from "didn't get any game time at all," a
+    """Every player's real MINUTES for one gameweek -- used to tell apart
+    "played and scored 0" from "didn't get any game time at all," a
     distinction a bare points number can't make (0 pts reads as a harsh/
     unfair result for a player who simply wasn't selected to play, when it's
-    really just "nothing to report yet"). No fallback bundle for this one --
-    the current dashboard_current_squad.json fallback only stores points,
-    not minutes (see refresh_dashboard_fallbacks.py) -- returns an empty
-    dict in that case, and callers should treat a missing entry as unknown,
-    not as "definitely played 0 minutes.\""""
+    really just "nothing to report yet"). Tries the real FPL API first
+    (fpl_api.get_event_live(), same live endpoint as load_live_gw_points,
+    60s ttl) for genuinely live minutes, not once-a-day-stale data.
+
+    Falls back to the collector's saved data/raw/2026-27/live/gw{n}.json if
+    the live call fails. No further fallback bundle for this one -- the
+    committed dashboard_current_squad.json fallback only stores points, not
+    minutes (see refresh_dashboard_fallbacks.py) -- returns an empty dict
+    in that case, and callers should treat a missing entry as unknown, not
+    as "definitely played 0 minutes.\""""
+    try:
+        live = fpl_api.get_event_live(gw)
+        return {e["id"]: e["stats"]["minutes"] for e in live["elements"]}
+    except Exception:
+        pass
     path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
     if not os.path.exists(path):
         return {}
@@ -585,8 +644,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     points scored that gameweek (from load_live_gw_points), not a
     prediction -- named that only for compatibility with the shared
     rendering code, which doesn't care what produced the number."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     element_by_id = {p["id"]: p for p in raw["elements"]}
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
     live_points = load_live_gw_points(gw)
@@ -673,18 +731,29 @@ def suggest_captain(squad_df: pd.DataFrame) -> pd.Series:
 _DASHBOARD_LEAGUES_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_leagues.json")
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_joined_leagues(entry_id: int) -> list:
     """This manager's PRIVATE classic leagues (joined by code, not FPL's
-    auto-generated global/region/club leagues -- see snapshot_entry's
-    league_type == "x" filter), each with its full real standings, read from
-    the collector's saved entry/{id}/leagues/{league_id}.json files. Falls
-    back to data/dashboard_leagues.json (a single, deliberately committed
-    bundle of every private league's standings, refreshed automatically by
-    the scheduled collector workflow -- see load_current_squad_picks's
-    docstring for the same reasoning: never more than a day stale while the
-    workflow keeps running). Returns an empty list if genuinely nothing's
-    available in this environment."""
+    auto-generated global/region/club leagues -- league_type == "x", same
+    filter snapshot.py's collector itself uses), each with its full real
+    standings. Tries the real FPL API directly first (fpl_api.get_entry()
+    for the league id list, then fpl_api.get_league_standings() per league,
+    same calls the collector makes) so standings are genuinely live (60s
+    ttl) rather than a once-a-day batch snapshot.
+
+    Falls back, in order, to the collector's saved
+    entry/{id}/leagues/{league_id}.json files, then
+    data/dashboard_leagues.json (a single, deliberately committed bundle of
+    every private league's standings, refreshed daily by the scheduled
+    collector workflow). Only reached if the live API calls fail. Returns
+    an empty list if genuinely nothing's available in this environment."""
+    try:
+        entry_info = fpl_api.get_entry(entry_id)
+        classic_leagues = entry_info.get("leagues", {}).get("classic", [])
+        private_leagues = [l for l in classic_leagues if l.get("league_type") == "x"]
+        return [fpl_api.get_league_standings(l["id"]) for l in private_leagues]
+    except Exception:
+        pass
     leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "leagues")
     if os.path.isdir(leagues_dir):
         leagues = []
@@ -730,8 +799,7 @@ def scout_picks_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") 
     spirit as the real article's player-by-player commentary."""
     pool = preseason_pool(_features_df, prior_season)
 
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
     penalty_takers = {p["id"] for p in raw["elements"] if p.get("penalties_order") == 1}
 
@@ -789,6 +857,29 @@ def _latest_bootstrap_path() -> str:
     )
 
 
+@st.cache_data(ttl=60)
+def _load_bootstrap() -> dict:
+    """Live-first replacement for every `with open(_latest_bootstrap_path())`
+    call site: calls the real FPL bootstrap-static API directly (the same
+    endpoint fpl_api.get_bootstrap_static() the collector itself uses) so
+    scores/points/prices/ownership are genuinely live -- refreshed at most
+    60 seconds old (st.cache_data's ttl), not once-a-day-batch stale. Falls
+    back to _latest_bootstrap_path()'s file (local data/raw/ snapshot, then
+    the committed data/dashboard_bootstrap.json) if the live call fails for
+    any reason (network hiccup, FPL API down, offline dev environment) --
+    every caller keeps working exactly as before, just live when possible.
+
+    A short TTL (not 0/none) rather than no caching at all: FPL's own site
+    itself only updates provisional bonus/live points roughly once a minute
+    during matches, so re-fetching more often than that buys nothing real
+    and just adds load for no benefit."""
+    try:
+        return fpl_api.get_bootstrap_static()
+    except Exception:
+        with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+            return json.load(f)
+
+
 def _fixtures_path() -> str:
     """Same fallback pattern as _latest_bootstrap_path(): data/raw/2026-27/
     fixtures.csv is gitignored (lives under data/raw/), so a fresh Streamlit
@@ -807,6 +898,30 @@ def _fixtures_path() -> str:
     if os.path.exists(fallback):
         return fallback
     return None
+
+
+@st.cache_data(ttl=60)
+def _load_fixtures_df() -> pd.DataFrame:
+    """Live-first replacement for reading _fixtures_path() as a CSV: calls
+    the real FPL fixtures API directly (fpl_api.get_fixtures(), same schema
+    as fixtures.csv -- checked directly, identical column names) so real
+    match scores/results are live (60s ttl) rather than waiting on the
+    once-a-day collector batch -- this is what makes PL Table and every
+    fixture-difficulty feature genuinely live instead of a day stale.
+
+    Falls back to _fixtures_path()'s file (local data/raw/ snapshot, then
+    the committed data/dashboard_fixtures.csv) if the live call fails.
+    Returns an empty DataFrame (not an exception) if neither the live call
+    nor any fallback file is available -- callers already treat that as
+    "nothing collected yet.\""""
+    try:
+        return pd.DataFrame(fpl_api.get_fixtures())
+    except Exception:
+        pass
+    path = _fixtures_path()
+    if path is None:
+        return pd.DataFrame()
+    return pd.read_csv(path)
 
 
 @st.cache_data
@@ -829,8 +944,7 @@ def live_price_changes() -> pd.DataFrame:
     error) if literally nobody has moved yet, which is the correct state
     very early in a season before FPL's price-change algorithm has reacted
     to any real transfer activity."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     rows = []
@@ -870,8 +984,7 @@ def likely_price_movers(top_n: int = 10) -> pd.DataFrame:
     activity, not cumulative), so this naturally refreshes automatically as
     the collector runs -- same "no separate wiring needed" property as
     live_price_changes()."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
     already_moved = set(live_price_changes()["name"])
 
@@ -918,8 +1031,7 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
     duty is a real reason a low-owned player's upside is more trustworthy
     than ep_next alone would suggest, same signal build_live_squad_df's
     penalty-taker badge already surfaces on squad cards)."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     rows = []
@@ -957,8 +1069,7 @@ def league_wide_status_flags() -> pd.DataFrame:
     chance_of_playing_next_round for every player whose real status != 'a'
     (available), sorted by ownership descending (higher-owned flags are the
     ones most managers actually need to know about first)."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     rows = []
@@ -997,14 +1108,12 @@ def premier_league_table() -> pd.DataFrame:
     Returns team, played, won, drawn, lost, gf, ga, gd, points, sorted by
     points then goal difference descending -- the real, standard PL
     table-ordering rule."""
-    fixtures_path = _fixtures_path()
-    if fixtures_path is None:
+    fx = _load_fixtures_df()
+    if fx.empty:
         return pd.DataFrame(columns=["team", "played", "won", "drawn", "lost", "gf", "ga", "gd", "points"])
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
-    fx = pd.read_csv(fixtures_path)
     played = fx[fx["team_h_score"].notna() & fx["team_a_score"].notna()]
 
     stats = {tid: {"played": 0, "won": 0, "drawn": 0, "lost": 0, "gf": 0, "ga": 0} for tid in team_by_id}
@@ -1065,8 +1174,7 @@ def team_insights(top_n: int = 5) -> dict:
     best_attack = played_table[["team", "played", "gf"]].sort_values("gf", ascending=False).head(top_n).reset_index(drop=True)
     best_defense = played_table[["team", "played", "ga"]].sort_values("ga", ascending=True).head(top_n).reset_index(drop=True)
 
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     rows = []
@@ -1121,8 +1229,7 @@ def season_leaderboards(top_n: int = 10) -> dict:
       every other board here: early on, form and total_points will look
       similar, and that's a correct, honest reflection of there being only
       a handful of real gameweeks so far, not a bug to hide."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     rows = []
@@ -1179,17 +1286,15 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
 
     Returns an empty dict if no 2026-27 fixtures.csv has been collected yet
     in this environment (expected before the collector's first run)."""
-    fixtures_path = _fixtures_path()
-    if fixtures_path is None:
+    fx = _load_fixtures_df()
+    if fx.empty:
         return {}
 
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
     current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
     current_gw = current_events[0] if current_events else 1
 
-    fx = pd.read_csv(fixtures_path)
     upcoming = fx[fx["event"] >= current_gw].sort_values("event").head(n_gws * 10)
 
     result = {name: [] for name in team_id_to_name.values()}
@@ -1235,8 +1340,7 @@ def _team_name_to_badge_code() -> dict:
     CDN (confirmed some current signings genuinely have none yet -- a real
     403 from FPL's own servers, not a bug here), so the placeholder at least
     shows the player's real team instead of a blank box."""
-    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = _load_bootstrap()
     return {t["name"]: t["code"] for t in raw["teams"]}
 
 
