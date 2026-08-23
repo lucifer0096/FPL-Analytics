@@ -157,15 +157,23 @@ with tab_squad:
             st.caption("Overall rank by gameweek (lower is better)")
             st.line_chart(current_progress.set_index("gw")["overall_rank"])
         with col2:
-            st.caption("Cumulative points by gameweek")
-            st.line_chart(current_progress.set_index("gw")["total_points"])
+            st.caption("Your points vs. the real average across ALL managers, by gameweek")
+            st.line_chart(current_progress.set_index("gw")[["points", "average_entry_score"]].rename(
+                columns={"points": "Your points", "average_entry_score": "Average (all managers)"}
+            ))
         latest = current_progress.iloc[-1]
         total_bench_points = current_progress["points_on_bench"].sum()
-        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+        mcol1, mcol2, mcol3, mcol4, mcol5 = st.columns(5)
         mcol1.metric("Total points", f"{latest['total_points']:.0f}")
         mcol2.metric("Overall rank", f"{latest['overall_rank']:,.0f}")
-        mcol3.metric("Bank", f"£{latest['bank']:.1f}m")
-        mcol4.metric(
+        if pd.notna(latest["overall_rank_percentage"]):
+            mcol3.metric(
+                "Top %", f"{latest['overall_rank_percentage']:.0f}%",
+                help="FPL's own real 'you're in the top X%' figure for your current overall "
+                     "rank -- not derived here, taken directly from their own reported number.",
+            )
+        mcol4.metric("Bank", f"£{latest['bank']:.1f}m")
+        mcol5.metric(
             "Points left on bench", f"{total_bench_points:.0f}",
             help="Real, running total of points_on_bench (FPL's own field) across every "
                  "gameweek so far this season — points your bench scored that never counted "
@@ -175,7 +183,8 @@ with tab_squad:
             current_progress.rename(columns={
                 "gw": "GW", "points": "GW points", "total_points": "Total points",
                 "overall_rank": "Overall rank", "bank": "Bank (£m)", "value": "Squad value (£m)",
-                "points_on_bench": "Bench points",
+                "points_on_bench": "Bench points", "overall_rank_percentage": "Top %",
+                "average_entry_score": "Avg. (all managers)",
             }).drop(columns=["event_transfers", "event_transfers_cost"]),
             use_container_width=True,
             hide_index=True,

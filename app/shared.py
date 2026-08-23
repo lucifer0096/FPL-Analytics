@@ -419,7 +419,7 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     (correct/expected before the season's first deadline has passed, not a
     bug after that)."""
     path = _find_entry_history_path(entry_id)
-    empty_cols = ["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost", "points_on_bench"]
+    empty_cols = ["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost", "points_on_bench", "overall_rank_percentage", "average_entry_score"]
     if path is None:
         return pd.DataFrame(columns=empty_cols)
 
@@ -429,6 +429,20 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     current = history.get("current", [])
     if not current:
         return pd.DataFrame(columns=empty_cols)
+
+    # FPL's own real per-gameweek average score across ALL managers --
+    # verified directly against bootstrap-static's events -- gives real
+    # context for whether a gameweek's points were actually good, not just
+    # a bare number with nothing to compare against. Best-effort: if no
+    # bootstrap is available, average_entry_score is left null rather than
+    # failing the whole function over a context nicety.
+    average_by_gw = {}
+    try:
+        with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+            bootstrap = json.load(f)
+        average_by_gw = {e["id"]: e.get("average_entry_score") for e in bootstrap["events"]}
+    except FileNotFoundError:
+        pass
 
     df = pd.DataFrame([
         {
@@ -441,6 +455,11 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
             "event_transfers": g["event_transfers"],
             "event_transfers_cost": g["event_transfers_cost"],
             "points_on_bench": g["points_on_bench"],
+            # FPL's own real "you're in the top X%" figure for this
+            # gameweek's overall rank -- already computed by FPL itself, not
+            # derived here. Cast from string (FPL publishes it as one).
+            "overall_rank_percentage": float(g["overall_rank_percentage"]) if g.get("overall_rank_percentage") else None,
+            "average_entry_score": average_by_gw.get(g["event"]),
         }
         for g in current
     ])
