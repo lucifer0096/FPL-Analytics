@@ -21,7 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
-    differential_finder, league_wide_status_flags, premier_league_table, season_leaderboards,
+    differential_finder, league_wide_status_flags, premier_league_table, season_leaderboards, team_insights,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -721,5 +721,49 @@ with tab_insights:
     else:
         st.dataframe(
             form_board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Form"}),
+            use_container_width=True, hide_index=True,
+        )
+
+    st.divider()
+    st.subheader("🏟️ Team-level insights")
+    st.caption(
+        "Real, current-season team form — best attack (most real goals scored) and best defense "
+        "(fewest real goals conceded), both derived from the same PL Table data above, not a "
+        "separate recompute. Also shows each real Premier League team's single most-selected "
+        "asset (FPL's own real `selected_by_percent`) — a quick 'who's the team's most-trusted "
+        "pick right now' view."
+    )
+    tinsights = team_insights()
+    tcol1, tcol2 = st.columns(2)
+    with tcol1:
+        st.caption("⚔️ Best attack (goals scored)")
+        board = tinsights["best_attack"]
+        if board.empty:
+            st.caption("No results recorded yet.")
+        else:
+            st.dataframe(
+                board.rename(columns={"team": "Team", "played": "P", "gf": "Goals"}),
+                use_container_width=True, hide_index=True,
+            )
+    with tcol2:
+        st.caption("🧱 Best defense (goals conceded)")
+        board = tinsights["best_defense"]
+        if board.empty:
+            st.caption("No results recorded yet.")
+        else:
+            st.dataframe(
+                board.rename(columns={"team": "Team", "played": "P", "ga": "Conceded"}),
+                use_container_width=True, hide_index=True,
+            )
+
+    st.caption("Most-owned player per team")
+    owned_board = tinsights["most_owned_players"]
+    if owned_board.empty:
+        st.caption("Nothing recorded yet.")
+    else:
+        st.dataframe(
+            owned_board.rename(columns={
+                "team": "Team", "name": "Player", "position": "Pos", "selected_by_percent": "Owned (%)",
+            }),
             use_container_width=True, hide_index=True,
         )

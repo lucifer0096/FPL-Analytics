@@ -1035,6 +1035,64 @@ def premier_league_table() -> pd.DataFrame:
 
 
 @st.cache_data
+def team_insights(top_n: int = 5) -> dict:
+    """Real, current-season team-level insights derived from
+    premier_league_table()'s own gf/ga (no separate fixtures.csv read --
+    reuses the same real computed table rather than duplicating the
+    scoring logic). Returns a dict of DataFrames:
+
+    - "best_attack": teams sorted by real goals scored (gf) descending.
+    - "best_defense": teams sorted by real goals conceded (ga) ascending
+      (fewest first -- the actual real defensive record, not goal
+      difference, which best_attack/best_defense would otherwise conflate).
+    - "most_owned_players": each team's single most-selected player
+      (FPL's own real selected_by_percent), one row per team with at least
+      one played minute -- a real, checkable "who's the team's most-picked
+      asset" view, not a guess.
+
+    Empty DataFrames (not an error) if premier_league_table() has no
+    results yet this season."""
+    table = premier_league_table()
+    if table.empty or table["played"].sum() == 0:
+        empty_cols = {
+            "best_attack": ["team", "played", "gf"],
+            "best_defense": ["team", "played", "ga"],
+            "most_owned_players": ["team", "name", "position", "selected_by_percent"],
+        }
+        return {k: pd.DataFrame(columns=v) for k, v in empty_cols.items()}
+
+    played_table = table[table["played"] > 0]
+    best_attack = played_table[["team", "played", "gf"]].sort_values("gf", ascending=False).head(top_n).reset_index(drop=True)
+    best_defense = played_table[["team", "played", "ga"]].sort_values("ga", ascending=True).head(top_n).reset_index(drop=True)
+
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        rows.append({
+            "team": team_by_id.get(p["team"]),
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "selected_by_percent": float(p["selected_by_percent"]),
+        })
+    players_df = pd.DataFrame(rows)
+    most_owned = (
+        players_df.sort_values("selected_by_percent", ascending=False)
+        .drop_duplicates("team", keep="first")
+        .sort_values("selected_by_percent", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    return {
+        "best_attack": best_attack,
+        "best_defense": best_defense,
+        "most_owned_players": most_owned,
+    }
+
+
+@st.cache_data
 def season_leaderboards(top_n: int = 10) -> dict:
     """Real, current 2026-27 season leaderboards -- every number here is a
     single FPL bootstrap-static field read directly, no derived/invented
