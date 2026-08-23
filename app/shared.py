@@ -920,6 +920,28 @@ def _load_bootstrap() -> dict:
             return json.load(f)
 
 
+def is_gameweek_live() -> bool:
+    """Real, current "is a gameweek actually in progress right now" check --
+    FPL's own is_current flag AND NOT finished (checked directly: is_current
+    stays True for the current gameweek even after full time, until the
+    NEXT gameweek's deadline passes, so is_current alone isn't enough --
+    finished only flips once bonus points are fully locked in, correctly
+    staying False while a match is still live or awaiting bonus).
+
+    Used to gate auto-refresh (see app.py's My Squad tab): polling FPL's
+    live API every 60s is only worth doing while a real gameweek is
+    actually live -- pointless (and wasteful) the rest of the week, when
+    nothing on this page is actually changing minute to minute."""
+    try:
+        raw = _load_bootstrap()
+    except FileNotFoundError:
+        return False
+    for event in raw.get("events", []):
+        if event.get("is_current"):
+            return not event.get("finished", False)
+    return False
+
+
 def _fixtures_path() -> str:
     """Same fallback pattern as _latest_bootstrap_path(): data/raw/2026-27/
     fixtures.csv is gitignored (lives under data/raw/), so a fresh Streamlit
@@ -1045,6 +1067,55 @@ def likely_price_movers(top_n: int = 10) -> pd.DataFrame:
         })
     df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "net_transfers"])
     df["_abs"] = df["net_transfers"].abs()
+    return df.sort_values("_abs", ascending=False).drop(columns=["_abs"]).head(top_n * 2).reset_index(drop=True)
+
+
+@st.cache_data(ttl=60)
+def tonight_price_projections(top_n: int = 10) -> pd.DataFrame:
+    """FPL's OWN real price-change forecast for the very next update --
+    distinct from likely_price_movers() (this project's own momentum-based
+    guess from transfers_in_event/transfers_out_event). This is FPL's own
+    published projection, read verbatim from each player's real
+    `price_change_projections` list (offset 0 = the next scheduled price
+    update) and `likelihood` field (a real -5..+5 scale FPL itself computes
+    -- verified directly against bootstrap-static: -5 is their strongest
+    "will fall" signal, +5 their strongest "will rise" signal, 0 means no
+    change expected).
+
+    Deliberately doesn't claim a specific clock time for "tonight's"
+    update -- FPL's public API doesn't expose one, and this project only
+    surfaces fields it can verify directly rather than assuming a schedule.
+
+    Returns up to top_n likely risers (likelihood > 0) and top_n likely
+    fallers (likelihood < 0), sorted by |likelihood| descending, with
+    columns: name, position, team, cost, projected_percent, likelihood.
+    Players already excluded from FPL's own price-change calculation
+    (`price_change_calibrating` -- new signings/promoted-team players FPL
+    hasn't built enough transfer history on yet) are skipped, since their
+    projection field isn't meaningful yet."""
+    raw = _load_bootstrap()
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        if p.get("price_change_calibrating"):
+            continue
+        projections = p.get("price_change_projections") or []
+        tonight = next((proj for proj in projections if proj.get("offset") == 0), None)
+        if tonight is None or tonight.get("likelihood") == 0:
+            continue
+        rows.append({
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "projected_percent": float(tonight["projected_percent"]),
+            "likelihood": tonight["likelihood"],
+        })
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "projected_percent", "likelihood"])
+    if df.empty:
+        return df
+    df["_abs"] = df["likelihood"].abs()
     return df.sort_values("_abs", ascending=False).drop(columns=["_abs"]).head(top_n * 2).reset_index(drop=True)
 
 

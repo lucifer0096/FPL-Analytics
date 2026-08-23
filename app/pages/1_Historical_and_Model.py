@@ -322,11 +322,12 @@ with tab_past:
             hide_index=True,
         )
         st.caption(
-            "Read live from this project's own collector snapshot "
-            f"(`data/raw/*/entry/{MANAGER_ENTRY_ID}/history.json`), not a hardcoded table — "
-            "refreshes automatically whenever the collector re-runs. The most recent "
-            "season's figures may be provisional if pulled before that season's final "
-            "gameweek was confirmed finished. Full interactive version: "
+            "Fetched LIVE from FPL's own entry-history API on every page load "
+            "(`load_manager_history()`, 60s-ttl cache), falling back to this project's own "
+            f"collector snapshot (`data/raw/*/entry/{MANAGER_ENTRY_ID}/history.json`) or the "
+            "committed fallback copy only if that live call fails — not a hardcoded table. The "
+            "most recent season's figures may be provisional if pulled before that season's "
+            "final gameweek was confirmed finished. Full interactive version: "
             "[my-fpl-history.html](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html) "
             "(a separate, statically-hosted page — still carries its own hardcoded copy of this "
             "same data, since GitHub Pages can't run this project's Python collector)."

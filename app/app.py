@@ -21,8 +21,9 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
+    tonight_price_projections,
     differential_finder, league_wide_status_flags, premier_league_table, season_leaderboards, team_insights,
-    team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
+    team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
 )
@@ -78,10 +79,21 @@ tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_ins
 # =============================================================================
 # MY SQUAD (real, live)
 # =============================================================================
-with tab_squad:
+# Wrapped in an st.fragment so it can auto-rerun on its own timer without
+# re-running the whole page (Transfers/Price Changes/etc. below don't need
+# to refetch every 60s just because My Squad does). run_every is set to a
+# real number (not None) ONLY while a gameweek is genuinely live (see
+# is_gameweek_live() -- FPL's own is_current AND NOT finished) -- polling
+# FPL's live API every 60s the rest of the week would be pure waste, since
+# nothing here actually changes minute to minute outside a live gameweek.
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_my_squad_tab():
     st.header("My current squad")
+    if is_gameweek_live():
+        st.caption("🔴 Live gameweek in progress — this section auto-refreshes every 60 seconds.")
 
     collected_gws = _collected_gws()
+    live_gw_points = None  # set below when a real squad's live points are computed, reused by the progress section further down
 
     if not collected_gws:
         st.info(
@@ -108,6 +120,7 @@ with tab_squad:
         # cards underneath it, and matches the real live per-player source
         # sooner than the summary field catches up.
         gw_points = int(squad_df["predicted_points"].sum())
+        live_gw_points = (latest_gw, gw_points)
 
         pcol1, pcol2, pcol3, pcol4 = st.columns(4)
         pcol1.metric(f"GW{latest_gw} points", gw_points)
@@ -166,6 +179,19 @@ with tab_squad:
             "gameweek by gameweek, once the collector captures real results."
         )
     else:
+        # The latest gameweek's points/total_points here can suffer the SAME
+        # entry_history-lags-behind-its-own-live-feed staleness as the My
+        # Squad metric above (verified directly: FPL's summary said 15 while
+        # the real per-player live feed already summed to 18) -- corrected
+        # using the same real gw_points already computed above from
+        # squad_df, when this row is for that same gameweek, so the chart/
+        # metrics below never contradict the pitch view above them.
+        if live_gw_points is not None and current_progress["gw"].iloc[-1] == live_gw_points[0]:
+            corrected_points = live_gw_points[1]
+            stale_points = current_progress["points"].iloc[-1]
+            current_progress.loc[current_progress.index[-1], "points"] = corrected_points
+            current_progress.loc[current_progress.index[-1], "total_points"] += (corrected_points - stale_points)
+
         col1, col2 = st.columns(2)
         with col1:
             st.caption("Overall rank by gameweek (lower is better)")
@@ -203,6 +229,10 @@ with tab_squad:
             use_container_width=True,
             hide_index=True,
         )
+
+
+with tab_squad:
+    _render_my_squad_tab()
 
 # =============================================================================
 # TRANSFERS (against the real live squad)
@@ -619,6 +649,45 @@ with tab_prices:
             st.dataframe(
                 likely_fallers[["name", "position", "team", "cost", "net_transfers"]]
                 .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
+                use_container_width=True, hide_index=True,
+            )
+
+    st.divider()
+    st.subheader("🌙 Tonight's projected price changes")
+    st.caption(
+        "FPL's OWN real forecast for the very next price update — distinct from the momentum-"
+        "based 'likely to move' above (this project's own guess from transfer activity), this is "
+        "FPL's own published projection (`price_change_projections`/`likelihood`, verified "
+        "directly against the live API). A real -5..+5 likelihood scale: further from 0 means a "
+        "stronger real signal from FPL's own algorithm. No specific clock time is shown for when "
+        "the change actually lands — FPL's public API doesn't expose one, so this project only "
+        "surfaces what it can verify, not an assumed schedule."
+    )
+    projections = tonight_price_projections()
+    if projections.empty:
+        st.caption("No real price-change forecast available right now.")
+    else:
+        jcol1, jcol2 = st.columns(2)
+        likely_rise = projections[projections["likelihood"] > 0].sort_values("likelihood", ascending=False).head(5)
+        likely_fall = projections[projections["likelihood"] < 0].sort_values("likelihood").head(5)
+        with jcol1:
+            st.caption("Projected to rise tonight")
+            st.dataframe(
+                likely_rise[["name", "position", "team", "cost", "projected_percent", "likelihood"]]
+                .rename(columns={
+                    "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
+                    "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
+                }),
+                use_container_width=True, hide_index=True,
+            )
+        with jcol2:
+            st.caption("Projected to fall tonight")
+            st.dataframe(
+                likely_fall[["name", "position", "team", "cost", "projected_percent", "likelihood"]]
+                .rename(columns={
+                    "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
+                    "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
+                }),
                 use_container_width=True, hide_index=True,
             )
 
