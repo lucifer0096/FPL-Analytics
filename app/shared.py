@@ -1245,8 +1245,8 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         )
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
     return (
-        f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
-        f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
+        f'<div class="fpl-player-card" style="position: relative; background: rgba(255,255,255,0.94); '
+        f'border-radius: 8px; padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
         f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
         f'{badge_html}'
         f'{dreamteam_html}'
@@ -1349,42 +1349,190 @@ def inject_shared_css() -> None:
     view), so it reads correctly against BOTH themes rather than assuming one."""
     st.markdown("""
 <style>
-    h1, h2, h3, h4 { font-family: "Segoe UI", Roboto, sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap');
+
+    html, body, [class*="css"] { font-family: "Manrope", "Segoe UI", Roboto, sans-serif; }
+    h1, h2, h3, h4 { font-family: "Sora", "Segoe UI", Roboto, sans-serif; letter-spacing: -0.01em; }
+
+    /* ---- Metric cards: glassy, gradient-bordered, lift on hover ---- */
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, rgba(42,150,80,0.14), rgba(90,60,180,0.12));
-        border: 1px solid rgba(42,150,80,0.4);
-        border-radius: 10px;
-        padding: 12px 14px 8px 14px;
-    }
-    div[data-testid="stMetricLabel"] { font-size: 0.8rem; opacity: 0.8; }
-    .stTabs [data-baseweb="tab-list"] { gap: 4px; }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px 8px 0 0;
-        padding: 8px 16px;
-    }
-    .app-hero {
-        background: linear-gradient(120deg, #1f7a3f 0%, #2a9650 55%, #5a3cb4 130%);
+        background: linear-gradient(160deg, rgba(42,150,80,0.16), rgba(90,60,180,0.10));
+        border: 1px solid rgba(90,60,180,0.35);
         border-radius: 14px;
-        padding: 22px 28px;
-        margin-bottom: 18px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+        padding: 14px 16px 10px 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(90,60,180,0.20);
+    }
+    div[data-testid="stMetricLabel"] { font-size: 0.78rem; opacity: 0.75; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    div[data-testid="stMetricValue"] { font-family: "Sora", sans-serif; font-weight: 800; }
+
+    /* ---- Tabs: pill-style, colored active state ---- */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        border-bottom: none;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 999px;
+        padding: 8px 20px;
+        font-weight: 600;
+        background: rgba(127,127,127,0.08);
+        border: 1px solid transparent;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(90,60,180,0.12);
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(120deg, #2a9650, #5a3cb4) !important;
+        border-color: transparent !important;
+    }
+    .stTabs [aria-selected="true"] p {
+        color: white !important;
+        font-weight: 700;
+    }
+    .stTabs [data-baseweb="tab-highlight"] { display: none; }
+
+    /* ---- Hero banner ---- */
+    .app-hero {
+        background: linear-gradient(120deg, #1f7a3f 0%, #2a9650 45%, #5a3cb4 130%);
+        border-radius: 18px;
+        padding: 28px 32px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 30px rgba(42,150,80,0.25);
+        position: relative;
+        overflow: hidden;
+    }
+    .app-hero::after {
+        content: "";
+        position: absolute;
+        top: -40%; right: -10%;
+        width: 260px; height: 260px;
+        background: radial-gradient(circle, rgba(255,255,255,0.16), transparent 70%);
+        pointer-events: none;
     }
     .app-hero h1 {
         color: white;
-        margin: 0 0 6px 0;
-        font-size: 1.9rem;
+        margin: 0 0 8px 0;
+        font-size: 2.1rem;
+        font-weight: 800;
     }
     .app-hero p {
         color: rgba(255,255,255,0.92);
         margin: 0;
-        font-size: 0.95rem;
+        font-size: 0.98rem;
+        max-width: 640px;
     }
+
+    /* ---- Section cards / expanders ---- */
     .section-card {
         background: rgba(127,127,127,0.06);
         border: 1px solid rgba(127,127,127,0.15);
-        border-radius: 10px;
-        padding: 16px 18px;
+        border-radius: 14px;
+        padding: 18px 20px;
         margin-bottom: 12px;
+        transition: border-color 0.15s ease;
+    }
+    .section-card:hover { border-color: rgba(90,60,180,0.35); }
+
+    div[data-testid="stExpander"] {
+        border-radius: 12px;
+        border: 1px solid rgba(127,127,127,0.18);
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] summary {
+        font-weight: 600;
+    }
+
+    /* ---- Buttons ---- */
+    .stButton > button, .stDownloadButton > button {
+        border-radius: 999px;
+        font-weight: 700;
+        border: none;
+        background: linear-gradient(120deg, #2a9650, #5a3cb4);
+        color: white;
+        padding: 0.5em 1.4em;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(90,60,180,0.35);
+        color: white;
+    }
+
+    /* ---- Dataframes: rounder, less spreadsheet-y ---- */
+    div[data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(127,127,127,0.15);
+    }
+
+    /* ---- Player cards (see _player_card_html): entrance + hover lift ---- */
+    @keyframes fpl-card-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .fpl-player-card {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        animation: fpl-card-in 0.35s ease both;
+    }
+    .fpl-player-card:hover {
+        transform: translateY(-4px) scale(1.03);
+        box-shadow: 0 12px 24px rgba(90,60,180,0.30);
+        z-index: 2;
+    }
+    /* stagger up to the first 20 cards on a row so they don't all pop at once */
+    div[data-testid="column"]:nth-child(1) .fpl-player-card { animation-delay: 0.00s; }
+    div[data-testid="column"]:nth-child(2) .fpl-player-card { animation-delay: 0.03s; }
+    div[data-testid="column"]:nth-child(3) .fpl-player-card { animation-delay: 0.06s; }
+    div[data-testid="column"]:nth-child(4) .fpl-player-card { animation-delay: 0.09s; }
+    div[data-testid="column"]:nth-child(5) .fpl-player-card { animation-delay: 0.12s; }
+    div[data-testid="column"]:nth-child(6) .fpl-player-card { animation-delay: 0.15s; }
+    div[data-testid="column"]:nth-child(7) .fpl-player-card { animation-delay: 0.18s; }
+    div[data-testid="column"]:nth-child(8) .fpl-player-card { animation-delay: 0.21s; }
+    div[data-testid="column"]:nth-child(9) .fpl-player-card { animation-delay: 0.24s; }
+    div[data-testid="column"]:nth-child(10) .fpl-player-card { animation-delay: 0.27s; }
+    div[data-testid="column"]:nth-child(11) .fpl-player-card { animation-delay: 0.30s; }
+
+    /* ---- Hero: subtle shimmer sweep, not distracting ---- */
+    @keyframes fpl-hero-shimmer {
+        0% { transform: translateX(-30%) translateY(-30%) rotate(0deg); }
+        100% { transform: translateX(-30%) translateY(-30%) rotate(360deg); }
+    }
+    .app-hero::after { animation: fpl-hero-shimmer 18s linear infinite; }
+
+    /* ---- Whole-page fade-in on load ---- */
+    @keyframes fpl-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    section[data-testid="stMain"] { animation: fpl-fade-in 0.4s ease both; }
+
+    /* ---- Tabs: smooth underline-free active swap already handled above;
+       add a quick scale pulse when a tab becomes active ---- */
+    @keyframes fpl-tab-pop { 0% { transform: scale(0.94); } 100% { transform: scale(1); } }
+    .stTabs [aria-selected="true"] { animation: fpl-tab-pop 0.2s ease both; }
+
+    /* ---- Metrics: gentle rise-in ---- */
+    @keyframes fpl-metric-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    div[data-testid="stMetric"] { animation: fpl-metric-in 0.3s ease both; }
+
+    /* ---- Buttons: press feedback ---- */
+    .stButton > button:active, .stDownloadButton > button:active {
+        transform: translateY(0) scale(0.97);
+    }
+
+    /* ---- Sidebar: subtle depth so it doesn't read as flat admin nav ---- */
+    section[data-testid="stSidebar"] {
+        border-right: 1px solid rgba(127,127,127,0.15);
+    }
+
+    /* Respect users who've asked for reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+        .fpl-player-card, .app-hero::after, section[data-testid="stMain"],
+        .stTabs [aria-selected="true"], div[data-testid="stMetric"] {
+            animation: none !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
