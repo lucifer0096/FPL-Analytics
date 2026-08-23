@@ -96,9 +96,22 @@ with tab_squad:
         squad_df = build_live_squad_df(picks_data, latest_gw)
         entry_hist = picks_data["entry_history"]
 
+        # This gameweek's points are summed directly from the same real,
+        # live per-player points shown on the pitch below (squad_df's
+        # predicted_points, already multiplier-applied for captaincy) rather
+        # than trusted from entry_history["points"] -- verified directly
+        # that FPL's own entry-summary field can lag behind its OWN
+        # per-player live feed by a few points for a short window during a
+        # gameweek (e.g. summary said 15 while the live per-player feed's
+        # own numbers already summed to 18) -- summing the same numbers
+        # already on screen keeps the headline metric consistent with the
+        # cards underneath it, and matches the real live per-player source
+        # sooner than the summary field catches up.
+        gw_points = int(squad_df["predicted_points"].sum())
+
         pcol1, pcol2, pcol3, pcol4 = st.columns(4)
-        pcol1.metric(f"GW{latest_gw} points", entry_hist["points"])
-        pcol2.metric("Total points", entry_hist["total_points"])
+        pcol1.metric(f"GW{latest_gw} points", gw_points)
+        pcol2.metric("Total points", entry_hist["total_points"] + (gw_points - entry_hist["points"]))
         pcol3.metric("Overall rank", f"{entry_hist['overall_rank']:,}")
         pcol4.metric("Points on bench", entry_hist["points_on_bench"])
 

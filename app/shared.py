@@ -634,6 +634,38 @@ def load_live_gw_minutes(gw: int) -> dict:
     return {e["id"]: e["stats"]["minutes"] for e in live["elements"]}
 
 
+@st.cache_data(ttl=60)
+def _team_fixture_started(gw: int) -> dict:
+    """Real, per-team "has this team's gameweek-{gw} match actually kicked
+    off" flag, from fixtures.csv's own real `started` field -- checked
+    directly against the live API alongside `finished`: `started` flips
+    True the moment a match kicks off and stays True for the rest of the
+    gameweek, while `finished`/`finished_provisional` only flip once the
+    match (or its bonus points) are done. Used to tell apart a squad
+    member's real 0 minutes because their match simply hasn't happened yet
+    this gameweek vs. their match already being over and they didn't
+    feature -- two different real situations a bare "0 pts"/generic
+    "no game time" label would otherwise conflate.
+
+    Returns {team_name: True/False}. A team missing from the result
+    (shouldn't normally happen for a real fixture list) should be treated
+    by callers as "unknown," not "hasn't started.\""""
+    fx = _load_fixtures_df()
+    if fx.empty:
+        return {}
+    raw = _load_bootstrap()
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    gw_fixtures = fx[fx["event"] == gw]
+    started = {}
+    for _, row in gw_fixtures.iterrows():
+        home, away = team_by_id.get(row["team_h"]), team_by_id.get(row["team_a"])
+        if home:
+            started[home] = bool(row["started"])
+        if away:
+            started[away] = bool(row["started"])
+    return started
+
+
 def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     """Turn one gameweek's real picks (from load_current_squad_picks) into a
     DataFrame in the same shape render_pitch()/optimize_squad() already
@@ -650,6 +682,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     live_points = load_live_gw_points(gw)
     live_minutes = load_live_gw_minutes(gw)
     fixtures_by_team = team_upcoming_fixtures(3)
+    fixture_started_by_team = _team_fixture_started(gw)
 
     rows = []
     for pick in picks_data["picks"]:
@@ -665,6 +698,12 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
         # minutes -- see load_live_gw_minutes' docstring.
         minutes = live_minutes.get(eid)
         team_name = team_by_id.get(player["team"])
+        # A real 0-minutes player is further split by whether their team's
+        # own real fixture has actually kicked off yet this gameweek (see
+        # _team_fixture_started) -- "hasn't played yet" (fixture not
+        # started) and "played 0 minutes in a finished/live match" are two
+        # different real situations, not the same "no game time" state.
+        fixture_started = fixture_started_by_team.get(team_name)
         rows.append({
             "player_id": eid,
             "player_code": player["code"],
@@ -674,6 +713,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             "cost": player["now_cost"] / 10.0,
             "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
             "did_not_play": minutes == 0,
+            "fixture_started": fixture_started,
             "in_starting_xi": pick["multiplier"] > 0,
             "is_captain": pick["is_captain"],
             "is_vice_captain": pick["is_vice_captain"],
@@ -1380,15 +1420,23 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # metric) is shown underneath as extra context, not a replacement label.
     is_season_pool = "points_per_game" in row.index
     # A live squad's bench/unused player who genuinely didn't get any
-    # minutes shows "No game time" instead of "0 pts" -- a bare 0 reads as a
-    # harsh/unfair result for someone who simply wasn't selected to play,
-    # when it's really just "nothing to report yet." Only applies to
-    # build_live_squad_df's real squads (did_not_play column) -- optimizer-
-    # built squads never have this column, so they keep showing a real
-    # points/predicted-points number as before.
+    # minutes shows a label instead of "0 pts" -- a bare 0 reads as a harsh/
+    # unfair result for someone who simply wasn't selected to play. Split
+    # into two real, distinct states using fixture_started (see
+    # _team_fixture_started/build_live_squad_df) rather than one generic
+    # label that would otherwise conflate them: "Not yet played" (their
+    # team's real fixture hasn't kicked off yet this gameweek -- there's
+    # still genuinely nothing to report) vs. "No game time" (their match
+    # has started/finished and they simply weren't used). fixture_started
+    # missing/None (unknown -- e.g. no fixtures data available) falls back
+    # to the older, more conservative "No game time" wording rather than
+    # guessing. Only applies to build_live_squad_df's real squads
+    # (did_not_play column) -- optimizer-built squads never have this
+    # column, so they keep showing a real points/predicted-points number.
     did_not_play = "did_not_play" in row.index and row["did_not_play"]
     if did_not_play:
-        points_label = "No game time"
+        fixture_started = row.get("fixture_started") if "fixture_started" in row.index else None
+        points_label = "Not yet played" if fixture_started is False else "No game time"
     elif is_season_pool:
         points_label = f'{row["predicted_points"]:.0f} pts'
     else:
