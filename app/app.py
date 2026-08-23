@@ -21,7 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes,
-    team_upcoming_fixtures, average_fixture_difficulty,
+    team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
 )
@@ -104,6 +104,21 @@ with tab_squad:
         captain_row = squad_df[squad_df["is_captain"]]
         if not captain_row.empty:
             st.caption(f"Captain: **{captain_row.iloc[0]['name']}** (points doubled below)")
+
+        # Real captain suggestion, using FPL's OWN ep_next field for every
+        # starter in THIS squad -- links directly into the squad just built
+        # above rather than a separate tool. Only shown as a distinct
+        # suggestion when it actually differs from the real choice already
+        # made, so agreement doesn't produce redundant noise.
+        suggested_captain = suggest_captain(squad_df)
+        if suggested_captain is not None and (
+            captain_row.empty or suggested_captain["player_id"] != captain_row.iloc[0]["player_id"]
+        ):
+            st.info(
+                f"💡 Suggested captain based on FPL's own real expected-points data: "
+                f"**{suggested_captain['name']}** ({suggested_captain['ep_next']:.1f} expected pts) "
+                f"— currently the highest-`ep_next` starter in your squad."
+            )
 
         render_pitch(squad_df)
         st.caption(

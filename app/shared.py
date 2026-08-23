@@ -603,8 +603,44 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             # color-coded strip on each card by _player_card_html, rather
             # than being a separate, disconnected fixture display.
             "next_fixtures": fixtures_by_team.get(team_name, []),
+            # FPL's OWN real "expected points next gameweek" prediction --
+            # not derived here, taken directly from bootstrap-static, since
+            # it already factors in FPL's own view of form + fixture +
+            # availability. Used by suggest_captain() below to recommend a
+            # captain from THIS squad using the same real number FPL itself
+            # publishes, rather than a separate homegrown estimate.
+            "ep_next": float(player.get("ep_next") or 0),
         })
     return pd.DataFrame(rows)
+
+
+def suggest_captain(squad_df: pd.DataFrame) -> pd.Series:
+    """Recommend a captain from a real live squad (build_live_squad_df's
+    output) using FPL's OWN ep_next field -- the same real, published
+    "expected points next gameweek" number bootstrap-static exposes for
+    every player, not a separate homegrown prediction. Only considers
+    STARTING XI players (captaining a bench player who might not even play
+    is never the right call, regardless of their ep_next). Returns the
+    starter with the highest ep_next as a pandas Series (one row of
+    squad_df); returns None if the squad has no starters with a positive
+    ep_next (e.g. very early in a season before FPL's own model has enough
+    signal, or a completely empty squad)."""
+    starters = squad_df[squad_df["in_starting_xi"]]
+    candidates = starters[starters["ep_next"] > 0]
+    if candidates.empty:
+        return None
+    # A tie on ep_next (real and not rare -- checked directly: 3 starters at
+    # exactly 4.0 in a real GW1 squad) breaks toward attacking output, since
+    # captaincy doubles the SAME real points either way, but an attacker's
+    # ep_next carries more upside variance (a goal/assist swing) than a
+    # goalkeeper's or defender's floor-heavy one -- position order here
+    # (FWD > MID > DEF > GK) is the standard "attacking upside" ordering,
+    # not an arbitrary tiebreak.
+    POSITION_PRIORITY = {"FWD": 0, "MID": 1, "DEF": 2, "GK": 3}
+    candidates = candidates.copy()
+    candidates["_tiebreak"] = candidates["position"].map(POSITION_PRIORITY)
+    best = candidates.sort_values(["ep_next", "_tiebreak"], ascending=[False, True]).iloc[0]
+    return best.drop("_tiebreak")
 
 
 _DASHBOARD_LEAGUES_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_leagues.json")
