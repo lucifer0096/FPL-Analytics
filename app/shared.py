@@ -922,6 +922,99 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
 
 
 @st.cache_data
+def league_wide_status_flags() -> pd.DataFrame:
+    """Every real, currently-flagged player league-wide (not just this
+    manager's own squad) -- the SAME real FPL fields (status/news/
+    chance_of_playing_next_round) the Transfers tab already uses to flag a
+    squad member as injured/suspended/doubtful, just applied to every
+    player instead of only the 15 in one manager's squad. Meant for
+    scouting a potential transfer-IN too: a low-owned name with a scary
+    points total might just be a player who's been out injured, not a bad
+    pick -- and a fringe replacement can be checked for their OWN status
+    before being suggested.
+
+    Returns name, position, team, cost, selected_by_percent, status, news,
+    chance_of_playing_next_round for every player whose real status != 'a'
+    (available), sorted by ownership descending (higher-owned flags are the
+    ones most managers actually need to know about first)."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        if p["status"] == "a":
+            continue
+        rows.append({
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "selected_by_percent": float(p["selected_by_percent"]),
+            "status": p["status"],
+            "news": p.get("news") or "",
+            "chance_of_playing_next_round": p.get("chance_of_playing_next_round"),
+        })
+    df = pd.DataFrame(rows, columns=[
+        "name", "position", "team", "cost", "selected_by_percent",
+        "status", "news", "chance_of_playing_next_round",
+    ])
+    return df.sort_values("selected_by_percent", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data
+def premier_league_table() -> pd.DataFrame:
+    """The real, current Premier League table for the season in progress --
+    computed directly from fixtures.csv's own real team_h_score/team_a_score
+    for every match that has an actual result recorded, not FPL's own
+    strength ratings or any derived metric. Uses team_h_score.notna() (a
+    real score has been recorded) rather than the 'finished' column, since
+    'finished' verifiably stays False on a played match until bonus points
+    are fully locked in -- real final scores are already known well before
+    that, so waiting on 'finished' would hide results for hours after a
+    match actually ends.
+
+    Returns team, played, won, drawn, lost, gf, ga, gd, points, sorted by
+    points then goal difference descending -- the real, standard PL
+    table-ordering rule."""
+    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    if not os.path.exists(fixtures_path):
+        return pd.DataFrame(columns=["team", "played", "won", "drawn", "lost", "gf", "ga", "gd", "points"])
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    fx = pd.read_csv(fixtures_path)
+    played = fx[fx["team_h_score"].notna() & fx["team_a_score"].notna()]
+
+    stats = {tid: {"played": 0, "won": 0, "drawn": 0, "lost": 0, "gf": 0, "ga": 0} for tid in team_by_id}
+    for _, row in played.iterrows():
+        h, a = int(row["team_h"]), int(row["team_a"])
+        hs, as_ = int(row["team_h_score"]), int(row["team_a_score"])
+        for tid, gf, ga in ((h, hs, as_), (a, as_, hs)):
+            stats[tid]["played"] += 1
+            stats[tid]["gf"] += gf
+            stats[tid]["ga"] += ga
+            if gf > ga:
+                stats[tid]["won"] += 1
+            elif gf == ga:
+                stats[tid]["drawn"] += 1
+            else:
+                stats[tid]["lost"] += 1
+
+    rows = []
+    for tid, s in stats.items():
+        points = s["won"] * 3 + s["drawn"]
+        rows.append({
+            "team": team_by_id[tid],
+            "played": s["played"], "won": s["won"], "drawn": s["drawn"], "lost": s["lost"],
+            "gf": s["gf"], "ga": s["ga"], "gd": s["gf"] - s["ga"], "points": points,
+        })
+    df = pd.DataFrame(rows)
+    return df.sort_values(["points", "gd", "gf"], ascending=False).reset_index(drop=True)
+
+
+@st.cache_data
 def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     """Each real Premier League team's next N gameweeks' opponents and FPL's
     own published fixture-difficulty rating (1-5, verified directly against

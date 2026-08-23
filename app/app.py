@@ -21,7 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
-    differential_finder,
+    differential_finder, league_wide_status_flags, premier_league_table,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -71,8 +71,8 @@ def _collected_gws() -> list:
     return found
 
 
-tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices = st.tabs(
-    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes"]
+tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table = st.tabs(
+    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table"]
 )
 
 # =============================================================================
@@ -328,6 +328,27 @@ with tab_transfers:
                                 "name": "Player", "position": "Pos", "team": "Team", "cost": "Cost (£m)",
                                 "selected_by_percent": "Owned (%)", "ep_next": "Expected pts (next GW)",
                                 "is_penalty_taker": "Penalty taker",
+                            }),
+                            use_container_width=True, hide_index=True,
+                        )
+                with st.expander("🚑 League-wide injury/suspension feed (scout transfer-ins too)"):
+                    st.caption(
+                        "The same real status/news/chance_of_playing_next_round fields used to "
+                        "flag your own squad above, applied league-wide — so a potential transfer-in "
+                        "can be checked for their OWN real availability before you bring them in, "
+                        "not just your current squad's."
+                    )
+                    flags = league_wide_status_flags()
+                    if flags.empty:
+                        st.caption("No players currently flagged league-wide.")
+                    else:
+                        display_flags = flags.copy()
+                        display_flags["status"] = display_flags["status"].map(STATUS_LABELS).fillna(display_flags["status"])
+                        st.dataframe(
+                            display_flags.rename(columns={
+                                "name": "Player", "position": "Pos", "team": "Team", "cost": "Cost (£m)",
+                                "selected_by_percent": "Owned (%)", "status": "Status", "news": "News",
+                                "chance_of_playing_next_round": "Chance of playing (%)",
                             }),
                             use_container_width=True, hide_index=True,
                         )
@@ -587,3 +608,28 @@ with tab_prices:
                 .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
                 use_container_width=True, hide_index=True,
             )
+
+# =============================================================================
+# PL TABLE (real league standings, computed from fixtures.csv's own scores)
+# =============================================================================
+with tab_table:
+    st.header("Premier League table")
+    st.caption(
+        "The real, current 2026-27 table — computed directly from fixtures.csv's own recorded "
+        "match scores, not FPL's strength ratings or any derived metric. A match's real score is "
+        "counted as soon as it's recorded, without waiting on the 'finished' flag (verified "
+        "directly: 'finished' stays False for hours after a match ends, until bonus points lock "
+        "in) so results appear here as soon as they're actually known. Updates automatically as "
+        "the collector runs each day."
+    )
+    table = premier_league_table()
+    if table.empty or table["played"].sum() == 0:
+        st.info("No results recorded yet this season.")
+    else:
+        st.dataframe(
+            table.rename(columns={
+                "team": "Team", "played": "P", "won": "W", "drawn": "D", "lost": "L",
+                "gf": "GF", "ga": "GA", "gd": "GD", "points": "Pts",
+            }),
+            use_container_width=True, hide_index=True,
+        )
