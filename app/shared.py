@@ -22,7 +22,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 
-from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET
+from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
@@ -335,14 +335,14 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     bug after that)."""
     path = _find_entry_history_path(entry_id)
     if path is None:
-        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value"])
+        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost"])
 
     with open(path, encoding="utf-8") as f:
         history = json.load(f)
 
     current = history.get("current", [])
     if not current:
-        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value"])
+        return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value", "event_transfers", "event_transfers_cost"])
 
     df = pd.DataFrame([
         {
@@ -352,10 +352,45 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
             "overall_rank": g["overall_rank"],
             "bank": g["bank"] / 10.0,
             "value": g["value"] / 10.0,
+            "event_transfers": g["event_transfers"],
+            "event_transfers_cost": g["event_transfers_cost"],
         }
         for g in current
     ])
     return df.sort_values("gw").reset_index(drop=True)
+
+
+def calculate_free_transfers(entry_id: int) -> int:
+    """This manager's REAL banked free transfers going into the NEXT
+    gameweek, computed from their actual transfer history -- not a manual
+    guess/slider. FPL's real rule (verified against the live API's
+    game_settings: max_extra_free_transfers == 4, i.e. 1 this week + 4
+    banked == 5 max in a single week -- see optimizer.py's
+    MAX_FREE_TRANSFERS_BANKED): each gameweek that passes with fewer
+    transfers made than were available banks the difference forward (capped
+    at 5 total); each transfer made consumes one banked transfer first, with
+    any beyond that counted as a paid hit (already reflected in that
+    gameweek's own event_transfers_cost, which this function doesn't need to
+    re-derive).
+
+    GW1 (the initial squad build) is EXCLUDED from this simulation --
+    building your season-opening squad isn't a "transfer" in FPL's own
+    accounting (event_transfers is 0 for GW1 regardless of squad size), so
+    treating it as a transfer gameweek would incorrectly consume a bank
+    entry. Free-transfer accounting genuinely starts from GW2 onward.
+
+    Returns 1 (the standard single free transfer) if there's no season
+    history to simulate from yet (e.g. only GW1 has been played) -- the
+    correct real starting point for GW2, not a guess."""
+    progress = load_current_season_progress(entry_id)
+    if progress.empty:
+        return 1
+
+    banked = 1  # every manager starts GW2 with exactly 1 free transfer
+    for _, row in progress[progress["gw"] > 1].sort_values("gw").iterrows():
+        used = min(int(row["event_transfers"]), banked)
+        banked = min(banked - used + 1, 1 + MAX_FREE_TRANSFERS_BANKED)
+    return banked
 
 
 _DASHBOARD_CURRENT_SQUAD_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_current_squad.json")

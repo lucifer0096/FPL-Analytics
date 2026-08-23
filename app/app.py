@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shared import (
     PROJECT_DIR, MANAGER_ENTRY_ID,
     load_features, gw_pool, preseason_pool,
-    load_manager_name, load_current_season_progress,
+    load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard,
@@ -111,6 +111,13 @@ with tab_squad:
             f"entry/{MANAGER_ENTRY_ID}/event/{latest_gw}/picks — not the optimizer. "
             f"Points shown may still be provisional if bonus points haven't been finalized yet."
         )
+        st.caption(
+            f"⚠️ If you've made a transfer for GW{latest_gw + 1} since this was collected, it "
+            f"won't show here yet — checked directly against FPL's API: a gameweek's picks aren't "
+            f"publicly visible until THAT gameweek's own deadline passes (no public endpoint "
+            f"exposes a squad mid-transfer-window). This will update automatically to your real "
+            f"GW{latest_gw + 1} squad once its deadline passes and the collector picks it up."
+        )
 
         # Store the live squad in the SAME session_state keys the historical
         # Squad Builder page uses, so Transfers/Chip Advisor below (and on
@@ -169,6 +176,16 @@ with tab_transfers:
         try:
             next_pool = preseason_pool(df)
             pool_label = "the live current player pool (re-fetched, in case prices moved)"
+            st.info(
+                "⚠️ This early in the season, predicted_points still comes from last season's "
+                "**closing 2025-26 form**, not real 2026-27 in-season data — there aren't enough "
+                "finished 2026-27 gameweeks yet for the trained model to use real fixture "
+                "difficulty/current form (see the Historical & Model page's Model Performance tab "
+                "for how that model works once it can be used here). Treat suggested transfers as "
+                "a rough signal, not a confident recommendation, until this improves — a real "
+                "current-season model will automatically start being used here once enough live "
+                "gameweeks are collected."
+            )
         except FileNotFoundError as e:
             st.error(str(e))
             next_pool = None
@@ -182,7 +199,14 @@ with tab_transfers:
                      "no -4pt hit ever applying. Check this instead of setting free transfers below.",
             )
             if not unlimited:
-                free_transfers = st.slider("Free transfers available", 1, 5, 1, key="ft_slider_home")
+                real_free_transfers = calculate_free_transfers(MANAGER_ENTRY_ID)
+                free_transfers = st.slider(
+                    "Free transfers available", 1, 5, real_free_transfers, key="ft_slider_home",
+                    help="Pre-filled from your REAL transfer history (event_transfers each gameweek, "
+                         "banked per FPL's real rule: 1 per week, up to 5 max) — not a guess. Override "
+                         "if you know it's wrong (e.g. a chip changed the normal accounting).",
+                )
+                st.caption(f"Your real banked free transfers, computed from transfer history: **{real_free_transfers}**.")
 
             if unlimited:
                 st.caption(f"Checking against {pool_label}. Unlimited transfers this gameweek — no hit cost, no minimum-gain bar.")
@@ -212,6 +236,18 @@ with tab_transfers:
                             players=next_pool,
                             free_transfers=1 if unlimited else free_transfers,
                             unlimited_transfers=unlimited,
+                            # Doubled from the default 2.0 -- this pool's
+                            # predicted_points is last season's closing form,
+                            # not this project's trained model, so it's a
+                            # noisier, less trustworthy signal than the
+                            # historical-gameweek path uses. Verified against
+                            # real GW1 data: at the default margin, this noise
+                            # alone justified 4 hits for a real squad; at 4.0
+                            # it settles to 1 sensible free transfer with no
+                            # hit, while a genuinely obvious case (a starter's
+                            # predicted points zeroed, simulating an injury)
+                            # still correctly clears the bar and takes the hit.
+                            min_net_gain_per_hit=4.0,
                         )
 
                     if result["transfers_in"]:
