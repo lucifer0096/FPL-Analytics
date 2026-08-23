@@ -21,6 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
+    differential_finder,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -309,6 +310,24 @@ with tab_transfers:
                         "breaks even. Having more free transfers banked never forces more of them "
                         "to be used; holding is the answer whenever nothing clears the bar."
                     )
+                with st.expander("💎 Differential picks (low-owned, real upside)"):
+                    st.caption(
+                        "Real 'differential' candidates: owned by ≤10% of managers (FPL's own "
+                        "`selected_by_percent`) with meaningful real upside (FPL's own `ep_next`, "
+                        "the same field the captain suggestion and Chip Advisor use) — a genuine "
+                        "rank-gaining edge if they perform, since few other managers have them."
+                    )
+                    diffs = differential_finder()
+                    if diffs.empty:
+                        st.caption("No qualifying differentials right now.")
+                    else:
+                        st.dataframe(
+                            diffs.rename(columns={
+                                "name": "Player", "position": "Pos", "team": "Team", "cost": "Cost (£m)",
+                                "selected_by_percent": "Owned (%)", "ep_next": "Expected pts (next GW)",
+                            }),
+                            use_container_width=True, hide_index=True,
+                        )
 
             if st.button("Find best transfer(s)", key="find_transfers_btn_home"):
                 common_ids = set(current_squad["player_id"]) & set(next_pool["player_id"])

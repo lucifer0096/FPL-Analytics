@@ -870,6 +870,47 @@ def likely_price_movers(top_n: int = 10) -> pd.DataFrame:
 
 
 @st.cache_data
+def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, top_n: int = 15) -> pd.DataFrame:
+    """Real 'differential' picks -- low-owned players (FPL's own real
+    selected_by_percent field) with real, meaningful upside (FPL's own
+    ep_next, the same field suggest_captain()/the Chip Advisor tab already
+    use), rather than a homegrown score. A genuine FPL strategy concept
+    (bringing in a player few other managers have, for a rank-gaining edge
+    if they do well) quantified from real, checkable numbers, not a vague
+    "under the radar" guess.
+
+    max_ownership: exclude anyone owned by more than this % of managers --
+    default 10% is a common real-world differential threshold, not an
+    arbitrary project-specific number.
+    min_ep_next: exclude anyone FPL itself doesn't expect to score
+    meaningfully next gameweek -- a differential nobody expects to actually
+    perform isn't a useful pick regardless of how low-owned they are.
+
+    Returns up to top_n players sorted by ep_next descending, with columns:
+    name, position, team, cost, selected_by_percent, ep_next."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        owned = float(p["selected_by_percent"])
+        ep_next = float(p["ep_next"] or 0)
+        if owned > max_ownership or ep_next < min_ep_next:
+            continue
+        rows.append({
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "selected_by_percent": owned,
+            "ep_next": ep_next,
+        })
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "selected_by_percent", "ep_next"])
+    return df.sort_values("ep_next", ascending=False).head(top_n).reset_index(drop=True)
+
+
+@st.cache_data
 def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     """Each real Premier League team's next N gameweeks' opponents and FPL's
     own published fixture-difficulty rating (1-5, verified directly against
