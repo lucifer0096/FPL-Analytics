@@ -570,6 +570,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
     live_points = load_live_gw_points(gw)
     live_minutes = load_live_gw_minutes(gw)
+    fixtures_by_team = team_upcoming_fixtures(3)
 
     rows = []
     for pick in picks_data["picks"]:
@@ -584,18 +585,24 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
         # dict, e.g. no fallback data) is treated as unknown, not as 0
         # minutes -- see load_live_gw_minutes' docstring.
         minutes = live_minutes.get(eid)
+        team_name = team_by_id.get(player["team"])
         rows.append({
             "player_id": eid,
             "player_code": player["code"],
             "name": f"{player['first_name']} {player['second_name']}",
             "position": _POSITION_MAP_APP[player["element_type"]],
-            "team": team_by_id.get(player["team"]),
+            "team": team_name,
             "cost": player["now_cost"] / 10.0,
             "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
             "did_not_play": minutes == 0,
             "in_starting_xi": pick["multiplier"] > 0,
             "is_captain": pick["is_captain"],
             "is_vice_captain": pick["is_vice_captain"],
+            # Links this squad view into the SAME real fixture-difficulty
+            # data Transfers uses (see team_upcoming_fixtures) -- shown as a
+            # color-coded strip on each card by _player_card_html, rather
+            # than being a separate, disconnected fixture display.
+            "next_fixtures": fixtures_by_team.get(team_name, []),
         })
     return pd.DataFrame(rows)
 
@@ -761,6 +768,69 @@ def live_price_changes() -> pd.DataFrame:
 
 
 @st.cache_data
+def team_upcoming_fixtures(n_gws: int = 3) -> dict:
+    """Each real Premier League team's next N gameweeks' opponents and FPL's
+    own published fixture-difficulty rating (1-5, verified directly against
+    fixtures.csv), for the season actually in progress. Returns
+    {team_name: [{"gw": int, "opponent": str, "is_home": bool, "difficulty": int}, ...]}.
+
+    "Upcoming" is determined from the live bootstrap's own is_current/is_next
+    gameweek flags, NOT the fixtures.csv `finished` column alone -- checked
+    directly: GW1's own fixtures.csv rows show finished=False even for
+    matches that have already kicked off and finished_provisional=True,
+    since `finished` only flips once bonus points are fully locked in. Using
+    the bootstrap's real current-gameweek number avoids treating an
+    already-played (but not yet "finished") match as still upcoming.
+
+    Returns an empty dict if no 2026-27 fixtures.csv has been collected yet
+    in this environment (expected before the collector's first run)."""
+    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    if not os.path.exists(fixtures_path):
+        return {}
+
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+
+    fx = pd.read_csv(fixtures_path)
+    upcoming = fx[fx["event"] >= current_gw].sort_values("event").head(n_gws * 10)
+
+    result = {name: [] for name in team_id_to_name.values()}
+    for _, row in upcoming.iterrows():
+        if len(result.get(team_id_to_name.get(row["team_h"]), [])) < n_gws:
+            home_name = team_id_to_name.get(row["team_h"])
+            if home_name:
+                result[home_name].append({
+                    "gw": int(row["event"]), "opponent": team_id_to_name.get(row["team_a"]),
+                    "is_home": True, "difficulty": int(row["team_h_difficulty"]),
+                })
+        if len(result.get(team_id_to_name.get(row["team_a"]), [])) < n_gws:
+            away_name = team_id_to_name.get(row["team_a"])
+            if away_name:
+                result[away_name].append({
+                    "gw": int(row["event"]), "opponent": team_id_to_name.get(row["team_h"]),
+                    "is_home": False, "difficulty": int(row["team_a_difficulty"]),
+                })
+    return result
+
+
+def average_fixture_difficulty(team: str, fixtures_by_team: dict) -> float:
+    """Mean upcoming fixture difficulty for one team, from
+    team_upcoming_fixtures()'s output -- a single number for quick sorting/
+    comparison (e.g. "who has the easier run"). Returns None if that team
+    has no upcoming fixtures data (shouldn't normally happen for a real
+    Premier League team once fixtures.csv exists, but a promoted/relegated
+    edge case or a blank gameweek could leave a team with fewer than
+    expected)."""
+    fixtures = fixtures_by_team.get(team, [])
+    if not fixtures:
+        return None
+    return sum(f["difficulty"] for f in fixtures) / len(fixtures)
+
+
+@st.cache_data
 def _team_name_to_badge_code() -> dict:
     """Team name (e.g. "Arsenal", the string every pool already carries as
     `team`) -> FPL's team `code` (e.g. 3), the id FPL's own real badge CDN
@@ -896,6 +966,26 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'style="width: 100%; height: 100%; object-fit: contain;" loading="lazy" />'
         f'</div>'
     )
+    # Real upcoming-fixture strip -- only present when the caller has
+    # attached a `next_fixtures` column (a list of team_upcoming_fixtures()
+    # entries for this player's team), which links this card into the SAME
+    # real fixture-difficulty data Transfers now uses to gate suggestions
+    # (see optimize_transfers' fixture-adjustment in app.py), rather than
+    # being a separate, disconnected display. FPL's own 1 (easiest) - 5
+    # (hardest) rating, color-coded the same way FPL's own site does
+    # (green=easy, red=hard) so it reads instantly without a legend.
+    DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
+    fixtures_html = ""
+    if "next_fixtures" in row.index and row["next_fixtures"]:
+        chips = "".join(
+            f'<span title="GW{f["gw"]}: {"vs" if f["is_home"] else "@"} {f["opponent"]} '
+            f'(difficulty {f["difficulty"]}/5)" style="display: inline-block; width: 16px; '
+            f'height: 16px; line-height: 16px; border-radius: 3px; '
+            f'background: {DIFFICULTY_COLORS.get(f["difficulty"], "#999")}; color: white; '
+            f'font-size: 9px; font-weight: 700; margin: 0 1px;">{f["difficulty"]}</span>'
+            for f in row["next_fixtures"]
+        )
+        fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
     return (
         f'<div style="position: relative; background: rgba(255,255,255,0.94); border-radius: 8px; '
         f'padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
@@ -911,6 +1001,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'<div style="font-size: 11px; color: #0a6b2f; font-weight: 700; margin-top: 1px;">'
         f'{points_label}</div>'
         f'{ppg_html}'
+        f'{fixtures_html}'
         f'</div>'
     )
 

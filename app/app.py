@@ -21,6 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes,
+    team_upcoming_fixtures, average_fixture_difficulty,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
 )
@@ -219,6 +220,33 @@ with tab_transfers:
                 )
                 next_pool = next_pool.copy()
                 next_pool.loc[next_pool["player_id"].isin(flagged_ids), "predicted_points"] = 0.0
+
+            # Real upcoming fixture difficulty (FPL's own 1-5 rating, same
+            # data now shown on every squad card's fixture strip -- see
+            # build_live_squad_df/team_upcoming_fixtures) adjusts
+            # predicted_points before optimizing: an easy run of fixtures is
+            # a real, checkable reason a player might be worth bringing IN,
+            # and a hard run a real reason to consider moving one OUT --
+            # not just last season's closing form on its own, which has no
+            # notion of who a player is actually about to play. Scaled
+            # modestly (+/-15% at the extremes, difficulty 3 = neutral) so
+            # fixtures nudge the ranking rather than dominate it outright --
+            # form still matters more than a single average-difficulty number.
+            fixtures_by_team = team_upcoming_fixtures(3)
+            next_pool = next_pool.copy()
+
+            def _fixture_multiplier(team):
+                avg_difficulty = average_fixture_difficulty(team, fixtures_by_team)
+                if avg_difficulty is None:
+                    return 1.0  # no fixture data for this team -- don't adjust, not a reason to guess
+                return 1.0 - (avg_difficulty - 3.0) * 0.075
+
+            next_pool["predicted_points"] = next_pool["predicted_points"] * next_pool["team"].map(_fixture_multiplier)
+            st.caption(
+                "📅 Predicted points above are adjusted (±15% at the extremes) for each player's "
+                "team's real upcoming fixture difficulty (FPL's own rating, next 3 gameweeks) — "
+                "the same fixture strip shown on your squad cards in the My Squad tab."
+            )
 
             unlimited = st.checkbox(
                 "Playing Wildcard or Free Hit this gameweek — unlimited free transfers",
