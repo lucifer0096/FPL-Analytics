@@ -642,9 +642,9 @@ with tab_insights:
     st.caption(
         "Real, current-season leaderboards — every number below is a single FPL field read "
         "directly (goals_scored, assists, yellow_cards, red_cards, defensive_contribution, "
-        "total_points), not a derived or invented score, and not gated behind a minimum-games "
-        "cutoff this early in the season. Updates automatically as the collector runs each day — "
-        "no separate wiring needed."
+        "total_points, form), not a derived or invented score, and not gated behind a "
+        "minimum-games cutoff this early in the season. Updates automatically as the collector "
+        "runs each day — no separate wiring needed."
     )
     boards = season_leaderboards()
 
@@ -704,3 +704,22 @@ with tab_insights:
                 board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Points"}),
                 use_container_width=True, hide_index=True,
             )
+
+    st.divider()
+    st.subheader("🔥 In-form right now")
+    st.caption(
+        "FPL's own real `form` field — their published rolling average points over recent "
+        "gameweeks, the same real number Transfers/differential/captain logic elsewhere in this "
+        "app treats as the closest thing to genuine current-season signal. Early in a season "
+        "this will look similar to the MVP board above (only a handful of real gameweeks exist "
+        "so far) — that's a correct reflection of the data, not a bug. As more real gameweeks "
+        "are played, this is what actually separates a hot streak from a season-long total."
+    )
+    form_board = boards["in_form"]
+    if form_board.empty:
+        st.caption("Nothing recorded yet.")
+    else:
+        st.dataframe(
+            form_board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Form"}),
+            use_container_width=True, hide_index=True,
+        )

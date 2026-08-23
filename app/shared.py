@@ -1054,7 +1054,15 @@ def season_leaderboards(top_n: int = 10) -> dict:
     - "mvp": real total_points leader -- deliberately the plain, already-
       trusted FPL number rather than a model-derived score, since a trained
       model would need real in-season signal this project doesn't have yet
-      this early (same caveat already shown on the Transfers tab)."""
+      this early (same caveat already shown on the Transfers tab).
+    - "in_form": FPL's own real `form` field (their published rolling
+      average points over recent gameweeks, not this project's own
+      recompute) -- the single number that actually separates players once
+      several gameweeks exist, unlike season totals which barely
+      differentiate after just 1-2 games. Same "no cutoff" reasoning as
+      every other board here: early on, form and total_points will look
+      similar, and that's a correct, honest reflection of there being only
+      a handful of real gameweeks so far, not a bug to hide."""
     with open(_latest_bootstrap_path(), encoding="utf-8") as f:
         raw = json.load(f)
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
@@ -1071,6 +1079,7 @@ def season_leaderboards(top_n: int = 10) -> dict:
             "red_cards": p.get("red_cards") or 0,
             "defensive_contribution": p.get("defensive_contribution") or 0,
             "total_points": p.get("total_points") or 0,
+            "form": float(p.get("form") or 0),
         })
     df = pd.DataFrame(rows)
 
@@ -1091,6 +1100,7 @@ def season_leaderboards(top_n: int = 10) -> dict:
         "red_cards": _top("red_cards"),
         "defensive_contribution": _top("defensive_contribution"),
         "mvp": _top("total_points"),
+        "in_form": _top("form"),
     }
 
 
