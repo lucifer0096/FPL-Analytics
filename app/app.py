@@ -18,12 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared import (
     PROJECT_DIR, MANAGER_ENTRY_ID,
-    load_features, gw_pool, preseason_pool,
+    load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues,
     render_pitch, inject_shared_css, render_sidebar,
-    optimize_transfers, suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard,
-    optimize_squad, POSITION_REQUIREMENTS,
+    optimize_transfers, POSITION_REQUIREMENTS,
 )
 
 st.set_page_config(
@@ -191,6 +190,36 @@ with tab_transfers:
             next_pool = None
 
         if next_pool is not None:
+            # Real, current injury/suspension/doubt status -- FPL's own
+            # status/news/chance_of_playing_next_round fields (verified live
+            # against bootstrap-static), not inferred from a points gap.
+            # 'a' = available; anything else (i/injured, s/suspended,
+            # d/doubtful, u/unavailable-left-club, n/not-in-squad) is a real,
+            # named reason a squad member might be worth transferring out --
+            # shown explicitly rather than left for a stale predicted-points
+            # comparison to (maybe) stumble onto.
+            STATUS_LABELS = {"i": "Injured", "s": "Suspended", "d": "Doubtful", "u": "Left club", "n": "Not in squad"}
+            squad_status = next_pool[next_pool["player_id"].isin(current_squad["player_id"])]
+            flagged = squad_status[squad_status["status"] != "a"]
+            flagged_ids = set()
+            if not flagged.empty:
+                st.warning("⚠️ Squad members with a real availability concern:")
+                for _, row in flagged.iterrows():
+                    label = STATUS_LABELS.get(row["status"], row["status"])
+                    chance = row["chance_of_playing_next_round"]
+                    chance_str = f" ({chance}% chance of playing)" if chance is not None else ""
+                    news = f" — {row['news']}" if row["news"] else ""
+                    st.caption(f"**{row['name']}**: {label}{chance_str}{news}")
+                    flagged_ids.add(row["player_id"])
+                st.caption(
+                    "These players are treated as effectively unavailable below (predicted points "
+                    "zeroed for this check) so a genuine injury/suspension — not just a form dip — "
+                    "is what actually drives a transfer-out suggestion, rather than relying on a "
+                    "predicted-points gap to happen to catch it."
+                )
+                next_pool = next_pool.copy()
+                next_pool.loc[next_pool["player_id"].isin(flagged_ids), "predicted_points"] = 0.0
+
             unlimited = st.checkbox(
                 "Playing Wildcard or Free Hit this gameweek — unlimited free transfers",
                 key="unlimited_transfers_checkbox_home",

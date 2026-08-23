@@ -178,6 +178,68 @@ def season_pool(df: pd.DataFrame, season: str, gw_start: int = None, gw_end: int
 
 
 @st.cache_data
+def season_insights(df: pd.DataFrame, season: str) -> dict:
+    """Real, verifiable analytics for one completed (or completing) season --
+    not a squad-building tool, just "what actually happened." Distinct from
+    season_pool(), which exists to feed the optimizer a ranked player pool;
+    this returns several small, human-readable tables for direct display.
+
+    Every number here is a real historical fact (sums/means of actual
+    per-gameweek total_points, minutes, value), not a prediction -- no model,
+    no rolling window, since the season in question has (mostly) already
+    happened.
+
+    Returns a dict with:
+      - top_scorers: top 10 by total points (any minutes played)
+      - best_value: top 10 by points-per-£m spent (>=450 minutes, so a cheap
+        bench player with one big haul doesn't dominate on a tiny sample --
+        same floor reasoning as season_pool's min_games_for_window)
+      - position_leaders: {position: top scorer in that position}
+      - biggest_price_risers: top 10 by (final gameweek value - first
+        gameweek value) that season -- a real signal of who the market
+        judged to be performing well as the season went on."""
+    sub = df[df["season"] == season].copy()
+    last_gw = sub["GW"].max()
+    first_gw = sub["GW"].min()
+
+    totals = sub.groupby("player_code").agg(
+        name=("name", "last"), position=("position", "last"), team=("team", "last"),
+        total_points=("total_points", "sum"), minutes=("minutes", "sum"),
+    )
+    latest_value = (
+        sub[sub["GW"] == last_gw].drop_duplicates("player_code")
+        .set_index("player_code")["value"]
+    )
+    first_value = (
+        sub[sub["GW"] == first_gw].drop_duplicates("player_code")
+        .set_index("player_code")["value"]
+    )
+    totals["cost"] = latest_value / 10.0
+    totals["price_rise"] = (latest_value - first_value) / 10.0
+
+    top_scorers = totals.sort_values("total_points", ascending=False).head(10)
+
+    MIN_MINUTES_FOR_VALUE = 450  # ~5 full matches -- same floor reasoning as MIN_GAMES_FOR_SEASON_RATE, a cheap player with one big haul in limited minutes shouldn't dominate a per-£m ranking
+    valued = totals[totals["minutes"] >= MIN_MINUTES_FOR_VALUE].copy()
+    valued["pts_per_million"] = valued["total_points"] / valued["cost"]
+    best_value = valued.sort_values("pts_per_million", ascending=False).head(10)
+
+    position_leaders = {
+        pos: totals[totals["position"] == pos].sort_values("total_points", ascending=False).head(3)
+        for pos in ["GK", "DEF", "MID", "FWD"]
+    }
+
+    biggest_risers = totals[totals["minutes"] >= MIN_MINUTES_FOR_VALUE].sort_values("price_rise", ascending=False).head(10)
+
+    return {
+        "top_scorers": top_scorers,
+        "best_value": best_value,
+        "position_leaders": position_leaders,
+        "biggest_price_risers": biggest_risers,
+    }
+
+
+@st.cache_data
 def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
     """Build a 2026-27 pre-season player pool: each player's LIVE current price
     (this season's actual cost, pulled from the latest collector snapshot) paired
@@ -223,7 +285,23 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
 
     live["predicted_points"] = live["player_code"].map(closing_form).fillna(0).clip(lower=0)
 
-    return live[["player_id", "name", "position", "team", "cost", "predicted_points", "player_code"]]
+    # Real, current availability -- FPL's own status/news/chance-of-playing
+    # fields (verified live: e.g. Saliba genuinely flagged 'i' with a real
+    # "Back injury - Unknown return date" news string right now). Used to
+    # gate transfer suggestions on actual injury/suspension/doubt, not just a
+    # predicted-points gap, which stale pre-season form can't reliably
+    # signal on its own -- see optimize_transfers' usage of this column.
+    status_by_id = {p["id"]: p.get("status") for p in raw["elements"]}
+    news_by_id = {p["id"]: p.get("news") for p in raw["elements"]}
+    chance_by_id = {p["id"]: p.get("chance_of_playing_next_round") for p in raw["elements"]}
+    live["status"] = live["player_id"].map(status_by_id)
+    live["news"] = live["player_id"].map(news_by_id)
+    live["chance_of_playing_next_round"] = live["player_id"].map(chance_by_id)
+
+    return live[[
+        "player_id", "name", "position", "team", "cost", "predicted_points", "player_code",
+        "status", "news", "chance_of_playing_next_round",
+    ]]
 
 
 @st.cache_data
@@ -449,6 +527,26 @@ def load_live_gw_points(gw: int) -> dict:
     return {}
 
 
+@st.cache_data
+def load_live_gw_minutes(gw: int) -> dict:
+    """Every player's real MINUTES for one gameweek, same source as
+    load_live_gw_points (data/raw/2026-27/live/gw{n}.json) -- used to tell
+    apart "played and scored 0" from "didn't get any game time at all," a
+    distinction a bare points number can't make (0 pts reads as a harsh/
+    unfair result for a player who simply wasn't selected to play, when it's
+    really just "nothing to report yet"). No fallback bundle for this one --
+    the current dashboard_current_squad.json fallback only stores points,
+    not minutes (see refresh_dashboard_fallbacks.py) -- returns an empty
+    dict in that case, and callers should treat a missing entry as unknown,
+    not as "definitely played 0 minutes.\""""
+    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        live = json.load(f)
+    return {e["id"]: e["stats"]["minutes"] for e in live["elements"]}
+
+
 def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     """Turn one gameweek's real picks (from load_current_squad_picks) into a
     DataFrame in the same shape render_pitch()/optimize_squad() already
@@ -464,6 +562,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     element_by_id = {p["id"]: p for p in raw["elements"]}
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
     live_points = load_live_gw_points(gw)
+    live_minutes = load_live_gw_minutes(gw)
 
     rows = []
     for pick in picks_data["picks"]:
@@ -471,6 +570,13 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
         player = element_by_id.get(eid)
         if player is None:
             continue
+        # Distinguishes "played and scored 0" from "didn't get any minutes
+        # at all" -- a bare 0 reads as an unfairly harsh result for a bench
+        # player who simply wasn't selected to play, when it's really just
+        # "nothing to report yet." Missing from live_minutes entirely (empty
+        # dict, e.g. no fallback data) is treated as unknown, not as 0
+        # minutes -- see load_live_gw_minutes' docstring.
+        minutes = live_minutes.get(eid)
         rows.append({
             "player_id": eid,
             "player_code": player["code"],
@@ -479,6 +585,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             "team": team_by_id.get(player["team"]),
             "cost": player["now_cost"] / 10.0,
             "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
+            "did_not_play": minutes == 0,
             "in_starting_xi": pick["multiplier"] > 0,
             "is_captain": pick["is_captain"],
             "is_vice_captain": pick["is_vice_captain"],
@@ -655,7 +762,20 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # total (what selection is ranked on), so points_per_game (FPL's own rate
     # metric) is shown underneath as extra context, not a replacement label.
     is_season_pool = "points_per_game" in row.index
-    points_label = f'{row["predicted_points"]:.0f} pts' if is_season_pool else f'{row["predicted_points"]:.1f} pts'
+    # A live squad's bench/unused player who genuinely didn't get any
+    # minutes shows "No game time" instead of "0 pts" -- a bare 0 reads as a
+    # harsh/unfair result for someone who simply wasn't selected to play,
+    # when it's really just "nothing to report yet." Only applies to
+    # build_live_squad_df's real squads (did_not_play column) -- optimizer-
+    # built squads never have this column, so they keep showing a real
+    # points/predicted-points number as before.
+    did_not_play = "did_not_play" in row.index and row["did_not_play"]
+    if did_not_play:
+        points_label = "No game time"
+    elif is_season_pool:
+        points_label = f'{row["predicted_points"]:.0f} pts'
+    else:
+        points_label = f'{row["predicted_points"]:.1f} pts'
     ppg_html = (
         f'<div style="font-size: 9.5px; color: #777; margin-top: 0px;">'
         f'{row["points_per_game"]:.1f} pts/game</div>'
