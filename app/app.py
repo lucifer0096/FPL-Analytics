@@ -391,8 +391,9 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     total-only rows, which the live API never updates mid-season for old
     seasons (see fpl_api.get_entry_history's docstring: the public API only
     exposes gw-by-gw detail for the season actually happening right now).
-    Returns an empty DataFrame before the first gameweek finishes, which is
-    the correct/expected state right now (2026-27 hasn't started), not a bug."""
+    Returns an empty DataFrame before the collector has captured a gameweek
+    (correct/expected before the season's first deadline has passed, not a
+    bug after that)."""
     path = _find_entry_history_path(entry_id)
     if path is None:
         return pd.DataFrame(columns=["gw", "points", "total_points", "overall_rank", "bank", "value"])
@@ -416,6 +417,107 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
         for g in current
     ])
     return df.sort_values("gw").reset_index(drop=True)
+
+
+@st.cache_data
+def load_current_squad_picks(entry_id: int, gw: int) -> dict:
+    """This manager's REAL picks for one gameweek of the season actually in
+    progress, read from the collector's saved entry/{id}/picks/gw{n}.json --
+    snapshot_entry() now fetches this the moment a gameweek's deadline has
+    passed (see snapshot.py's _latest_live_gw), not gated on data_checked
+    like the league-wide stats are, since a manager's own picks/points are
+    correct (if provisional -- bonus points can still shift for a day or
+    two) well before that flag flips.
+
+    Deliberately has NO committed dashboard-fallback file, unlike bootstrap/
+    entry-history/entry-info above -- those are relatively stable (prices
+    move weekly, past seasons never change), but a live gameweek's picks and
+    points change constantly while it's in progress, so a stale committed
+    copy would misrepresent old, wrong points as current rather than being a
+    reasonable approximation. Returns None if nothing's been collected yet
+    for this gameweek, which the caller should treat as "not available in
+    this environment" rather than fabricating placeholder data."""
+    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "picks", f"gw{gw}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+_POSITION_MAP_APP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+
+
+@st.cache_data
+def load_live_gw_points(gw: int) -> dict:
+    """Every player's real points for one gameweek in progress (or finished),
+    read from the collector's saved data/raw/2026-27/live/gw{n}.json --
+    fpl_api.get_event_live(), one call for every player rather than N
+    per-player element-summary calls. Returns {element_id: total_points}.
+    Empty dict if not collected yet in this environment."""
+    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        live = json.load(f)
+    return {e["id"]: e["stats"]["total_points"] for e in live["elements"]}
+
+
+def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
+    """Turn one gameweek's real picks (from load_current_squad_picks) into a
+    DataFrame in the same shape render_pitch()/optimize_squad() already
+    expect (player_id/name/position/team/cost/predicted_points/
+    in_starting_xi), so this manager's REAL squad can reuse the exact same
+    pitch-view rendering as every optimizer-built squad -- no separate
+    display logic to maintain. `predicted_points` here is each player's REAL
+    points scored that gameweek (from load_live_gw_points), not a
+    prediction -- named that only for compatibility with the shared
+    rendering code, which doesn't care what produced the number."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    element_by_id = {p["id"]: p for p in raw["elements"]}
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    live_points = load_live_gw_points(gw)
+
+    rows = []
+    for pick in picks_data["picks"]:
+        eid = pick["element"]
+        player = element_by_id.get(eid)
+        if player is None:
+            continue
+        rows.append({
+            "player_id": eid,
+            "player_code": player["code"],
+            "name": f"{player['first_name']} {player['second_name']}",
+            "position": _POSITION_MAP_APP[player["element_type"]],
+            "team": team_by_id.get(player["team"]),
+            "cost": player["now_cost"] / 10.0,
+            "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
+            "in_starting_xi": pick["multiplier"] > 0,
+            "is_captain": pick["is_captain"],
+            "is_vice_captain": pick["is_vice_captain"],
+        })
+    return pd.DataFrame(rows)
+
+
+@st.cache_data
+def load_joined_leagues(entry_id: int) -> list:
+    """This manager's PRIVATE classic leagues (joined by code, not FPL's
+    auto-generated global/region/club leagues -- see snapshot_entry's
+    league_type == "x" filter), each with its full real standings, read from
+    the collector's saved entry/{id}/leagues/{league_id}.json files. Same
+    "no committed fallback, changes live every gameweek" reasoning as
+    load_current_squad_picks -- returns an empty list if nothing's been
+    collected yet in this environment."""
+    leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "leagues")
+    if not os.path.isdir(leagues_dir):
+        return []
+    leagues = []
+    for fname in sorted(os.listdir(leagues_dir)):
+        if not fname.endswith(".json"):
+            continue
+        with open(os.path.join(leagues_dir, fname), encoding="utf-8") as f:
+            leagues.append(json.load(f))
+    return leagues
 
 
 @st.cache_data
@@ -573,6 +675,22 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">🔍</div>'
         if "scout_reasons" in row.index and row["scout_reasons"] else ""
     )
+    # Real captain/vice-captain marker for a manager's own live squad (see
+    # build_live_squad_df) -- distinct from the MVP ⭐ badge, which marks the
+    # single highest-SCORING player, not necessarily who was actually made
+    # captain (a captain can score 0 and still be captain).
+    captain_html = (
+        f'<div title="Captain (points doubled)" style="position: absolute; bottom: -6px; left: -6px; '
+        f'background: #ffb300; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
+        f'font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">C</div>'
+        if "is_captain" in row.index and row["is_captain"] else
+        f'<div title="Vice-captain" style="position: absolute; bottom: -6px; left: -6px; '
+        f'background: #d8dde3; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
+        f'font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
+        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">VC</div>'
+        if "is_vice_captain" in row.index and row["is_vice_captain"] else ""
+    )
     # Real FPL player headshot -- checked directly against the live CDN:
     # https://resources.premierleague.com/premierleague/photos/players/110x140/p{code}.png
     # returns 200 for a real player code (confirmed with Raya, code 154561),
@@ -620,6 +738,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'{badge_html}'
         f'{dreamteam_html}'
         f'{scout_html}'
+        f'{captain_html}'
         f'{img_html}'
         f'<div style="font-weight: 600; font-size: 12px; color: #1a1a1a; line-height: 1.2; '
         f'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row["name"]}</div>'
@@ -723,8 +842,8 @@ with st.sidebar:
         "[Manager history page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)"
     )
 
-tab_overview, tab_squad, tab_transfers, tab_chips, tab_model, tab_history = st.tabs(
-    ["📋 Overview", "🧠 Squad Builder", "🔁 Transfers", "🃏 Chip Advisor", "📈 Model Performance", "🏆 Manager History"]
+tab_overview, tab_squad, tab_transfers, tab_chips, tab_model, tab_history, tab_leagues = st.tabs(
+    ["📋 Overview", "🧠 Squad Builder", "🔁 Transfers", "🃏 Chip Advisor", "📈 Model Performance", "🏆 Manager History", "🏅 League Tracker"]
 )
 
 # =============================================================================
@@ -1290,14 +1409,53 @@ with tab_history:
     st.header(f"Manager history — {manager_name}")
     st.caption(f"Season-by-season points and overall rank (entry {MANAGER_ENTRY_ID}).")
 
+    st.subheader("My current squad")
+    # Find the highest gameweek this manager's picks have actually been
+    # collected for (not assumed) -- checks disk directly rather than
+    # re-deriving "current gameweek" from bootstrap here, since the
+    # dashboard doesn't otherwise need a live bootstrap call on every load.
+    picks_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(MANAGER_ENTRY_ID), "picks")
+    collected_gws = sorted(
+        int(f[2:-5]) for f in os.listdir(picks_dir) if f.startswith("gw") and f.endswith(".json")
+    ) if os.path.isdir(picks_dir) else []
+
+    if not collected_gws:
+        st.info(
+            "No picks collected yet for this manager — this section fills in automatically "
+            "once the collector captures a gameweek's picks (available as soon as that "
+            "gameweek's deadline passes, even before final bonus points are added)."
+        )
+    else:
+        latest_gw = collected_gws[-1]
+        picks_data = load_current_squad_picks(MANAGER_ENTRY_ID, latest_gw)
+        squad_df = build_live_squad_df(picks_data, latest_gw)
+        entry_hist = picks_data["entry_history"]
+
+        pcol1, pcol2, pcol3, pcol4 = st.columns(4)
+        pcol1.metric(f"GW{latest_gw} points", entry_hist["points"])
+        pcol2.metric("Total points", entry_hist["total_points"])
+        pcol3.metric("Overall rank", f"{entry_hist['overall_rank']:,}")
+        pcol4.metric("Points on bench", entry_hist["points_on_bench"])
+
+        captain_row = squad_df[squad_df["is_captain"]]
+        if not captain_row.empty:
+            st.caption(f"Captain: **{captain_row.iloc[0]['name']}** (points doubled below)")
+
+        render_pitch(squad_df)
+        st.caption(
+            f"This is your REAL GW{latest_gw} squad and points, read from FPL's own "
+            f"entry/{MANAGER_ENTRY_ID}/event/{latest_gw}/picks — not the optimizer. "
+            f"Points shown may still be provisional if bonus points haven't been finalized yet."
+        )
+
     st.subheader("2026-27 live progress")
     current_progress = load_current_season_progress(MANAGER_ENTRY_ID)
     if current_progress.empty:
         st.info(
-            "No 2026-27 gameweeks finished yet (first fixture 21 Aug 2026) — this section "
-            "fills in automatically, gameweek by gameweek, once the collector captures real "
-            "results. Unlike the past-seasons table below (which the live API only ever gives "
-            "as season totals, never gameweek detail, for an already-finished season — see "
+            "No 2026-27 gameweeks captured yet — this section fills in automatically, "
+            "gameweek by gameweek, once the collector captures real results. Unlike the "
+            "past-seasons table below (which the live API only ever gives as season totals, "
+            "never gameweek detail, for an already-finished season — see "
             "load_current_season_progress), this IS gameweek-by-gameweek, live, for the "
             "season actually in progress."
         )
@@ -1364,4 +1522,73 @@ with tab_history:
             "[my-fpl-history.html](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html) "
             "(a separate, statically-hosted page — still carries its own hardcoded copy of this "
             "same data, since GitHub Pages can't run this project's Python collector)."
+        )
+
+# =============================================================================
+# LEAGUE TRACKER
+# =============================================================================
+with tab_leagues:
+    st.header("League tracker")
+    st.caption(
+        "Real standings for every PRIVATE classic (points-based) mini-league this manager "
+        "has joined by code — excludes FPL's own auto-generated global/region/club leagues, "
+        "which aren't leagues you actually 'joined.'"
+    )
+
+    leagues = load_joined_leagues(MANAGER_ENTRY_ID)
+
+    if not leagues:
+        st.info(
+            "No league standings collected yet — this fills in automatically once the "
+            "collector runs with `FPL_ENTRY_ID` set (see README's 'Running the Collector'). "
+            "Run `python src/collector/snapshot.py` to populate this tab."
+        )
+    else:
+        league_names = [l["league"]["name"] for l in leagues]
+        selected_name = st.selectbox("League", league_names, key="league_select")
+        league = next(l for l in leagues if l["league"]["name"] == selected_name)
+
+        results = league["standings"]["results"]
+        standings_df = pd.DataFrame([
+            {
+                "rank": r["rank"],
+                "manager": r["player_name"],
+                "team": r["entry_name"],
+                "gw_points": r["event_total"],
+                "total_points": r["total"],
+                "is_you": r["entry"] == MANAGER_ENTRY_ID,
+            }
+            for r in results
+        ]).sort_values("rank")
+
+        my_row = standings_df[standings_df["is_you"]]
+        if not my_row.empty:
+            lcol1, lcol2, lcol3 = st.columns(3)
+            lcol1.metric("Your rank", f"{int(my_row.iloc[0]['rank'])} / {len(standings_df)}")
+            lcol2.metric("Your total points", int(my_row.iloc[0]["total_points"]))
+            lcol3.metric("Your GW points", int(my_row.iloc[0]["gw_points"]))
+
+        display_df = standings_df.drop(columns=["is_you"]).rename(columns={
+            "rank": "Rank", "manager": "Manager", "team": "Team Name",
+            "gw_points": "GW Points", "total_points": "Total Points",
+        })
+        # Highlight this manager's own row so it's easy to find in a longer
+        # league table -- st.dataframe doesn't support row-conditional
+        # styling directly via column config, so pandas Styler is used here
+        # specifically (the one place in this app a DataFrame is styled
+        # rather than rendered as plain HTML, since this needs real per-row
+        # conditional logic a static CSS class can't express).
+        def _highlight_own_row(row):
+            is_you = standings_df.loc[row.name, "is_you"]
+            return ["background-color: rgba(42,150,80,0.25)" if is_you else "" for _ in row]
+
+        st.dataframe(
+            display_df.style.apply(_highlight_own_row, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            f"League: **{league['league']['name']}** · {len(standings_df)} managers · "
+            f"read live from FPL's own `leagues-classic/{league['league']['id']}/standings` "
+            f"endpoint via the collector, not hardcoded."
         )

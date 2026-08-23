@@ -11,6 +11,9 @@ Endpoints used:
   expose gameweek-level picks for prior, already-finished seasons
 - entry/{entry_id}/event/{gw}/picks: a manager's squad/picks for one gameweek of the
   current season (404s for gameweeks that haven't been played yet)
+- leagues-classic/{league_id}/standings: full leaderboard for one classic
+  (points-based) mini-league -- the league ids to query come from
+  get_entry()'s own leagues.classic list, not guessed
 """
 
 import time
@@ -64,6 +67,27 @@ def get_entry_picks(entry_id: int, gameweek: int) -> dict | None:
         if e.code == 404:
             return None
         raise
+
+
+def get_event_live(gameweek: int) -> dict:
+    """Every player's stats/points for ONE gameweek, in a single call -- the
+    same figures element-summary's per-player `history` rows eventually
+    settle into, but available immediately (if provisional) as soon as that
+    gameweek's matches are underway, and without N separate per-player
+    requests. Used for showing a manager's real squad's per-player point
+    breakdown for the CURRENT gameweek without waiting on
+    get_all_player_summaries' full per-player fetch."""
+    return _get_json(f"{BASE_URL}/event/{gameweek}/live/")
+
+
+def get_league_standings(league_id: int, page: int = 1) -> dict:
+    """One page of a classic (points-based) mini-league's leaderboard --
+    league name/metadata plus up to 50 entries per page, ranked by total
+    points. Pagination via `page` (FPL's own standings.has_next flag tells
+    the caller whether another page exists) -- most private mini-leagues fit
+    on one page, so callers checking a specific manager's own small leagues
+    typically don't need more than page 1."""
+    return _get_json(f"{BASE_URL}/leagues-classic/{league_id}/standings/?page_standings={page}")
 
 
 def get_all_player_summaries(player_ids: list, delay_seconds: float = 0.3) -> dict:
