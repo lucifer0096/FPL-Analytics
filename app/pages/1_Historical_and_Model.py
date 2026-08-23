@@ -133,10 +133,18 @@ with tab_insights:
                 st.caption(f"{row['name']} — {row['total_points']} pts")
 
     st.subheader("Biggest price risers")
-    st.caption("Real price movement over the season — the market's own signal of who performed above expectations.")
+    st.caption(
+        f"Real price movement WITHIN {insight_season} only — each player's own first and last "
+        f"gameweek price that season (not their current 2026-27 price), never compared across "
+        f"seasons. The market's own signal of who performed above expectations that year."
+    )
     st.dataframe(
-        insights["biggest_price_risers"][["name", "position", "team", "cost", "price_rise"]]
-        .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Current cost (£m)", "price_rise": "Price rise (£m)"})
+        insights["biggest_price_risers"][["name", "position", "team", "start_cost", "cost", "price_rise"]]
+        .rename(columns={
+            "name": "Player", "position": "Pos", "team": "Team",
+            "start_cost": f"Start of {insight_season} (£m)", "cost": f"End of {insight_season} (£m)",
+            "price_rise": "Change (£m)",
+        })
         .head(5),
         use_container_width=True, hide_index=True,
     )

@@ -200,7 +200,6 @@ def season_insights(df: pd.DataFrame, season: str) -> dict:
         judged to be performing well as the season went on."""
     sub = df[df["season"] == season].copy()
     last_gw = sub["GW"].max()
-    first_gw = sub["GW"].min()
 
     totals = sub.groupby("player_code").agg(
         name=("name", "last"), position=("position", "last"), team=("team", "last"),
@@ -210,12 +209,20 @@ def season_insights(df: pd.DataFrame, season: str) -> dict:
         sub[sub["GW"] == last_gw].drop_duplicates("player_code")
         .set_index("player_code")["value"]
     )
+    # A player's TRUE season-start price is their value at their own FIRST
+    # gameweek that season, not literally GW1 -- checked directly: 151
+    # players in 2025-26 have no GW1 row at all (mid-season signings,
+    # promoted-team players not yet in the dataset that early, etc.), so
+    # using a fixed GW1 lookup would leave them with a NaN/undefined "start
+    # price" rather than their own real starting point. sort_values +
+    # drop_duplicates(keep="first") picks each player's own earliest row.
     first_value = (
-        sub[sub["GW"] == first_gw].drop_duplicates("player_code")
+        sub.sort_values("GW").drop_duplicates("player_code", keep="first")
         .set_index("player_code")["value"]
     )
     totals["cost"] = latest_value / 10.0
-    totals["price_rise"] = (latest_value - first_value) / 10.0
+    totals["start_cost"] = first_value / 10.0
+    totals["price_rise"] = totals["cost"] - totals["start_cost"]
 
     top_scorers = totals.sort_values("total_points", ascending=False).head(10)
 
