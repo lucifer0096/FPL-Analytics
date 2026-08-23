@@ -21,7 +21,7 @@ from shared import (
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
-    differential_finder, league_wide_status_flags, premier_league_table,
+    differential_finder, league_wide_status_flags, premier_league_table, season_leaderboards,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -71,8 +71,8 @@ def _collected_gws() -> list:
     return found
 
 
-tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table = st.tabs(
-    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table"]
+tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_insights = st.tabs(
+    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table", "🔥 Season Insights"]
 )
 
 # =============================================================================
@@ -633,3 +633,74 @@ with tab_table:
             }),
             use_container_width=True, hide_index=True,
         )
+
+# =============================================================================
+# SEASON INSIGHTS (real, live 2026-27 leaderboards)
+# =============================================================================
+with tab_insights:
+    st.header("2026-27 season insights")
+    st.caption(
+        "Real, current-season leaderboards — every number below is a single FPL field read "
+        "directly (goals_scored, assists, yellow_cards, red_cards, defensive_contribution, "
+        "total_points), not a derived or invented score, and not gated behind a minimum-games "
+        "cutoff this early in the season. Updates automatically as the collector runs each day — "
+        "no separate wiring needed."
+    )
+    boards = season_leaderboards()
+
+    def _show_board(title, key, unit, icon, col):
+        with col:
+            st.subheader(f"{icon} {title}")
+            board = boards[key]
+            if board.empty:
+                st.caption("Nothing recorded yet.")
+            else:
+                st.dataframe(
+                    board.rename(columns={
+                        "name": "Player", "position": "Pos", "team": "Team", "value": unit,
+                    }),
+                    use_container_width=True, hide_index=True,
+                )
+
+    icol1, icol2 = st.columns(2)
+    _show_board("Golden Boot (goals)", "golden_boot", "Goals", "⚽", icol1)
+    _show_board("Assists", "assists", "Assists", "🎯", icol2)
+
+    icol3, icol4 = st.columns(2)
+    _show_board("Yellow cards", "yellow_cards", "Yellow", "🟨", icol3)
+    _show_board("Red cards", "red_cards", "Red", "🟥", icol4)
+
+    st.divider()
+    icol5, icol6 = st.columns(2)
+    with icol5:
+        st.subheader("🛡️ DEFCON leaders")
+        st.caption(
+            "FPL's own real `defensive_contribution` stat (tackles + interceptions + clearances "
+            "for defenders; ball recoveries + tackles + interceptions for midfielders/forwards) — "
+            "the same real number that earns DEFCON bonus points in FPL's actual scoring rules."
+        )
+        board = boards["defensive_contribution"]
+        if board.empty:
+            st.caption("Nothing recorded yet.")
+        else:
+            st.dataframe(
+                board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "DefCon"}),
+                use_container_width=True, hide_index=True,
+            )
+    with icol6:
+        st.subheader("👑 MVP so far")
+        st.caption(
+            "The real, current total_points leader — FPL's own already-trusted number, not a "
+            "model-derived score. A trained-model MVP estimate isn't used here for the same "
+            "reason Transfers flags its own predicted_points as unreliable this early: there "
+            "aren't enough real 2026-27 gameweeks yet for this project's model to have a genuine "
+            "signal beyond last season's closing form."
+        )
+        board = boards["mvp"]
+        if board.empty:
+            st.caption("Nothing recorded yet.")
+        else:
+            st.dataframe(
+                board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Points"}),
+                use_container_width=True, hide_index=True,
+            )

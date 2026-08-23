@@ -1035,6 +1035,66 @@ def premier_league_table() -> pd.DataFrame:
 
 
 @st.cache_data
+def season_leaderboards(top_n: int = 10) -> dict:
+    """Real, current 2026-27 season leaderboards -- every number here is a
+    single FPL bootstrap-static field read directly, no derived/invented
+    metric and no minimum-appearance cutoff (early in a season that would
+    just as easily exclude a real 1-game leader as a fluke). Returns a dict
+    of DataFrames, each with name/position/team/value columns:
+
+    - "golden_boot": real goals_scored, most first.
+    - "assists": real assists, most first.
+    - "yellow_cards": real yellow_cards, most first.
+    - "red_cards": real red_cards, most first (only includes players with
+      at least 1 -- a red-card "leaderboard" full of zeroes isn't useful).
+    - "defensive_contribution": FPL's own real defensive_contribution stat
+      (the 2025-26+ DEFCON scoring category -- tackles+interceptions+
+      clearances for defenders, ball recoveries+tackles+interceptions for
+      mid/fwd -- read verbatim, not recomputed).
+    - "mvp": real total_points leader -- deliberately the plain, already-
+      trusted FPL number rather than a model-derived score, since a trained
+      model would need real in-season signal this project doesn't have yet
+      this early (same caveat already shown on the Transfers tab)."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        rows.append({
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "goals_scored": p.get("goals_scored") or 0,
+            "assists": p.get("assists") or 0,
+            "yellow_cards": p.get("yellow_cards") or 0,
+            "red_cards": p.get("red_cards") or 0,
+            "defensive_contribution": p.get("defensive_contribution") or 0,
+            "total_points": p.get("total_points") or 0,
+        })
+    df = pd.DataFrame(rows)
+
+    def _top(col, n=top_n, min_positive=True):
+        d = df[df[col] > 0] if min_positive else df
+        return (
+            d[["name", "position", "team", col]]
+            .rename(columns={col: "value"})
+            .sort_values("value", ascending=False)
+            .head(n)
+            .reset_index(drop=True)
+        )
+
+    return {
+        "golden_boot": _top("goals_scored"),
+        "assists": _top("assists"),
+        "yellow_cards": _top("yellow_cards"),
+        "red_cards": _top("red_cards"),
+        "defensive_contribution": _top("defensive_contribution"),
+        "mvp": _top("total_points"),
+    }
+
+
+@st.cache_data
 def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     """Each real Premier League team's next N gameweeks' opponents and FPL's
     own published fixture-difficulty rating (1-5, verified directly against
