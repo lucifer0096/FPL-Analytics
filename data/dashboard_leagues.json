@@ -1,0 +1,3745 @@
+[
+  {
+    "league": {
+      "admin_entry": 5316291,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-08-17T17:00:28.427730Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 1152619,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "The Great Indian FPL League",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": false,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 651090,
+          "entry_name": "Joel Joseph",
+          "event_total": 49,
+          "last_rank": 0,
+          "player_name": "Joel Joseph",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 49
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/3450567/b9caebf2-0235-4186-8da7-a7cde20c24dc.png",
+          "entry": 3450567,
+          "entry_name": "Kiran de bruyne",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "Kiran Jose",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 38
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/2988684/5a93d4c6-1e0f-4629-b079-4a842c79c5d4.png",
+          "entry": 2988684,
+          "entry_name": "the old tree",
+          "event_total": 36,
+          "last_rank": 0,
+          "player_name": "Rahul Sahai",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 36
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5316291,
+          "entry_name": "Bappa's Team",
+          "event_total": 30,
+          "last_rank": 0,
+          "player_name": "Bappa Ji",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 30
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8449541,
+          "entry_name": "NoLampsNoParty",
+          "event_total": 25,
+          "last_rank": 0,
+          "player_name": "Divyansh Shandilya",
+          "rank": 5,
+          "rank_sort": 5,
+          "total": 25
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7115367,
+          "entry_name": "shabaash szlai",
+          "event_total": 24,
+          "last_rank": 0,
+          "player_name": "Anushka Ahuja",
+          "rank": 6,
+          "rank_sort": 6,
+          "total": 24
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5774450,
+          "entry_name": "Joellll27",
+          "event_total": 23,
+          "last_rank": 0,
+          "player_name": "Joel Philip",
+          "rank": 7,
+          "rank_sort": 7,
+          "total": 23
+        },
+        {
+          "club_badge_src": null,
+          "entry": 6953192,
+          "entry_name": "man u 4.0",
+          "event_total": 22,
+          "last_rank": 0,
+          "player_name": "Jexin Johnson",
+          "rank": 8,
+          "rank_sort": 8,
+          "total": 22
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4346319,
+          "entry_name": "CityHaal_9",
+          "event_total": 22,
+          "last_rank": 0,
+          "player_name": "Eugene Jose",
+          "rank": 8,
+          "rank_sort": 9,
+          "total": 22
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8079734,
+          "entry_name": "Konoha Xl",
+          "event_total": 22,
+          "last_rank": 0,
+          "player_name": "Piyush Punjabi",
+          "rank": 8,
+          "rank_sort": 10,
+          "total": 22
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5318354,
+          "entry_name": "Ishaan's Team",
+          "event_total": 18,
+          "last_rank": 0,
+          "player_name": "Ishaan Lahiri",
+          "rank": 11,
+          "rank_sort": 11,
+          "total": 18
+        },
+        {
+          "club_badge_src": null,
+          "entry": 901359,
+          "entry_name": "Ha la land",
+          "event_total": 18,
+          "last_rank": 0,
+          "player_name": "Alex A",
+          "rank": 11,
+          "rank_sort": 12,
+          "total": 18
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1132016,
+          "entry_name": "Tintumon's Playas",
+          "event_total": 15,
+          "last_rank": 0,
+          "player_name": "Rahul Bhaskaran",
+          "rank": 13,
+          "rank_sort": 13,
+          "total": 15
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:14Z",
+    "new_entries": {
+      "has_next": false,
+      "page": 1,
+      "results": [
+        {
+          "entry": 9114523,
+          "entry_name": "Ctrl Alt De Ligt",
+          "joined_time": "2026-08-22T03:28:39Z",
+          "player_first_name": "chaitanya",
+          "player_last_name": "bodhe"
+        }
+      ]
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 5318354,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-08-17T17:06:43.825941Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 1153184,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "Desi Football League",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": false,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/2988684/5a93d4c6-1e0f-4629-b079-4a842c79c5d4.png",
+          "entry": 2988684,
+          "entry_name": "the old tree",
+          "event_total": 36,
+          "last_rank": 0,
+          "player_name": "Rahul Sahai",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 36
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1421761,
+          "entry_name": "declan biryani",
+          "event_total": 33,
+          "last_rank": 0,
+          "player_name": "Raghav Nanda",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 33
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5316291,
+          "entry_name": "Bappa's Team",
+          "event_total": 30,
+          "last_rank": 0,
+          "player_name": "Bappa Ji",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 30
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8449541,
+          "entry_name": "NoLampsNoParty",
+          "event_total": 25,
+          "last_rank": 0,
+          "player_name": "Divyansh Shandilya",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 25
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5318354,
+          "entry_name": "Ishaan's Team",
+          "event_total": 18,
+          "last_rank": 0,
+          "player_name": "Ishaan Lahiri",
+          "rank": 5,
+          "rank_sort": 5,
+          "total": 18
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1132016,
+          "entry_name": "Tintumon's Playas",
+          "event_total": 15,
+          "last_rank": 0,
+          "player_name": "Rahul Bhaskaran",
+          "rank": 6,
+          "rank_sort": 6,
+          "total": 15
+        },
+        {
+          "club_badge_src": null,
+          "entry": 6020452,
+          "entry_name": "Namak Isak ka",
+          "event_total": 15,
+          "last_rank": 0,
+          "player_name": "Anshul Chaudhary",
+          "rank": 6,
+          "rank_sort": 7,
+          "total": 15
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:14Z",
+    "new_entries": {
+      "has_next": false,
+      "page": 1,
+      "results": []
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 5552008,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-08-18T09:13:33.362452Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 1208335,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "TheCyclingGK Super League!",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 1434512,
+          "entry_name": "\u00d8de to joy",
+          "event_total": 83,
+          "last_rank": 0,
+          "player_name": "David Long",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 83
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5695080,
+          "entry_name": "FREECS",
+          "event_total": 75,
+          "last_rank": 0,
+          "player_name": "Ade Ibrahim",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 75
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7094309,
+          "entry_name": "Mboka",
+          "event_total": 75,
+          "last_rank": 0,
+          "player_name": "Ronald Abuka",
+          "rank": 2,
+          "rank_sort": 3,
+          "total": 75
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1537181,
+          "entry_name": "Hobbsy's Lions",
+          "event_total": 74,
+          "last_rank": 0,
+          "player_name": "stuart hobbs",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 74
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/2913120/4acaacd6-549d-4c68-bdd6-52adc678d76e.png",
+          "entry": 1189444,
+          "entry_name": "Donnycarney Church",
+          "event_total": 73,
+          "last_rank": 0,
+          "player_name": "Ethan Collins",
+          "rank": 5,
+          "rank_sort": 5,
+          "total": 73
+        },
+        {
+          "club_badge_src": null,
+          "entry": 110773,
+          "entry_name": "Bus stop in Hounslow",
+          "event_total": 72,
+          "last_rank": 0,
+          "player_name": "Tim Wye",
+          "rank": 6,
+          "rank_sort": 6,
+          "total": 72
+        },
+        {
+          "club_badge_src": null,
+          "entry": 291627,
+          "entry_name": "Zubi DoobeeDoo",
+          "event_total": 71,
+          "last_rank": 0,
+          "player_name": "Mike Walker",
+          "rank": 7,
+          "rank_sort": 7,
+          "total": 71
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1251427,
+          "entry_name": "Xabi Dabi Doo",
+          "event_total": 71,
+          "last_rank": 0,
+          "player_name": "Dave Satchell",
+          "rank": 7,
+          "rank_sort": 8,
+          "total": 71
+        },
+        {
+          "club_badge_src": null,
+          "entry": 372108,
+          "entry_name": "Sesko Club Card",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "Frankie Mcbride",
+          "rank": 9,
+          "rank_sort": 9,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1707339,
+          "entry_name": "im winning dalot",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "cian obrien",
+          "rank": 9,
+          "rank_sort": 10,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 353258,
+          "entry_name": "whats the Mata ?",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Harrison Dalby",
+          "rank": 11,
+          "rank_sort": 11,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4163344,
+          "entry_name": "Saka Potatoes",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Luka Milivojevic",
+          "rank": 11,
+          "rank_sort": 12,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2403976,
+          "entry_name": "Sheikh Nyallay",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "ismail nyallay",
+          "rank": 11,
+          "rank_sort": 13,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4675,
+          "entry_name": "Calafiornication",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Johnny Kuzmanovski",
+          "rank": 11,
+          "rank_sort": 14,
+          "total": 69
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/69488/4d465b2c-ec5d-4447-a5d1-800fc7fd4c0b.png",
+          "entry": 69488,
+          "entry_name": "B\u00d8SHINATORS Xl",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Liam Bosher",
+          "rank": 11,
+          "rank_sort": 15,
+          "total": 69
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1821530/22692a4a-1e12-4cc1-9382-909a3210da14.png",
+          "entry": 1821530,
+          "entry_name": "Its Coming Home",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Ben Robinson",
+          "rank": 16,
+          "rank_sort": 16,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 426257,
+          "entry_name": "No more mr rice kai",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Edward Alexander",
+          "rank": 16,
+          "rank_sort": 17,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2070940,
+          "entry_name": "SergejBarmyArmy",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Antoine Bussey",
+          "rank": 16,
+          "rank_sort": 18,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8880339,
+          "entry_name": "PIP My Ride",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "harshwardhan grover",
+          "rank": 16,
+          "rank_sort": 19,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5884708,
+          "entry_name": "Bowen Bubbles",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Paul Sturges",
+          "rank": 16,
+          "rank_sort": 20,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2942874,
+          "entry_name": "IFK Snoppeborg",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Noel Johansson",
+          "rank": 16,
+          "rank_sort": 21,
+          "total": 68
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5524709,
+          "entry_name": "Gods plan",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Arnoud Van der Gracht",
+          "rank": 22,
+          "rank_sort": 22,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5617501,
+          "entry_name": "As Good Aznou",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Jamie Burch",
+          "rank": 22,
+          "rank_sort": 23,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1202625,
+          "entry_name": "Gruev is the Hart",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Danny Cossins",
+          "rank": 22,
+          "rank_sort": 24,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7460069,
+          "entry_name": "Cat in the Hato",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Conall Hyland",
+          "rank": 22,
+          "rank_sort": 25,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 221034,
+          "entry_name": "mo salad left",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Wilfred firmstone",
+          "rank": 22,
+          "rank_sort": 26,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4351328,
+          "entry_name": "Igor To Please",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Freddie Nicholas",
+          "rank": 27,
+          "rank_sort": 27,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2197076,
+          "entry_name": "Old Havertz Kai Hard",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Michael Armstrong",
+          "rank": 27,
+          "rank_sort": 28,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 629904,
+          "entry_name": "Bella Mutt",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Max Mullaney",
+          "rank": 27,
+          "rank_sort": 29,
+          "total": 66
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/207622/0c23b4b0-0d56-4d48-b324-779a53afd1d6.png",
+          "entry": 125956,
+          "entry_name": "Hot Christos Bun",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Ryan Cruickshanks",
+          "rank": 27,
+          "rank_sort": 30,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1061512,
+          "entry_name": "Beast ehf",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Fri\u00f0rik Vignisson",
+          "rank": 27,
+          "rank_sort": 31,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5243324,
+          "entry_name": "victor moses lawn",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Ollie Carne",
+          "rank": 27,
+          "rank_sort": 32,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 62172,
+          "entry_name": "Take My Breath (a)",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Sam Morriss",
+          "rank": 27,
+          "rank_sort": 33,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 344327,
+          "entry_name": "the lads",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Dylan Lyons",
+          "rank": 27,
+          "rank_sort": 34,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 389224,
+          "entry_name": "Artekkerz",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "CJ Kyne",
+          "rank": 27,
+          "rank_sort": 35,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1064487,
+          "entry_name": "jayround",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Jay Round",
+          "rank": 36,
+          "rank_sort": 36,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/2937756/04ec372a-db3d-4903-8232-d65cfba0e781.png",
+          "entry": 2553076,
+          "entry_name": "Turkish De Ligt",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Trung Le",
+          "rank": 36,
+          "rank_sort": 37,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 381741,
+          "entry_name": "come digne with me",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Thomas Watson",
+          "rank": 36,
+          "rank_sort": 38,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4464498,
+          "entry_name": "Blomster Sigurd",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Sigurd Sangolt",
+          "rank": 36,
+          "rank_sort": 39,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1744120/30070165-8066-4d26-9b1e-c08023425154.png",
+          "entry": 1744120,
+          "entry_name": "Oil or Nothing",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Oli Rice",
+          "rank": 36,
+          "rank_sort": 40,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1319110/a6bf2d2f-ea68-4981-a566-61055f4090a8.png",
+          "entry": 354762,
+          "entry_name": "The Mugs*",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "B C",
+          "rank": 36,
+          "rank_sort": 41,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 47772,
+          "entry_name": "rock and rohl",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Charlie Parkinson",
+          "rank": 36,
+          "rank_sort": 42,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3870305,
+          "entry_name": "Cham21ons",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Barry Mitchell",
+          "rank": 36,
+          "rank_sort": 43,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 369897,
+          "entry_name": "kovacs fc",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Gergely Kovacs",
+          "rank": 36,
+          "rank_sort": 44,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1108679/de3e6be7-82dc-4642-8ec2-bfed60d54352.png",
+          "entry": 1108679,
+          "entry_name": "LeoTheGoat",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Leonardo Ficetola",
+          "rank": 45,
+          "rank_sort": 45,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7675344,
+          "entry_name": "Strand and Deliver",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Ben Wildman",
+          "rank": 45,
+          "rank_sort": 46,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2892197,
+          "entry_name": "Livin Saliba Loca",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Henrik Biong",
+          "rank": 45,
+          "rank_sort": 47,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3552,
+          "entry_name": "Half The World (A)",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Jamie Roberts",
+          "rank": 45,
+          "rank_sort": 48,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8598232,
+          "entry_name": "Boulevard Boys",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Simon \u00c5gren",
+          "rank": 45,
+          "rank_sort": 49,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 260980,
+          "entry_name": "red djed redemption",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "dylan corbett",
+          "rank": 45,
+          "rank_sort": 50,
+          "total": 64
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:12Z",
+    "new_entries": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "entry": 9321139,
+          "entry_name": "Chicken Thiaw Mein",
+          "joined_time": "2026-08-23T01:31:06Z",
+          "player_first_name": "Matthew",
+          "player_last_name": "Ponting"
+        },
+        {
+          "entry": 9320845,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-23T01:23:56Z",
+          "player_first_name": "Jack",
+          "player_last_name": "Woodcock"
+        },
+        {
+          "entry": 9316307,
+          "entry_name": "The mighty Lady",
+          "joined_time": "2026-08-22T23:40:39Z",
+          "player_first_name": "Taylor",
+          "player_last_name": "Kennedy"
+        },
+        {
+          "entry": 9315638,
+          "entry_name": "Reece's Pieces",
+          "joined_time": "2026-08-22T23:27:34Z",
+          "player_first_name": "Luke",
+          "player_last_name": "Farrow"
+        },
+        {
+          "entry": 9315329,
+          "entry_name": "No Salah Needed",
+          "joined_time": "2026-08-22T23:22:05Z",
+          "player_first_name": "Azrief",
+          "player_last_name": "Azhar"
+        },
+        {
+          "entry": 9313506,
+          "entry_name": "\u00d6zilesque F.C",
+          "joined_time": "2026-08-22T22:51:38Z",
+          "player_first_name": "Dhruv",
+          "player_last_name": "Punjwani"
+        },
+        {
+          "entry": 9311821,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T22:26:14Z",
+          "player_first_name": "Ross",
+          "player_last_name": "Cockburn"
+        },
+        {
+          "entry": 9310021,
+          "entry_name": "Not too Xabi",
+          "joined_time": "2026-08-22T22:03:14Z",
+          "player_first_name": "Ethan",
+          "player_last_name": "Buckley"
+        },
+        {
+          "entry": 9309516,
+          "entry_name": "MSH",
+          "joined_time": "2026-08-22T21:57:14Z",
+          "player_first_name": "Manan",
+          "player_last_name": "Sharma"
+        },
+        {
+          "entry": 9309191,
+          "entry_name": "Club Foot",
+          "joined_time": "2026-08-22T21:53:28Z",
+          "player_first_name": "Jack",
+          "player_last_name": "Butler"
+        },
+        {
+          "entry": 9305617,
+          "entry_name": "Back Again",
+          "joined_time": "2026-08-22T21:11:24Z",
+          "player_first_name": "Chris",
+          "player_last_name": "Clarke"
+        },
+        {
+          "entry": 9302861,
+          "entry_name": "jamaica fc",
+          "joined_time": "2026-08-22T20:43:23Z",
+          "player_first_name": "kyle",
+          "player_last_name": "chung"
+        },
+        {
+          "entry": 9302026,
+          "entry_name": "Remontada FC",
+          "joined_time": "2026-08-22T20:35:40Z",
+          "player_first_name": "Arshad",
+          "player_last_name": "M"
+        },
+        {
+          "entry": 9300366,
+          "entry_name": "Donnys XI",
+          "joined_time": "2026-08-22T20:20:37Z",
+          "player_first_name": "Kian",
+          "player_last_name": "Rooney"
+        },
+        {
+          "entry": 9300156,
+          "entry_name": "goujon rangers",
+          "joined_time": "2026-08-22T20:18:34Z",
+          "player_first_name": "Jake",
+          "player_last_name": "Yearsley"
+        },
+        {
+          "entry": 9299050,
+          "entry_name": "late",
+          "joined_time": "2026-08-22T20:09:16Z",
+          "player_first_name": "Lee",
+          "player_last_name": "Farman"
+        },
+        {
+          "entry": 9297778,
+          "entry_name": "cheese",
+          "joined_time": "2026-08-22T19:57:52Z",
+          "player_first_name": "Salah",
+          "player_last_name": "Ali"
+        },
+        {
+          "entry": 9295304,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T19:37:08Z",
+          "player_first_name": "Zimi",
+          "player_last_name": "Njobeni"
+        },
+        {
+          "entry": 9295257,
+          "entry_name": "Just Keep R\u00f6hlin",
+          "joined_time": "2026-08-22T19:36:36Z",
+          "player_first_name": "Callum",
+          "player_last_name": "Andrews"
+        },
+        {
+          "entry": 9294293,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T19:29:03Z",
+          "player_first_name": "mohammed",
+          "player_last_name": "ahmed"
+        },
+        {
+          "entry": 9293626,
+          "entry_name": "DONALD DUCK",
+          "joined_time": "2026-08-22T19:23:49Z",
+          "player_first_name": "Youssef",
+          "player_last_name": "Rawash"
+        },
+        {
+          "entry": 9291143,
+          "entry_name": "Sahra B\u00f6rek",
+          "joined_time": "2026-08-22T19:04:46Z",
+          "player_first_name": "Batuhan",
+          "player_last_name": "Oglakcioglu"
+        },
+        {
+          "entry": 9290537,
+          "entry_name": "Red Djed Redemption",
+          "joined_time": "2026-08-22T19:00:25Z",
+          "player_first_name": "Mario",
+          "player_last_name": "Sigalas"
+        },
+        {
+          "entry": 9284795,
+          "entry_name": "Thomas Frank Engine",
+          "joined_time": "2026-08-22T18:22:46Z",
+          "player_first_name": "Toby",
+          "player_last_name": "Blackwell"
+        },
+        {
+          "entry": 9283466,
+          "entry_name": "Here We Go",
+          "joined_time": "2026-08-22T18:14:52Z",
+          "player_first_name": "Saptarshi",
+          "player_last_name": "Acharya"
+        },
+        {
+          "entry": 9283137,
+          "entry_name": "Sean's Team",
+          "joined_time": "2026-08-22T18:13:01Z",
+          "player_first_name": "Sean",
+          "player_last_name": "Crawley"
+        },
+        {
+          "entry": 9282321,
+          "entry_name": "Unai Emery christmas",
+          "joined_time": "2026-08-22T18:07:52Z",
+          "player_first_name": "Alfie",
+          "player_last_name": "Levitt"
+        },
+        {
+          "entry": 9281870,
+          "entry_name": "MD Dons",
+          "joined_time": "2026-08-22T18:05:13Z",
+          "player_first_name": "James",
+          "player_last_name": "Mcallister-Dew"
+        },
+        {
+          "entry": 9279696,
+          "entry_name": "Thomas's Team",
+          "joined_time": "2026-08-22T17:53:13Z",
+          "player_first_name": "Thomas",
+          "player_last_name": "Avison"
+        },
+        {
+          "entry": 9279493,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T17:52:11Z",
+          "player_first_name": "Ryan",
+          "player_last_name": "Woods"
+        },
+        {
+          "entry": 9278039,
+          "entry_name": "Halo Xl",
+          "joined_time": "2026-08-22T17:44:09Z",
+          "player_first_name": "JL",
+          "player_last_name": "Mante"
+        },
+        {
+          "entry": 9276957,
+          "entry_name": "tekkerslovakia",
+          "joined_time": "2026-08-22T17:37:21Z",
+          "player_first_name": "Connor",
+          "player_last_name": "Trevelyan"
+        },
+        {
+          "entry": 9275402,
+          "entry_name": "temooo",
+          "joined_time": "2026-08-22T17:28:12Z",
+          "player_first_name": "Kamal",
+          "player_last_name": "Senosy"
+        },
+        {
+          "entry": 9274846,
+          "entry_name": "skrillmind",
+          "joined_time": "2026-08-22T17:25:11Z",
+          "player_first_name": "Kelvin.",
+          "player_last_name": "Moruri"
+        },
+        {
+          "entry": 9273952,
+          "entry_name": "GLBFC",
+          "joined_time": "2026-08-22T17:20:14Z",
+          "player_first_name": "Gabe",
+          "player_last_name": "Brockett"
+        },
+        {
+          "entry": 9273013,
+          "entry_name": "LeWin",
+          "joined_time": "2026-08-22T17:15:19Z",
+          "player_first_name": "shane",
+          "player_last_name": "mccabe"
+        },
+        {
+          "entry": 9272559,
+          "entry_name": "Real Socialdad",
+          "joined_time": "2026-08-22T17:12:54Z",
+          "player_first_name": "Luvuyo",
+          "player_last_name": "Cindi"
+        },
+        {
+          "entry": 9265549,
+          "entry_name": "vovo",
+          "joined_time": "2026-08-22T16:33:58Z",
+          "player_first_name": "vovo",
+          "player_last_name": "vovo"
+        },
+        {
+          "entry": 9263082,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T16:20:28Z",
+          "player_first_name": "mohamed",
+          "player_last_name": "fawzy"
+        },
+        {
+          "entry": 9262957,
+          "entry_name": "styne's matador$",
+          "joined_time": "2026-08-22T16:19:46Z",
+          "player_first_name": "Styne-",
+          "player_last_name": "."
+        },
+        {
+          "entry": 9262822,
+          "entry_name": "Ezra's Team",
+          "joined_time": "2026-08-22T16:19:07Z",
+          "player_first_name": "Ezra",
+          "player_last_name": "John"
+        },
+        {
+          "entry": 9258507,
+          "entry_name": "Back of the Neto",
+          "joined_time": "2026-08-22T15:57:10Z",
+          "player_first_name": "Archie",
+          "player_last_name": "Hamblin"
+        },
+        {
+          "entry": 9258148,
+          "entry_name": "Backstreet moyes",
+          "joined_time": "2026-08-22T15:55:15Z",
+          "player_first_name": "Harley",
+          "player_last_name": "Dixon"
+        },
+        {
+          "entry": 9257343,
+          "entry_name": "liverpuddle",
+          "joined_time": "2026-08-22T15:50:50Z",
+          "player_first_name": "Charlie",
+          "player_last_name": "Buursma"
+        },
+        {
+          "entry": 9256544,
+          "entry_name": "true gonner",
+          "joined_time": "2026-08-22T15:46:30Z",
+          "player_first_name": "Adrian",
+          "player_last_name": "Munoz"
+        },
+        {
+          "entry": 9253392,
+          "entry_name": "shush",
+          "joined_time": "2026-08-22T15:30:47Z",
+          "player_first_name": "Yaseen",
+          "player_last_name": "Eiweida"
+        },
+        {
+          "entry": 9253329,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T15:30:30Z",
+          "player_first_name": "Luqman",
+          "player_last_name": "Hakeem"
+        },
+        {
+          "entry": 9251361,
+          "entry_name": "zdeso",
+          "joined_time": "2026-08-22T15:21:03Z",
+          "player_first_name": "Zdeslav",
+          "player_last_name": "Grubisic"
+        },
+        {
+          "entry": 9251074,
+          "entry_name": "haramball legendz",
+          "joined_time": "2026-08-22T15:19:40Z",
+          "player_first_name": "gbd",
+          "player_last_name": "best"
+        },
+        {
+          "entry": 9249903,
+          "entry_name": "\ufffd",
+          "joined_time": "2026-08-22T15:13:38Z",
+          "player_first_name": "saron",
+          "player_last_name": "yitay"
+        }
+      ]
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 80653,
+      "closed": false,
+      "code_privacy": "a",
+      "created": "2026-07-23T12:50:50.798948Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 16377,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "FFM League",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 7935484,
+          "entry_name": "Bunch of amateurs",
+          "event_total": 77,
+          "last_rank": 0,
+          "player_name": "Emily Harding-Moody",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 77
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3202709,
+          "entry_name": "The rebel",
+          "event_total": 75,
+          "last_rank": 0,
+          "player_name": "Suliman Ahmed",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 75
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2136399,
+          "entry_name": "\u0641\u0631\u064a\u0642 Hawiii",
+          "event_total": 73,
+          "last_rank": 0,
+          "player_name": "Hawiii Masr--",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 73
+        },
+        {
+          "club_badge_src": null,
+          "entry": 253468,
+          "entry_name": "teddy's bears",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "Teddy Cairns",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5291256,
+          "entry_name": "faz",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "Mr. Halfpint. The Genius",
+          "rank": 4,
+          "rank_sort": 5,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 360262,
+          "entry_name": "\u0627\u0644\u063a\u0627\u0646\u0631\u0632",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "Almanna Alamin",
+          "rank": 4,
+          "rank_sort": 6,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2403976,
+          "entry_name": "Sheikh Nyallay",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "ismail nyallay",
+          "rank": 7,
+          "rank_sort": 7,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5247621,
+          "entry_name": "Bulldozer",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Aek Akermi",
+          "rank": 7,
+          "rank_sort": 8,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7153938,
+          "entry_name": "\u0633\u064a\u0641",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "mostafa zezo",
+          "rank": 7,
+          "rank_sort": 9,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2549900,
+          "entry_name": "iOS arsenal",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Mohamed hamid",
+          "rank": 10,
+          "rank_sort": 10,
+          "total": 68
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1070313/efaf0b8a-dd18-444f-be49-f7273010063e.png",
+          "entry": 689692,
+          "entry_name": "Patrick Thistle",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Patrick Cobbold",
+          "rank": 11,
+          "rank_sort": 11,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 354118,
+          "entry_name": "State of the Arteta",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "a i",
+          "rank": 11,
+          "rank_sort": 12,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 616054,
+          "entry_name": "Abo aser Fc\ufffd",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Aser Alnoaman",
+          "rank": 11,
+          "rank_sort": 13,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 154213,
+          "entry_name": "AnnRed-Ball69357",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "AnnRy Red",
+          "rank": 11,
+          "rank_sort": 14,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5546131,
+          "entry_name": "Hanu",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Yaman Shrestha",
+          "rank": 11,
+          "rank_sort": 15,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 142126,
+          "entry_name": "Tel Me Moore",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Fifi O",
+          "rank": 16,
+          "rank_sort": 16,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3081540,
+          "entry_name": "PDG FC",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Muhammad faisal Haq",
+          "rank": 16,
+          "rank_sort": 17,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 409781,
+          "entry_name": "Straw Hat Pirates",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Devansh Modi",
+          "rank": 16,
+          "rank_sort": 18,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1737780,
+          "entry_name": "House of Waly",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "sherif waly",
+          "rank": 16,
+          "rank_sort": 19,
+          "total": 66
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1283458/5fd84518-4165-4701-a76d-c9b2a41ee388.png",
+          "entry": 1283458,
+          "entry_name": "Szobosz Lie",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Liam Prest",
+          "rank": 16,
+          "rank_sort": 20,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3480440,
+          "entry_name": "4MN4",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "F4R4i5 I2",
+          "rank": 21,
+          "rank_sort": 21,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 217451,
+          "entry_name": "Log In FC",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Nur Fazri",
+          "rank": 21,
+          "rank_sort": 22,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 399774,
+          "entry_name": "\u0644\u064a\u0641\u0631\u0628\u0648\u0644",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "\u0644\u064a\u0641\u0631\u0628\u0648\u0644 Elsaid elfar",
+          "rank": 21,
+          "rank_sort": 23,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 68531,
+          "entry_name": "AJIMACHO",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Anak Hantu",
+          "rank": 21,
+          "rank_sort": 24,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 192261,
+          "entry_name": "Change Name",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Soamil Vora",
+          "rank": 21,
+          "rank_sort": 25,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5392077,
+          "entry_name": "Saka B",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Steve Malit",
+          "rank": 21,
+          "rank_sort": 26,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/3765498/3cc6f7c3-58dd-4d39-b4a8-1ca34e351e98.png",
+          "entry": 6963827,
+          "entry_name": "AMA twice",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Dirkie Huseb",
+          "rank": 21,
+          "rank_sort": 27,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 891210,
+          "entry_name": "ayjotakalou",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Paul Shaw",
+          "rank": 21,
+          "rank_sort": 28,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7698371,
+          "entry_name": "LastCard",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Anak Antoo",
+          "rank": 21,
+          "rank_sort": 29,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 368022,
+          "entry_name": "MEB23EN SC",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Hussein M Gbr",
+          "rank": 30,
+          "rank_sort": 30,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 159761,
+          "entry_name": "Gabroky",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Rashed Akasha",
+          "rank": 30,
+          "rank_sort": 31,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3008527,
+          "entry_name": "Deloteam",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "FADHL .",
+          "rank": 30,
+          "rank_sort": 32,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4677124,
+          "entry_name": "MiddleFrag 2.0",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Anfal Ferdous Tanha",
+          "rank": 30,
+          "rank_sort": 33,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5151091,
+          "entry_name": "Smooth Operator",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Thuo E",
+          "rank": 30,
+          "rank_sort": 34,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1969198,
+          "entry_name": "The class of \u201892",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "M0 Sala7",
+          "rank": 30,
+          "rank_sort": 35,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3687023,
+          "entry_name": "Vincent vini",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "vincent kipz",
+          "rank": 30,
+          "rank_sort": 36,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8656116,
+          "entry_name": "Eyob",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Eyob -",
+          "rank": 30,
+          "rank_sort": 37,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1405708/4b4726cd-848f-42a6-b4bd-1a689d502511.png",
+          "entry": 1405708,
+          "entry_name": "Anbessa",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Hailemelekot Demeke",
+          "rank": 30,
+          "rank_sort": 38,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 230516,
+          "entry_name": "bkor15",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Beko Nor",
+          "rank": 30,
+          "rank_sort": 39,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2942546,
+          "entry_name": "Nnukwu_Mmuo",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Ndubuisi Ugochukwu Chisom",
+          "rank": 30,
+          "rank_sort": 40,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4477050,
+          "entry_name": "kalnarty",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "\u0639\u0644\u0627\u0621 \u0627\u0644\u062f\u064a\u0646  \u0648\u062f\u064a\u062f\u064a",
+          "rank": 30,
+          "rank_sort": 41,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 6566015,
+          "entry_name": "guruu...",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Shah Jamal",
+          "rank": 30,
+          "rank_sort": 42,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1802263,
+          "entry_name": "Made a Cunha this",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Brian Macfie",
+          "rank": 30,
+          "rank_sort": 43,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/291791/165881f8-6cc4-4443-96ec-cf673f234669.png",
+          "entry": 435754,
+          "entry_name": "BLACK THORN 3.0",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Anand GGMU",
+          "rank": 30,
+          "rank_sort": 44,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3822098,
+          "entry_name": "antidote",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "po po",
+          "rank": 30,
+          "rank_sort": 45,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/3052562/e1be07f2-ed62-44c4-ad01-4d7a10569623.png",
+          "entry": 3052562,
+          "entry_name": "Adaise",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Adaise Victor",
+          "rank": 30,
+          "rank_sort": 46,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2369533,
+          "entry_name": "Maresca\u2019s Mascara",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Reza Moradi",
+          "rank": 30,
+          "rank_sort": 47,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1822944,
+          "entry_name": "Don'tcryforme",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "John Duchaussee",
+          "rank": 30,
+          "rank_sort": 48,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 313444,
+          "entry_name": "\u0641\u0631\u064a\u0642 mohamed \u062e\u0627\u0644\u062f",
+          "event_total": 63,
+          "last_rank": 0,
+          "player_name": "mohamed khaled",
+          "rank": 49,
+          "rank_sort": 49,
+          "total": 63
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5533980,
+          "entry_name": "Change Name",
+          "event_total": 63,
+          "last_rank": 0,
+          "player_name": "Butch Coolidge",
+          "rank": 49,
+          "rank_sort": 50,
+          "total": 63
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:14Z",
+    "new_entries": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "entry": 9321195,
+          "entry_name": "brcaa",
+          "joined_time": "2026-08-23T01:32:47Z",
+          "player_first_name": "Adham",
+          "player_last_name": "Saad"
+        },
+        {
+          "entry": 9320985,
+          "entry_name": "JUNISA FC",
+          "joined_time": "2026-08-23T01:31:42Z",
+          "player_first_name": "Fallah Junisa",
+          "player_last_name": "Kamara"
+        },
+        {
+          "entry": 9321061,
+          "entry_name": "Jay16th",
+          "joined_time": "2026-08-23T01:29:05Z",
+          "player_first_name": "Ajibola",
+          "player_last_name": "Opeyemi"
+        },
+        {
+          "entry": 9320984,
+          "entry_name": "Selangor Fc",
+          "joined_time": "2026-08-23T01:27:11Z",
+          "player_first_name": "Muhammad",
+          "player_last_name": "Ammar"
+        },
+        {
+          "entry": 9320880,
+          "entry_name": "rembo fc",
+          "joined_time": "2026-08-23T01:24:38Z",
+          "player_first_name": "mohd",
+          "player_last_name": "safrie"
+        },
+        {
+          "entry": 9320853,
+          "entry_name": "Aka",
+          "joined_time": "2026-08-23T01:24:06Z",
+          "player_first_name": "Chris Israel",
+          "player_last_name": "Ekene"
+        },
+        {
+          "entry": 9320610,
+          "entry_name": "Nievz",
+          "joined_time": "2026-08-23T01:17:51Z",
+          "player_first_name": "Rakhmad",
+          "player_last_name": "Abinurizzaman"
+        },
+        {
+          "entry": 9320560,
+          "entry_name": "Top Markotop",
+          "joined_time": "2026-08-23T01:16:21Z",
+          "player_first_name": "Hikma",
+          "player_last_name": "Wahyu"
+        },
+        {
+          "entry": 9320454,
+          "entry_name": "TnT",
+          "joined_time": "2026-08-23T01:14:33Z",
+          "player_first_name": "Edgar",
+          "player_last_name": "Peter"
+        },
+        {
+          "entry": 9320365,
+          "entry_name": "KapakBesi",
+          "joined_time": "2026-08-23T01:11:10Z",
+          "player_first_name": "Mr",
+          "player_last_name": "Scott"
+        },
+        {
+          "entry": 9320165,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-23T01:06:02Z",
+          "player_first_name": "The",
+          "player_last_name": "Sar"
+        },
+        {
+          "entry": 9319305,
+          "entry_name": "Doksh",
+          "joined_time": "2026-08-23T01:04:25Z",
+          "player_first_name": "Adam",
+          "player_last_name": "Radwan"
+        },
+        {
+          "entry": 9131170,
+          "entry_name": "Dream Team",
+          "joined_time": "2026-08-23T01:02:23Z",
+          "player_first_name": "IBN",
+          "player_last_name": "YOUSIF 3"
+        },
+        {
+          "entry": 9319965,
+          "entry_name": "Zizash FC",
+          "joined_time": "2026-08-23T01:00:44Z",
+          "player_first_name": "Zizama",
+          "player_last_name": "Duba"
+        },
+        {
+          "entry": 9319720,
+          "entry_name": "H",
+          "joined_time": "2026-08-23T00:54:41Z",
+          "player_first_name": "itSh",
+          "player_last_name": "beah"
+        },
+        {
+          "entry": 9319606,
+          "entry_name": "nahhhh fc",
+          "joined_time": "2026-08-23T00:52:14Z",
+          "player_first_name": "man",
+          "player_last_name": "slot"
+        },
+        {
+          "entry": 9319406,
+          "entry_name": "Manuk dadali",
+          "joined_time": "2026-08-23T00:47:46Z",
+          "player_first_name": "david",
+          "player_last_name": "milner"
+        },
+        {
+          "entry": 9319291,
+          "entry_name": "Rice rice baby",
+          "joined_time": "2026-08-23T00:45:04Z",
+          "player_first_name": "Natnael",
+          "player_last_name": "Tadesse"
+        },
+        {
+          "entry": 9283656,
+          "entry_name": "fc skander\ufffdfc skande",
+          "joined_time": "2026-08-23T00:43:34Z",
+          "player_first_name": "Skander",
+          "player_last_name": "Sakher"
+        },
+        {
+          "entry": 9319185,
+          "entry_name": "manitis fc",
+          "joined_time": "2026-08-23T00:42:41Z",
+          "player_first_name": "Walter",
+          "player_last_name": "Zenga"
+        },
+        {
+          "entry": 9318956,
+          "entry_name": "Mesto DZ",
+          "joined_time": "2026-08-23T00:37:39Z",
+          "player_first_name": "Messaoud",
+          "player_last_name": "Lalili"
+        },
+        {
+          "entry": 9111984,
+          "entry_name": "SAN FC",
+          "joined_time": "2026-08-23T00:36:47Z",
+          "player_first_name": "Kiagus",
+          "player_last_name": "muhammad"
+        },
+        {
+          "entry": 9318887,
+          "entry_name": "RYZ FC",
+          "joined_time": "2026-08-23T00:35:58Z",
+          "player_first_name": "Azim",
+          "player_last_name": "Irfan"
+        },
+        {
+          "entry": 9318848,
+          "entry_name": "elfiqy",
+          "joined_time": "2026-08-23T00:34:58Z",
+          "player_first_name": "Mohamed",
+          "player_last_name": "Hassan"
+        },
+        {
+          "entry": 9092879,
+          "entry_name": "\u0645\u0627\u0628\u062f\u0647\u0627\u0634",
+          "joined_time": "2026-08-23T00:31:44Z",
+          "player_first_name": "kareem",
+          "player_last_name": "yasser"
+        },
+        {
+          "entry": 9318711,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-23T00:31:42Z",
+          "player_first_name": "Amer",
+          "player_last_name": "Occi"
+        },
+        {
+          "entry": 9318574,
+          "entry_name": "bakr 2026",
+          "joined_time": "2026-08-23T00:28:13Z",
+          "player_first_name": "Bakr",
+          "player_last_name": "Mokhtar"
+        },
+        {
+          "entry": 9318428,
+          "entry_name": "Dark Lords",
+          "joined_time": "2026-08-23T00:24:48Z",
+          "player_first_name": "Hasan",
+          "player_last_name": "Tahir"
+        },
+        {
+          "entry": 9318369,
+          "entry_name": "JD XI",
+          "joined_time": "2026-08-23T00:23:35Z",
+          "player_first_name": "JAYDIP",
+          "player_last_name": "Das"
+        },
+        {
+          "entry": 9318063,
+          "entry_name": "\u0641\u0631\u064a\u0642 Fouad",
+          "joined_time": "2026-08-23T00:16:41Z",
+          "player_first_name": "Fouad",
+          "player_last_name": "Saiid"
+        },
+        {
+          "entry": 9317994,
+          "entry_name": "Tritans FC",
+          "joined_time": "2026-08-23T00:14:58Z",
+          "player_first_name": "Sir",
+          "player_last_name": "Adiey"
+        },
+        {
+          "entry": 9317741,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-23T00:09:17Z",
+          "player_first_name": "Hosea",
+          "player_last_name": "Manyasa"
+        },
+        {
+          "entry": 9317600,
+          "entry_name": "Shoerace's Team",
+          "joined_time": "2026-08-23T00:06:09Z",
+          "player_first_name": "Shoerace",
+          "player_last_name": "Tyata"
+        },
+        {
+          "entry": 9317261,
+          "entry_name": "PDZ",
+          "joined_time": "2026-08-23T00:02:43Z",
+          "player_first_name": "Duke",
+          "player_last_name": "Zaman1"
+        },
+        {
+          "entry": 9317381,
+          "entry_name": "kamel",
+          "joined_time": "2026-08-23T00:01:48Z",
+          "player_first_name": "Mohamed",
+          "player_last_name": "- kamel"
+        },
+        {
+          "entry": 9316960,
+          "entry_name": "Elshorbagy",
+          "joined_time": "2026-08-23T00:01:02Z",
+          "player_first_name": "Mohamed",
+          "player_last_name": "Sherif"
+        },
+        {
+          "entry": 9317010,
+          "entry_name": "Sara Squad",
+          "joined_time": "2026-08-22T23:55:00Z",
+          "player_first_name": "Sara",
+          "player_last_name": "Modri\u0107"
+        },
+        {
+          "entry": 9316837,
+          "entry_name": "banjai",
+          "joined_time": "2026-08-22T23:51:28Z",
+          "player_first_name": "Shariman",
+          "player_last_name": "Saharum"
+        },
+        {
+          "entry": 9316793,
+          "entry_name": "aaa",
+          "joined_time": "2026-08-22T23:50:32Z",
+          "player_first_name": "Faisal",
+          "player_last_name": "Erris"
+        },
+        {
+          "entry": 9089290,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T23:50:16Z",
+          "player_first_name": "Awgeedi",
+          "player_last_name": "Shaambo"
+        },
+        {
+          "entry": 9316442,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T23:43:19Z",
+          "player_first_name": "Mostafa",
+          "player_last_name": "Ahmed"
+        },
+        {
+          "entry": 9316375,
+          "entry_name": "Flano's Lads",
+          "joined_time": "2026-08-22T23:41:55Z",
+          "player_first_name": "Jack",
+          "player_last_name": "Flanagan"
+        },
+        {
+          "entry": 9316310,
+          "entry_name": "\u0645\u062f\u0641\u0639",
+          "joined_time": "2026-08-22T23:40:42Z",
+          "player_first_name": "Mohamed almujtaba",
+          "player_last_name": "issam"
+        },
+        {
+          "entry": 9316281,
+          "entry_name": "\u0633\u0644\u0627\u0637\u0629",
+          "joined_time": "2026-08-22T23:40:16Z",
+          "player_first_name": "\u0628\u0646 \u0633\u064a \u0627\u062d\u0645\u062f",
+          "player_last_name": "\u0635\u0644\u0627\u062d"
+        },
+        {
+          "entry": 9316162,
+          "entry_name": "\u064a\u0644\u0627 \u0628\u064a\u0646\u0627\ufffdyalla_benaa",
+          "joined_time": "2026-08-22T23:37:55Z",
+          "player_first_name": "\u062d\u0631\u0642\u0647",
+          "player_last_name": "\u062f\u06453"
+        },
+        {
+          "entry": 9316069,
+          "entry_name": "Balakorak FC",
+          "joined_time": "2026-08-22T23:35:54Z",
+          "player_first_name": "Firrbudi",
+          "player_last_name": "Lensahijau"
+        },
+        {
+          "entry": 9316059,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T23:35:44Z",
+          "player_first_name": "Eric",
+          "player_last_name": "Nvida"
+        },
+        {
+          "entry": 9316027,
+          "entry_name": "Ras 254",
+          "joined_time": "2026-08-22T23:34:57Z",
+          "player_first_name": "Amon",
+          "player_last_name": "Mwaki Mwenda"
+        },
+        {
+          "entry": 9315955,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T23:33:42Z",
+          "player_first_name": "Mohd Nur Syukri",
+          "player_last_name": "Mohd Rosli"
+        },
+        {
+          "entry": 9315926,
+          "entry_name": "Ryan",
+          "joined_time": "2026-08-22T23:33:06Z",
+          "player_first_name": "Paul",
+          "player_last_name": "Theuri"
+        }
+      ]
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 1052536,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-07-24T18:29:14.954553Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 202257,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "Premier League Fans Kerala",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 158775,
+          "entry_name": "Carryck Job",
+          "event_total": 50,
+          "last_rank": 0,
+          "player_name": "Pranay Rajiv",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 50
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2314244,
+          "entry_name": "space",
+          "event_total": 48,
+          "last_rank": 0,
+          "player_name": "Ahammed Jaseel",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 48
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1465870,
+          "entry_name": "FC DOA",
+          "event_total": 46,
+          "last_rank": 0,
+          "player_name": "Sebastian P S",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 46
+        },
+        {
+          "club_badge_src": null,
+          "entry": 375771,
+          "entry_name": "ElevenXI",
+          "event_total": 46,
+          "last_rank": 0,
+          "player_name": "Shahad Islam",
+          "rank": 3,
+          "rank_sort": 4,
+          "total": 46
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/849854/226b729f-ee53-4271-9ba3-74d0ad323716.png",
+          "entry": 1217994,
+          "entry_name": "Red Devils FC",
+          "event_total": 45,
+          "last_rank": 0,
+          "player_name": "Abhilash V Raghav",
+          "rank": 5,
+          "rank_sort": 5,
+          "total": 45
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2244534,
+          "entry_name": "roooneyyy",
+          "event_total": 45,
+          "last_rank": 0,
+          "player_name": "SHAHEEM MULLALI",
+          "rank": 5,
+          "rank_sort": 6,
+          "total": 45
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3026797,
+          "entry_name": "Corner fc",
+          "event_total": 45,
+          "last_rank": 0,
+          "player_name": "Shahul Lfc",
+          "rank": 5,
+          "rank_sort": 7,
+          "total": 45
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/5487993/e82471a4-a1e1-412b-a38a-77b13d177c88.png",
+          "entry": 1655754,
+          "entry_name": "Athul's Team",
+          "event_total": 45,
+          "last_rank": 0,
+          "player_name": "Athul RS",
+          "rank": 5,
+          "rank_sort": 8,
+          "total": 45
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1916585,
+          "entry_name": "Team",
+          "event_total": 44,
+          "last_rank": 0,
+          "player_name": "Mohamed Risham",
+          "rank": 9,
+          "rank_sort": 9,
+          "total": 44
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5591709,
+          "entry_name": "Gunners XI",
+          "event_total": 44,
+          "last_rank": 0,
+          "player_name": "Aadil Mansoor",
+          "rank": 9,
+          "rank_sort": 10,
+          "total": 44
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/4251496/02a418be-107e-45b8-977c-94ca269d72af.png",
+          "entry": 3750710,
+          "entry_name": "FC CHALAKUDY",
+          "event_total": 43,
+          "last_rank": 0,
+          "player_name": "Ashik Shajan",
+          "rank": 11,
+          "rank_sort": 11,
+          "total": 43
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/422172/169d07f1-2cd5-4098-81d2-285a17b9562c.png",
+          "entry": 2248642,
+          "entry_name": "My Hits Don't Lie",
+          "event_total": 43,
+          "last_rank": 0,
+          "player_name": "Naveen PK",
+          "rank": 11,
+          "rank_sort": 12,
+          "total": 43
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/4055/04e18c8a-b2c2-4945-bd8f-ea59f2638c39.png",
+          "entry": 4055,
+          "entry_name": "HighRange Heroes",
+          "event_total": 43,
+          "last_rank": 0,
+          "player_name": "Praveen Raj S",
+          "rank": 11,
+          "rank_sort": 13,
+          "total": 43
+        },
+        {
+          "club_badge_src": null,
+          "entry": 403074,
+          "entry_name": "REDDEVILS",
+          "event_total": 42,
+          "last_rank": 0,
+          "player_name": "Suhail Pm",
+          "rank": 14,
+          "rank_sort": 14,
+          "total": 42
+        },
+        {
+          "club_badge_src": null,
+          "entry": 703771,
+          "entry_name": "Teta's Revenge",
+          "event_total": 42,
+          "last_rank": 0,
+          "player_name": "Preeth P R",
+          "rank": 14,
+          "rank_sort": 15,
+          "total": 42
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4042988,
+          "entry_name": "Arteta\u2019s Boys",
+          "event_total": 42,
+          "last_rank": 0,
+          "player_name": "Anand PS",
+          "rank": 14,
+          "rank_sort": 16,
+          "total": 42
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/78573/b4bd3678-0cae-4edc-ab90-2a1ec60c7f11.png",
+          "entry": 78573,
+          "entry_name": "Palliyangadi team",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Naseer Paralatt",
+          "rank": 17,
+          "rank_sort": 17,
+          "total": 41
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1999832/bb0f3c5d-ef31-43ae-a566-39fbf15b03f3.png",
+          "entry": 6239625,
+          "entry_name": "Chemela Sheythans",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Niju Jose",
+          "rank": 17,
+          "rank_sort": 18,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2894726,
+          "entry_name": "UTD Nilambur",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Mansoor Ali",
+          "rank": 17,
+          "rank_sort": 19,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1358911,
+          "entry_name": "Os Canarinhos",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Ashwin Pilicode",
+          "rank": 17,
+          "rank_sort": 20,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4375260,
+          "entry_name": "Kalyan United",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Ashik Kalyan",
+          "rank": 17,
+          "rank_sort": 21,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 336487,
+          "entry_name": "Sub-zero Merino",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Prabha Sankar",
+          "rank": 17,
+          "rank_sort": 22,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 62803,
+          "entry_name": "reyes de Europe",
+          "event_total": 41,
+          "last_rank": 0,
+          "player_name": "Sai 04",
+          "rank": 17,
+          "rank_sort": 23,
+          "total": 41
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7692002,
+          "entry_name": "Fidelcastro",
+          "event_total": 40,
+          "last_rank": 0,
+          "player_name": "Shanoob Sha",
+          "rank": 24,
+          "rank_sort": 24,
+          "total": 40
+        },
+        {
+          "club_badge_src": null,
+          "entry": 291292,
+          "entry_name": "\u0d06\u0d1f\u0d4d \u0d24\u0d4b\u0d2e",
+          "event_total": 40,
+          "last_rank": 0,
+          "player_name": "Kevin Manuel",
+          "rank": 24,
+          "rank_sort": 25,
+          "total": 40
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2565466,
+          "entry_name": "Anfield Army",
+          "event_total": 39,
+          "last_rank": 0,
+          "player_name": "Rahul Raghavan",
+          "rank": 26,
+          "rank_sort": 26,
+          "total": 39
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8610343,
+          "entry_name": "Delusional FC",
+          "event_total": 39,
+          "last_rank": 0,
+          "player_name": "Rahul Raphy",
+          "rank": 26,
+          "rank_sort": 27,
+          "total": 39
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1047368,
+          "entry_name": "Back to Stamford",
+          "event_total": 39,
+          "last_rank": 0,
+          "player_name": "Rohith P",
+          "rank": 26,
+          "rank_sort": 28,
+          "total": 39
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5521265,
+          "entry_name": "abdu",
+          "event_total": 39,
+          "last_rank": 0,
+          "player_name": "Abdu K",
+          "rank": 26,
+          "rank_sort": 29,
+          "total": 39
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/239943/2752620b-d98b-446a-9a90-70b94aaa5b0c.png",
+          "entry": 239943,
+          "entry_name": "FC MEAT BALLS",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "sreeraj thampan",
+          "rank": 30,
+          "rank_sort": 30,
+          "total": 38
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1579839/4d2b0ead-bf3e-49a1-bcc6-4b59f89b83c6.png",
+          "entry": 1579839,
+          "entry_name": "Goal Diggers",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "Alex Shabu",
+          "rank": 30,
+          "rank_sort": 31,
+          "total": 38
+        },
+        {
+          "club_badge_src": null,
+          "entry": 727114,
+          "entry_name": "Defconnoisseur",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "Deepak Krishnakumar",
+          "rank": 30,
+          "rank_sort": 32,
+          "total": 38
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2718606,
+          "entry_name": "Unusual_11",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "Mohammed Asif",
+          "rank": 30,
+          "rank_sort": 33,
+          "total": 38
+        },
+        {
+          "club_badge_src": null,
+          "entry": 856172,
+          "entry_name": "UDL Fc",
+          "event_total": 38,
+          "last_rank": 0,
+          "player_name": "Akshay Gopakumar",
+          "rank": 30,
+          "rank_sort": 34,
+          "total": 38
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8810181,
+          "entry_name": "Arsenal Fc",
+          "event_total": 37,
+          "last_rank": 0,
+          "player_name": "Ashiq Salim",
+          "rank": 35,
+          "rank_sort": 35,
+          "total": 37
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7633288,
+          "entry_name": "Gunner COP",
+          "event_total": 37,
+          "last_rank": 0,
+          "player_name": "Muhammad Khais",
+          "rank": 35,
+          "rank_sort": 36,
+          "total": 37
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1718172/a3601926-361d-4d4d-9d88-c52d615e2763.png",
+          "entry": 321051,
+          "entry_name": "Blue Lions",
+          "event_total": 37,
+          "last_rank": 0,
+          "player_name": "Nivin Joseph",
+          "rank": 35,
+          "rank_sort": 37,
+          "total": 37
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1301825,
+          "entry_name": "PL Champions",
+          "event_total": 36,
+          "last_rank": 0,
+          "player_name": "Sreerag Ganga",
+          "rank": 38,
+          "rank_sort": 38,
+          "total": 36
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2179280,
+          "entry_name": "Royal Rumble",
+          "event_total": 36,
+          "last_rank": 0,
+          "player_name": "Aswin Sajeev",
+          "rank": 38,
+          "rank_sort": 39,
+          "total": 36
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1174563,
+          "entry_name": "STPFC",
+          "event_total": 36,
+          "last_rank": 0,
+          "player_name": "SHUHAIB TP",
+          "rank": 38,
+          "rank_sort": 40,
+          "total": 36
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/150187/81672e63-5d58-4ee2-9b03-a45b5972c1d0.png",
+          "entry": 86881,
+          "entry_name": "Firoz United XI",
+          "event_total": 35,
+          "last_rank": 0,
+          "player_name": "Firoz Tharayil",
+          "rank": 41,
+          "rank_sort": 41,
+          "total": 35
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4401658,
+          "entry_name": "Carrickature",
+          "event_total": 35,
+          "last_rank": 0,
+          "player_name": "JK Reds",
+          "rank": 41,
+          "rank_sort": 42,
+          "total": 35
+        },
+        {
+          "club_badge_src": null,
+          "entry": 6481283,
+          "entry_name": "BlueLions",
+          "event_total": 35,
+          "last_rank": 0,
+          "player_name": "Rakesh Krishnan",
+          "rank": 41,
+          "rank_sort": 43,
+          "total": 35
+        },
+        {
+          "club_badge_src": null,
+          "entry": 2575820,
+          "entry_name": "Nandhu's Team",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Nandhu Vijay",
+          "rank": 44,
+          "rank_sort": 44,
+          "total": 34
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1057868,
+          "entry_name": "Devils",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Ranjith NP",
+          "rank": 44,
+          "rank_sort": 45,
+          "total": 34
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3973714,
+          "entry_name": "Fickle \u2696\ufe0f",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Abhishek Remesh",
+          "rank": 44,
+          "rank_sort": 46,
+          "total": 34
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3562514,
+          "entry_name": "Robertson\u2019s Revenge",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Fasalu Rahman",
+          "rank": 44,
+          "rank_sort": 47,
+          "total": 34
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1864608,
+          "entry_name": "Marry me chobozlai",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Aswin K",
+          "rank": 44,
+          "rank_sort": 48,
+          "total": 34
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1869245,
+          "entry_name": "SharQ09",
+          "event_total": 34,
+          "last_rank": 0,
+          "player_name": "Sharique Ahmed",
+          "rank": 44,
+          "rank_sort": 49,
+          "total": 34
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/7853/8c88c864-4bd3-4849-bbcb-dabe83269386.png",
+          "entry": 37367,
+          "entry_name": "Schr\u00f6dinger\u2019s Xabi",
+          "event_total": 33,
+          "last_rank": 0,
+          "player_name": "Navaneeth Kishor R",
+          "rank": 50,
+          "rank_sort": 50,
+          "total": 33
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:12Z",
+    "new_entries": {
+      "has_next": false,
+      "page": 1,
+      "results": [
+        {
+          "entry": 9315306,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T23:21:39Z",
+          "player_first_name": "BlueMoon",
+          "player_last_name": "FC"
+        },
+        {
+          "entry": 9173860,
+          "entry_name": "Bluekingdom",
+          "joined_time": "2026-08-22T10:22:32Z",
+          "player_first_name": "AMAN",
+          "player_last_name": "ZASHIL VP"
+        }
+      ]
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 1132016,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-07-24T23:42:50.055631Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 216095,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "Bhadwe",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": false,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 6164170,
+          "entry_name": "VeganaBall",
+          "event_total": 28,
+          "last_rank": 0,
+          "player_name": "Divyansh Kaushal",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 28
+        },
+        {
+          "club_badge_src": null,
+          "entry": 901359,
+          "entry_name": "Ha la land",
+          "event_total": 18,
+          "last_rank": 0,
+          "player_name": "Alex A",
+          "rank": 2,
+          "rank_sort": 2,
+          "total": 18
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1132016,
+          "entry_name": "Tintumon's Playas",
+          "event_total": 15,
+          "last_rank": 0,
+          "player_name": "Rahul Bhaskaran",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 15
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7497489,
+          "entry_name": "Kalafiori",
+          "event_total": 14,
+          "last_rank": 0,
+          "player_name": "Abin Antony",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 14
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:12Z",
+    "new_entries": {
+      "has_next": false,
+      "page": 1,
+      "results": []
+    }
+  },
+  {
+    "league": {
+      "admin_entry": 1527,
+      "closed": false,
+      "code_privacy": "p",
+      "created": "2026-07-23T12:24:40.291598Z",
+      "cup_league": null,
+      "has_cup": true,
+      "id": 6348,
+      "league_type": "x",
+      "max_entries": null,
+      "name": "YouTube.com/FPLtips",
+      "rank": null,
+      "scoring": "c",
+      "start_event": 1
+    },
+    "standings": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "club_badge_src": null,
+          "entry": 5575335,
+          "entry_name": "Hope",
+          "event_total": 72,
+          "last_rank": 0,
+          "player_name": "Anass Bouguillara",
+          "rank": 1,
+          "rank_sort": 1,
+          "total": 72
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5213831,
+          "entry_name": "I69 Ddker FC",
+          "event_total": 72,
+          "last_rank": 0,
+          "player_name": "ISixtynine Ddker",
+          "rank": 1,
+          "rank_sort": 2,
+          "total": 72
+        },
+        {
+          "club_badge_src": null,
+          "entry": 353009,
+          "entry_name": "Bilal Boys",
+          "event_total": 70,
+          "last_rank": 0,
+          "player_name": "Bilal Shaikh",
+          "rank": 3,
+          "rank_sort": 3,
+          "total": 70
+        },
+        {
+          "club_badge_src": null,
+          "entry": 119476,
+          "entry_name": "KTF1956 II",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Stephen Phillips",
+          "rank": 4,
+          "rank_sort": 4,
+          "total": 69
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/63191/0965d31b-724d-4c96-9fa3-793d9b95eeec.png",
+          "entry": 143623,
+          "entry_name": "Holybutter",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Jun Ming Ang",
+          "rank": 4,
+          "rank_sort": 5,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4675,
+          "entry_name": "Calafiornication",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Johnny Kuzmanovski",
+          "rank": 4,
+          "rank_sort": 6,
+          "total": 69
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/160658/92e5ffbf-492c-4609-b87a-054abba0ad2d.png",
+          "entry": 92222,
+          "entry_name": "Hotell? Thiago",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Sindre Kaupang",
+          "rank": 4,
+          "rank_sort": 7,
+          "total": 69
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/113298/580b7a83-9f13-47cf-af1a-a05334d688f4.png",
+          "entry": 116078,
+          "entry_name": "SBTeaM",
+          "event_total": 69,
+          "last_rank": 0,
+          "player_name": "Salah Badr",
+          "rank": 4,
+          "rank_sort": 8,
+          "total": 69
+        },
+        {
+          "club_badge_src": null,
+          "entry": 12012,
+          "entry_name": "Mbappe X Bellingham",
+          "event_total": 68,
+          "last_rank": 0,
+          "player_name": "Kezia Kinney",
+          "rank": 9,
+          "rank_sort": 9,
+          "total": 68
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/437277/dec28603-2ca8-4807-a373-d90a20515433.png",
+          "entry": 289713,
+          "entry_name": "DustyTrophyCabinet",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "gavin martin",
+          "rank": 10,
+          "rank_sort": 10,
+          "total": 67
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1070313/efaf0b8a-dd18-444f-be49-f7273010063e.png",
+          "entry": 689692,
+          "entry_name": "Patrick Thistle",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Patrick Cobbold",
+          "rank": 10,
+          "rank_sort": 11,
+          "total": 67
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1282148/a7a594ed-47b9-4e40-8ab6-a3d75fe7cade.png",
+          "entry": 3091675,
+          "entry_name": "Sopgubbarna",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "adam s",
+          "rank": 10,
+          "rank_sort": 12,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 283126,
+          "entry_name": "Sultan Newcastle 5.0",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Sultan Newcastle 3.0",
+          "rank": 10,
+          "rank_sort": 13,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 728001,
+          "entry_name": "TheWakko",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Georgi Yordanov",
+          "rank": 10,
+          "rank_sort": 14,
+          "total": 67
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/86468/be5b31cb-ef6d-44a1-9dac-15fc7fb824c5.png",
+          "entry": 758742,
+          "entry_name": "JackIredaleRemontada",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Peter Beckett",
+          "rank": 10,
+          "rank_sort": 15,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8389548,
+          "entry_name": "115 Charges FC",
+          "event_total": 67,
+          "last_rank": 0,
+          "player_name": "Jamie Phillipson",
+          "rank": 10,
+          "rank_sort": 16,
+          "total": 67
+        },
+        {
+          "club_badge_src": null,
+          "entry": 409781,
+          "entry_name": "Straw Hat Pirates",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Devansh Modi",
+          "rank": 17,
+          "rank_sort": 17,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 389224,
+          "entry_name": "Artekkerz",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "CJ Kyne",
+          "rank": 17,
+          "rank_sort": 18,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 5999586,
+          "entry_name": "POWELL FC",
+          "event_total": 66,
+          "last_rank": 0,
+          "player_name": "Patrick Powell Banda",
+          "rank": 17,
+          "rank_sort": 19,
+          "total": 66
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1320047,
+          "entry_name": "Power Reijnders",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Jose Mari Ruiz",
+          "rank": 20,
+          "rank_sort": 20,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 399774,
+          "entry_name": "\u0644\u064a\u0641\u0631\u0628\u0648\u0644",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "\u0644\u064a\u0641\u0631\u0628\u0648\u0644 Elsaid elfar",
+          "rank": 20,
+          "rank_sort": 21,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/975849/6e8f67a8-3053-4ad8-9757-e3a79e641330.png",
+          "entry": 975849,
+          "entry_name": "Quantum of Tzolis",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Aveshen Naicker",
+          "rank": 20,
+          "rank_sort": 22,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1988371,
+          "entry_name": "Str\u00f8ms\u00f8Aassen Faller",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Patrick Derbakk",
+          "rank": 20,
+          "rank_sort": 23,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1272094,
+          "entry_name": "chetaibi team",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "kamal chetaibi",
+          "rank": 20,
+          "rank_sort": 24,
+          "total": 65
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4464498,
+          "entry_name": "Blomster Sigurd",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Sigurd Sangolt",
+          "rank": 20,
+          "rank_sort": 25,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/4186026/9c0217fb-5d57-4caf-b577-2f03ef9f70eb.png",
+          "entry": 4762379,
+          "entry_name": "Team Revolution",
+          "event_total": 65,
+          "last_rank": 0,
+          "player_name": "Chai Ee Tyng",
+          "rank": 20,
+          "rank_sort": 26,
+          "total": 65
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/7185330/f382e81d-0341-409b-bdfa-3f00a2fe9985.png",
+          "entry": 7185330,
+          "entry_name": "Pending Moderation",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Ikraan Chady",
+          "rank": 27,
+          "rank_sort": 27,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3555384,
+          "entry_name": "Bruno Dos Tres",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Adrian Beedle",
+          "rank": 27,
+          "rank_sort": 28,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 4299201,
+          "entry_name": "Take It Eze FC",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Dobbin Laka",
+          "rank": 27,
+          "rank_sort": 29,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 172888,
+          "entry_name": "Iraola.exe F.C",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "TATHAGATA DAS",
+          "rank": 27,
+          "rank_sort": 30,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1304603/701d36b6-2d1d-4833-ac61-68c3a7a6f6b2.png",
+          "entry": 4977890,
+          "entry_name": "43VR70P",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Oladipupo Sule",
+          "rank": 27,
+          "rank_sort": 31,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/875240/6ba92a9b-c750-467f-bdca-d11bef665d75.png",
+          "entry": 875240,
+          "entry_name": "Bankai-HalandnoZanka",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Anjan Bhujel",
+          "rank": 27,
+          "rank_sort": 32,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3792686,
+          "entry_name": "SlayNok",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Chuchoke teepakarn",
+          "rank": 27,
+          "rank_sort": 33,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7949474,
+          "entry_name": "TIGERS",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Sanzhar Kazymov",
+          "rank": 27,
+          "rank_sort": 34,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/534463/62c09635-4ea0-4a3b-ae89-fc7df0b32937.png",
+          "entry": 2653619,
+          "entry_name": "Raptors",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Rafsan Nahian",
+          "rank": 27,
+          "rank_sort": 35,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7740681,
+          "entry_name": "UNCLE MILZ",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Richard Milanzi",
+          "rank": 27,
+          "rank_sort": 36,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 486099,
+          "entry_name": "Saka Potatoes",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Archie MacKinnon",
+          "rank": 27,
+          "rank_sort": 37,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1039569/9db8ca33-ba76-434d-b12c-c99c02355602.png",
+          "entry": 1039569,
+          "entry_name": "Dinko Cro Cup",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Dinko Mandanda",
+          "rank": 27,
+          "rank_sort": 38,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7623097,
+          "entry_name": "Pending Moderation",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "farouk sanni",
+          "rank": 27,
+          "rank_sort": 39,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/1827044/ab44d961-d3ef-4558-89cc-ab773823f5d9.png",
+          "entry": 2164064,
+          "entry_name": "Sexy XI",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Shivansh Dhar Singh",
+          "rank": 27,
+          "rank_sort": 40,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 8598232,
+          "entry_name": "Boulevard Boys",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Simon \u00c5gren",
+          "rank": 27,
+          "rank_sort": 41,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 3552,
+          "entry_name": "Half The World (A)",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Jamie Roberts",
+          "rank": 27,
+          "rank_sort": 42,
+          "total": 64
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/18569/8ee67750-c559-47f9-9bab-afc31a36bc3d.png",
+          "entry": 1270,
+          "entry_name": "THE TOWNHEAD GUNS",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Jamie Ayers",
+          "rank": 27,
+          "rank_sort": 43,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 183362,
+          "entry_name": "Zubi or not Zubi",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Thomas Parker",
+          "rank": 27,
+          "rank_sort": 44,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 7363251,
+          "entry_name": "Dr.yazan fc",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Yazan Hamdan",
+          "rank": 27,
+          "rank_sort": 45,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1637128,
+          "entry_name": "White Koffie 20",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "Antonio Theodore",
+          "rank": 27,
+          "rank_sort": 46,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1319755,
+          "entry_name": "Chicken feet",
+          "event_total": 64,
+          "last_rank": 0,
+          "player_name": "C Y",
+          "rank": 27,
+          "rank_sort": 47,
+          "total": 64
+        },
+        {
+          "club_badge_src": null,
+          "entry": 1407539,
+          "entry_name": "Wirtz Case Scenario",
+          "event_total": 63,
+          "last_rank": 0,
+          "player_name": "arsh Mathur",
+          "rank": 48,
+          "rank_sort": 48,
+          "total": 63
+        },
+        {
+          "club_badge_src": null,
+          "entry": 164402,
+          "entry_name": "Change Name",
+          "event_total": 63,
+          "last_rank": 0,
+          "player_name": "Jake Mcpherson",
+          "rank": 48,
+          "rank_sort": 49,
+          "total": 63
+        },
+        {
+          "club_badge_src": "https://fantasy.premierleague.com/gcs/plfpl-production-adobe-approved/plfpl-production/54706/6e1c1c72-e9e2-4db3-bb67-872fd18221c7.png",
+          "entry": 356132,
+          "entry_name": "Michos Jaguars",
+          "event_total": 63,
+          "last_rank": 0,
+          "player_name": "Micha\u0142 Socha",
+          "rank": 48,
+          "rank_sort": 50,
+          "total": 63
+        }
+      ]
+    },
+    "last_updated_data": "2026-08-23T01:38:14Z",
+    "new_entries": {
+      "has_next": true,
+      "page": 1,
+      "results": [
+        {
+          "entry": 9318454,
+          "entry_name": "Nakama",
+          "joined_time": "2026-08-23T00:25:22Z",
+          "player_first_name": "Syaiful",
+          "player_last_name": "Ma'arif"
+        },
+        {
+          "entry": 9317811,
+          "entry_name": "Terengganu City",
+          "joined_time": "2026-08-23T00:11:08Z",
+          "player_first_name": "Aziz",
+          "player_last_name": "Rahim"
+        },
+        {
+          "entry": 9315356,
+          "entry_name": "by luck \ufffdby luck",
+          "joined_time": "2026-08-22T23:22:32Z",
+          "player_first_name": "ali",
+          "player_last_name": "saad"
+        },
+        {
+          "entry": 9311826,
+          "entry_name": "Aalborg BK",
+          "joined_time": "2026-08-22T22:26:17Z",
+          "player_first_name": "Huaibo",
+          "player_last_name": "Yang"
+        },
+        {
+          "entry": 9309788,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T22:00:17Z",
+          "player_first_name": "Kruno",
+          "player_last_name": "\u017dagar"
+        },
+        {
+          "entry": 9306377,
+          "entry_name": "Invictus",
+          "joined_time": "2026-08-22T21:20:42Z",
+          "player_first_name": "shaurya",
+          "player_last_name": "mehta"
+        },
+        {
+          "entry": 9306306,
+          "entry_name": "Mkulima Service",
+          "joined_time": "2026-08-22T21:19:51Z",
+          "player_first_name": "Fred",
+          "player_last_name": "Materu"
+        },
+        {
+          "entry": 9299848,
+          "entry_name": "FATALXI",
+          "joined_time": "2026-08-22T20:15:55Z",
+          "player_first_name": "Amrit",
+          "player_last_name": "Shrestha"
+        },
+        {
+          "entry": 9299707,
+          "entry_name": "Mohamed's Team",
+          "joined_time": "2026-08-22T20:14:47Z",
+          "player_first_name": "Mohamed",
+          "player_last_name": "Mokhtar"
+        },
+        {
+          "entry": 9298012,
+          "entry_name": "Boldbaatar's Team",
+          "joined_time": "2026-08-22T20:04:07Z",
+          "player_first_name": "Boldbaatar",
+          "player_last_name": "Dashpurev"
+        },
+        {
+          "entry": 9297554,
+          "entry_name": "ahmed algarieb",
+          "joined_time": "2026-08-22T19:56:00Z",
+          "player_first_name": "Ahmed",
+          "player_last_name": "Algarieb"
+        },
+        {
+          "entry": 9295766,
+          "entry_name": "Amakosi",
+          "joined_time": "2026-08-22T19:40:46Z",
+          "player_first_name": "Pd",
+          "player_last_name": "Ekwaniilwa"
+        },
+        {
+          "entry": 9294237,
+          "entry_name": "No Mercy FC L_A_M_B",
+          "joined_time": "2026-08-22T19:28:40Z",
+          "player_first_name": "lukman",
+          "player_last_name": "Abubakar Mai buhu"
+        },
+        {
+          "entry": 9294073,
+          "entry_name": "chawki",
+          "joined_time": "2026-08-22T19:27:24Z",
+          "player_first_name": "Ahmed",
+          "player_last_name": "Zouaoui"
+        },
+        {
+          "entry": 9293498,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T19:22:46Z",
+          "player_first_name": "Rahim",
+          "player_last_name": "shocky"
+        },
+        {
+          "entry": 9291747,
+          "entry_name": "Safety_Kay FC",
+          "joined_time": "2026-08-22T19:09:14Z",
+          "player_first_name": "Adedoyin",
+          "player_last_name": "kayode"
+        },
+        {
+          "entry": 9291638,
+          "entry_name": "Pitch Please",
+          "joined_time": "2026-08-22T19:08:28Z",
+          "player_first_name": "Jason",
+          "player_last_name": "Woodford"
+        },
+        {
+          "entry": 9289356,
+          "entry_name": "alsaid awad",
+          "joined_time": "2026-08-22T18:52:14Z",
+          "player_first_name": "number one",
+          "player_last_name": "Not number two"
+        },
+        {
+          "entry": 9288066,
+          "entry_name": "late entry fc",
+          "joined_time": "2026-08-22T18:43:33Z",
+          "player_first_name": "Tenford",
+          "player_last_name": "Mabugu"
+        },
+        {
+          "entry": 9287798,
+          "entry_name": "\u0627\u0644\u0631\u062e",
+          "joined_time": "2026-08-22T18:41:45Z",
+          "player_first_name": "Ahmed",
+          "player_last_name": "Nasser"
+        },
+        {
+          "entry": 9286925,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T18:36:10Z",
+          "player_first_name": "Bruun",
+          "player_last_name": "Donavan"
+        },
+        {
+          "entry": 9286897,
+          "entry_name": "Nana Arsenal Joba",
+          "joined_time": "2026-08-22T18:35:59Z",
+          "player_first_name": "Nana",
+          "player_last_name": "Joba"
+        },
+        {
+          "entry": 9286355,
+          "entry_name": "Top Pick",
+          "joined_time": "2026-08-22T18:32:33Z",
+          "player_first_name": "Nathaniel",
+          "player_last_name": "Shammah"
+        },
+        {
+          "entry": 9285643,
+          "entry_name": "Oluwafemi's Team",
+          "joined_time": "2026-08-22T18:28:10Z",
+          "player_first_name": "Oluwafemi",
+          "player_last_name": "Ekujumi"
+        },
+        {
+          "entry": 9285574,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T18:27:47Z",
+          "player_first_name": "aweng",
+          "player_last_name": "awengan"
+        },
+        {
+          "entry": 9282544,
+          "entry_name": "Evansen F.C",
+          "joined_time": "2026-08-22T18:09:10Z",
+          "player_first_name": "Evans",
+          "player_last_name": "Murangiri"
+        },
+        {
+          "entry": 9281125,
+          "entry_name": "BALD BOYS",
+          "joined_time": "2026-08-22T18:01:00Z",
+          "player_first_name": "Danny",
+          "player_last_name": "Ho"
+        },
+        {
+          "entry": 9278934,
+          "entry_name": "Unsung Heros",
+          "joined_time": "2026-08-22T17:49:12Z",
+          "player_first_name": "Willem",
+          "player_last_name": "Pretorius"
+        },
+        {
+          "entry": 9278590,
+          "entry_name": "championn",
+          "joined_time": "2026-08-22T17:47:21Z",
+          "player_first_name": "seba",
+          "player_last_name": "aymen"
+        },
+        {
+          "entry": 9277415,
+          "entry_name": "KFC",
+          "joined_time": "2026-08-22T17:40:15Z",
+          "player_first_name": "Karou",
+          "player_last_name": "Apostolos"
+        },
+        {
+          "entry": 9277274,
+          "entry_name": "wahad",
+          "joined_time": "2026-08-22T17:39:29Z",
+          "player_first_name": "jo",
+          "player_last_name": "mo"
+        },
+        {
+          "entry": 9276754,
+          "entry_name": "MagicalMessi",
+          "joined_time": "2026-08-22T17:36:15Z",
+          "player_first_name": "Dylan",
+          "player_last_name": "Esteron"
+        },
+        {
+          "entry": 9275049,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T17:26:23Z",
+          "player_first_name": "JAMESTREVOR",
+          "player_last_name": "MURORI"
+        },
+        {
+          "entry": 9272707,
+          "entry_name": "DOD FC",
+          "joined_time": "2026-08-22T17:13:38Z",
+          "player_first_name": "kwame",
+          "player_last_name": "oxide"
+        },
+        {
+          "entry": 9272493,
+          "entry_name": "Pips Warrior FC",
+          "joined_time": "2026-08-22T17:12:34Z",
+          "player_first_name": "Peter",
+          "player_last_name": "Kirui"
+        },
+        {
+          "entry": 9272047,
+          "entry_name": "\u00d7\u00a7\u00a9\u00ae\u2122",
+          "joined_time": "2026-08-22T17:10:02Z",
+          "player_first_name": "Fq",
+          "player_last_name": "Zk"
+        },
+        {
+          "entry": 9269967,
+          "entry_name": "hossam",
+          "joined_time": "2026-08-22T16:58:17Z",
+          "player_first_name": "hossam",
+          "player_last_name": "sied"
+        },
+        {
+          "entry": 9269640,
+          "entry_name": "O.F.F.S.I.D.E",
+          "joined_time": "2026-08-22T16:56:33Z",
+          "player_first_name": "Sergio",
+          "player_last_name": "Nicolas"
+        },
+        {
+          "entry": 9269574,
+          "entry_name": "Tejaswi's Team",
+          "joined_time": "2026-08-22T16:56:11Z",
+          "player_first_name": "Tejaswi",
+          "player_last_name": "Bhat"
+        },
+        {
+          "entry": 9269268,
+          "entry_name": "SAYA ULANGGGGG",
+          "joined_time": "2026-08-22T16:54:37Z",
+          "player_first_name": "PAK-is",
+          "player_last_name": "RAMLY"
+        },
+        {
+          "entry": 9265224,
+          "entry_name": "mouhi",
+          "joined_time": "2026-08-22T16:32:09Z",
+          "player_first_name": "mahmah",
+          "player_last_name": "mohamed"
+        },
+        {
+          "entry": 9263834,
+          "entry_name": "PakYu",
+          "joined_time": "2026-08-22T16:24:18Z",
+          "player_first_name": "Pak",
+          "player_last_name": "Yu"
+        },
+        {
+          "entry": 9263546,
+          "entry_name": "Pending Moderation",
+          "joined_time": "2026-08-22T16:22:49Z",
+          "player_first_name": "Sheikh",
+          "player_last_name": "Farhan"
+        },
+        {
+          "entry": 9261079,
+          "entry_name": "J.A.N",
+          "joined_time": "2026-08-22T16:10:08Z",
+          "player_first_name": "Mr",
+          "player_last_name": "3"
+        },
+        {
+          "entry": 9260650,
+          "entry_name": "Here we go!!!",
+          "joined_time": "2026-08-22T16:08:00Z",
+          "player_first_name": "Mamun ur",
+          "player_last_name": "rashid"
+        },
+        {
+          "entry": 9260581,
+          "entry_name": "\u0641\u0631\u064a\u0642 \u0627\u0644\u0628\u062a\u0646\u062c\u0627\u0646\u0629",
+          "joined_time": "2026-08-22T16:07:41Z",
+          "player_first_name": "Mohamed",
+          "player_last_name": "Youssef"
+        },
+        {
+          "entry": 9258596,
+          "entry_name": "Berly's Blues",
+          "joined_time": "2026-08-22T15:57:33Z",
+          "player_first_name": "Amal Berly",
+          "player_last_name": "Kurian"
+        },
+        {
+          "entry": 9258021,
+          "entry_name": "REs",
+          "joined_time": "2026-08-22T15:54:33Z",
+          "player_first_name": "Akmal",
+          "player_last_name": "Azim"
+        },
+        {
+          "entry": 9257265,
+          "entry_name": "Mounib's Team",
+          "joined_time": "2026-08-22T15:50:27Z",
+          "player_first_name": "Mounib",
+          "player_last_name": "Bmk"
+        },
+        {
+          "entry": 9255476,
+          "entry_name": "Abod",
+          "joined_time": "2026-08-22T15:41:07Z",
+          "player_first_name": "Abdulla",
+          "player_last_name": "Elhassan"
+        }
+      ]
+    }
+  }
+]

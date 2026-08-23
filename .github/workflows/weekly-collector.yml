@@ -13,6 +13,11 @@ jobs:
   collect:
     name: Check and collect if a new gameweek is ready
     runs-on: ubuntu-latest
+    # Needed for the "Commit refreshed dashboard fallback files" step below
+    # to push back to main -- the default GITHUB_TOKEN is read-only unless
+    # explicitly granted write access here.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -67,3 +72,42 @@ jobs:
         with:
           path: data/raw/collector_state.json
           key: fpl-collector-state-${{ github.run_id }}
+
+      # data/raw/ is gitignored (personal manager picks/history live
+      # alongside league-wide snapshots there), so the deployed Streamlit
+      # Cloud app -- which reads the repo checkout, not this workflow's
+      # temporary artifact upload above -- would otherwise never see fresh
+      # data. Regenerates the handful of deliberately-committed
+      # data/dashboard_*.json fallback files this run's data/raw/ can
+      # produce, and commits them straight back to main. Not a new privacy
+      # decision: everything committed here (real name, historical points/
+      # rank, current squad/points, mini-league standings) is already
+      # published on this project's own public manager-history GitHub Pages
+      # page, linked throughout the dashboard.
+      - name: Refresh dashboard fallback files
+        if: steps.check.outputs.needed == 'true'
+        id: refresh
+        env:
+          FPL_ENTRY_ID: ${{ secrets.FPL_ENTRY_ID }}
+        run: |
+          if python src/collector/refresh_dashboard_fallbacks.py; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit refreshed dashboard fallback files
+        if: steps.check.outputs.needed == 'true' && steps.refresh.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # `git add` on a path that doesn't exist (e.g. dashboard_leagues.json
+          # when FPL_ENTRY_ID is unset, so the league fallback was never
+          # written) errors out -- so add only the files that actually exist.
+          for f in data/dashboard_bootstrap.json data/dashboard_entry_info.json \
+                   data/dashboard_entry_history.json data/dashboard_current_squad.json \
+                   data/dashboard_leagues.json; do
+            [ -f "$f" ] && git add "$f"
+          done
+          git diff --staged --quiet || git commit -m "Refresh dashboard fallback data [automated]"
+          git push

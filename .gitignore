@@ -19,15 +19,22 @@ data/raw/
 # data, so kept out of git same as data/raw/'s manager-entry history.
 data/manual_squad.json
 
-# data/dashboard_entry_history.json and data/dashboard_entry_info.json (NOT
+# data/dashboard_entry_history.json, data/dashboard_entry_info.json,
+# data/dashboard_current_squad.json, and data/dashboard_leagues.json (NOT
 # matched by data/raw/ above, since they're a different path) are
 # deliberately-committed, non-timestamped copies of ONE specific manager's
-# (this project's own) history.json / info.json, for the same reason
-# data/dashboard_bootstrap.json exists: Streamlit Cloud can't run the
-# collector, so the Manager History tab (including the manager's real name,
-# shown instead of a bare numeric entry id) needs a fallback at deploy time.
-# Not a new privacy decision -- this exact data is already published on the
-# public manager-history GitHub Pages page linked throughout the app.
+# (this project's own) history/info/current-squad-picks/league-standings, for
+# the same reason data/dashboard_bootstrap.json exists: Streamlit Cloud can't
+# run the collector, so Manager History (including the manager's real name
+# and REAL current-gameweek squad/points) and League Tracker need a fallback
+# at deploy time. Regenerated automatically by
+# src/collector/refresh_dashboard_fallbacks.py, run by the scheduled GitHub
+# Actions workflow (.github/workflows/weekly-collector.yml) right after the
+# collector itself, then committed straight back to main -- so these stay at
+# most a day stale while that workflow keeps running, same bound already
+# accepted for data/dashboard_bootstrap.json's prices. Not a new privacy
+# decision -- this exact data is already published on the public
+# manager-history GitHub Pages page linked throughout the app.
 
 # Processed data is normally gitignored (regenerates via load_historical.py +
 # features.py against the vaastav dataset), EXCEPT features.parquet and

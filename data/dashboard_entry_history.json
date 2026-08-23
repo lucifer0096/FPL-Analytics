@@ -1,5 +1,21 @@
 {
-  "current": [],
+  "current": [
+    {
+      "event": 1,
+      "points": 15,
+      "total_points": 15,
+      "rank": 6891581,
+      "rank_sort": 6919931,
+      "overall_rank": 6891574,
+      "percentile_rank": 80,
+      "overall_rank_percentage": "77",
+      "bank": 0,
+      "value": 1000,
+      "event_transfers": 0,
+      "event_transfers_cost": 0,
+      "points_on_bench": 1
+    }
+  ],
   "past": [
     {
       "season_name": "2016/17",

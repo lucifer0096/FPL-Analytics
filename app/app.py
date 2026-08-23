@@ -419,6 +419,9 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
     return df.sort_values("gw").reset_index(drop=True)
 
 
+_DASHBOARD_CURRENT_SQUAD_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_current_squad.json")
+
+
 @st.cache_data
 def load_current_squad_picks(entry_id: int, gw: int) -> dict:
     """This manager's REAL picks for one gameweek of the season actually in
@@ -429,19 +432,22 @@ def load_current_squad_picks(entry_id: int, gw: int) -> dict:
     correct (if provisional -- bonus points can still shift for a day or
     two) well before that flag flips.
 
-    Deliberately has NO committed dashboard-fallback file, unlike bootstrap/
-    entry-history/entry-info above -- those are relatively stable (prices
-    move weekly, past seasons never change), but a live gameweek's picks and
-    points change constantly while it's in progress, so a stale committed
-    copy would misrepresent old, wrong points as current rather than being a
-    reasonable approximation. Returns None if nothing's been collected yet
-    for this gameweek, which the caller should treat as "not available in
-    this environment" rather than fabricating placeholder data."""
+    Falls back to data/dashboard_current_squad.json (a single, deliberately
+    committed copy this manager's own picks + that gameweek's live points,
+    refreshed automatically by the scheduled collector workflow -- see
+    .github/workflows/weekly-collector.yml -- since it's regenerated daily
+    while the season's live, it's never more than a day stale, same
+    staleness bound already accepted for the bootstrap-price fallback).
+    Returns None if genuinely nothing's available in this environment."""
     path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "picks", f"gw{gw}.json")
-    if not os.path.exists(path):
-        return None
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    if os.path.exists(_DASHBOARD_CURRENT_SQUAD_FALLBACK):
+        with open(_DASHBOARD_CURRENT_SQUAD_FALLBACK, encoding="utf-8") as f:
+            bundle = json.load(f)
+        return bundle.get("picks") if bundle.get("gw") == gw else None
+    return None
 
 
 _POSITION_MAP_APP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
@@ -452,14 +458,21 @@ def load_live_gw_points(gw: int) -> dict:
     """Every player's real points for one gameweek in progress (or finished),
     read from the collector's saved data/raw/2026-27/live/gw{n}.json --
     fpl_api.get_event_live(), one call for every player rather than N
-    per-player element-summary calls. Returns {element_id: total_points}.
-    Empty dict if not collected yet in this environment."""
+    per-player element-summary calls. Falls back to the same
+    data/dashboard_current_squad.json bundle load_current_squad_picks uses
+    (see that function's docstring) if data/raw/ is unavailable. Returns an
+    empty dict if genuinely nothing's collected for this gameweek."""
     path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
-    if not os.path.exists(path):
-        return {}
-    with open(path, encoding="utf-8") as f:
-        live = json.load(f)
-    return {e["id"]: e["stats"]["total_points"] for e in live["elements"]}
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            live = json.load(f)
+        return {e["id"]: e["stats"]["total_points"] for e in live["elements"]}
+    if os.path.exists(_DASHBOARD_CURRENT_SQUAD_FALLBACK):
+        with open(_DASHBOARD_CURRENT_SQUAD_FALLBACK, encoding="utf-8") as f:
+            bundle = json.load(f)
+        if bundle.get("gw") == gw:
+            return {int(k): v for k, v in bundle.get("live_points", {}).items()}
+    return {}
 
 
 def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
@@ -499,25 +512,35 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+_DASHBOARD_LEAGUES_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_leagues.json")
+
+
 @st.cache_data
 def load_joined_leagues(entry_id: int) -> list:
     """This manager's PRIVATE classic leagues (joined by code, not FPL's
     auto-generated global/region/club leagues -- see snapshot_entry's
     league_type == "x" filter), each with its full real standings, read from
-    the collector's saved entry/{id}/leagues/{league_id}.json files. Same
-    "no committed fallback, changes live every gameweek" reasoning as
-    load_current_squad_picks -- returns an empty list if nothing's been
-    collected yet in this environment."""
+    the collector's saved entry/{id}/leagues/{league_id}.json files. Falls
+    back to data/dashboard_leagues.json (a single, deliberately committed
+    bundle of every private league's standings, refreshed automatically by
+    the scheduled collector workflow -- see load_current_squad_picks's
+    docstring for the same reasoning: never more than a day stale while the
+    workflow keeps running). Returns an empty list if genuinely nothing's
+    available in this environment."""
     leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "leagues")
-    if not os.path.isdir(leagues_dir):
-        return []
-    leagues = []
-    for fname in sorted(os.listdir(leagues_dir)):
-        if not fname.endswith(".json"):
-            continue
-        with open(os.path.join(leagues_dir, fname), encoding="utf-8") as f:
-            leagues.append(json.load(f))
-    return leagues
+    if os.path.isdir(leagues_dir):
+        leagues = []
+        for fname in sorted(os.listdir(leagues_dir)):
+            if not fname.endswith(".json"):
+                continue
+            with open(os.path.join(leagues_dir, fname), encoding="utf-8") as f:
+                leagues.append(json.load(f))
+        if leagues:
+            return leagues
+    if os.path.exists(_DASHBOARD_LEAGUES_FALLBACK):
+        with open(_DASHBOARD_LEAGUES_FALLBACK, encoding="utf-8") as f:
+            return json.load(f)
+    return []
 
 
 @st.cache_data
