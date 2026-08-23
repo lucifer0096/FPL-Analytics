@@ -720,6 +720,47 @@ def _latest_bootstrap_path() -> str:
 
 
 @st.cache_data
+def live_price_changes() -> pd.DataFrame:
+    """Real 2026-27 price movement SO FAR this season, straight from FPL's
+    own bootstrap-static -- `now_cost` (current price) and `cost_change_start`
+    (FPL's own real cumulative change since the season's opening prices,
+    verified directly against bootstrap-static: positive = risen, negative =
+    fallen). No GW-by-GW historical table needed here, unlike the Historical
+    page's season_insights() -- FPL tracks this delta itself in real time, so
+    this is always exactly as current as the latest collected bootstrap
+    snapshot (refreshed daily by the scheduled collector workflow -- see
+    Automated Collection in the README -- so it updates week by week
+    automatically as the season progresses, no separate wiring needed).
+
+    Returns every player with any real price movement so far, sorted by
+    biggest riser first, with columns: name, position, team, start_cost
+    (now_cost - cost_change_start, i.e. back-derived from FPL's own delta,
+    not a separate lookup), cost (current), price_change. Empty (not an
+    error) if literally nobody has moved yet, which is the correct state
+    very early in a season before FPL's price-change algorithm has reacted
+    to any real transfer activity."""
+    with open(_latest_bootstrap_path(), encoding="utf-8") as f:
+        raw = json.load(f)
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    rows = []
+    for p in raw["elements"]:
+        change = p["cost_change_start"]
+        if change == 0:
+            continue
+        rows.append({
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "price_change": change / 10.0,
+            "start_cost": (p["now_cost"] - change) / 10.0,
+        })
+    df = pd.DataFrame(rows, columns=["name", "position", "team", "start_cost", "cost", "price_change"])
+    return df.sort_values("price_change", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data
 def _team_name_to_badge_code() -> dict:
     """Team name (e.g. "Arsenal", the string every pool already carries as
     `team`) -> FPL's team `code` (e.g. 3), the id FPL's own real badge CDN

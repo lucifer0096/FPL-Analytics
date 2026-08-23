@@ -20,7 +20,7 @@ from shared import (
     PROJECT_DIR, MANAGER_ENTRY_ID,
     load_features, preseason_pool,
     load_manager_name, load_current_season_progress, calculate_free_transfers,
-    load_current_squad_picks, build_live_squad_df, load_joined_leagues,
+    load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
 )
@@ -69,8 +69,8 @@ def _collected_gws() -> list:
     return found
 
 
-tab_squad, tab_transfers, tab_chips, tab_leagues = st.tabs(
-    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker"]
+tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices = st.tabs(
+    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes"]
 )
 
 # =============================================================================
@@ -398,3 +398,56 @@ with tab_leagues:
             f"read live from FPL's own `leagues-classic/{league['league']['id']}/standings` "
             f"endpoint via the collector, not hardcoded."
         )
+
+# =============================================================================
+# PRICE CHANGES (live, updates automatically week by week)
+# =============================================================================
+with tab_prices:
+    st.header("Price changes")
+    st.caption(
+        "Real 2026-27 price movement so far this season — straight from FPL's own "
+        "cost_change_start field (verified directly against the live API), the same real "
+        "number FPL itself uses to track price rises/falls. Updates automatically as the "
+        "collector runs each day; no separate action needed to keep this current."
+    )
+
+    price_changes = live_price_changes()
+
+    if price_changes.empty:
+        st.info(
+            "No real price movement yet this season — this is the correct, expected state "
+            "very early on, before FPL's own price-change algorithm has reacted to enough "
+            "real transfer activity. This will fill in automatically, and keep updating "
+            "week by week, as prices actually start moving."
+        )
+    else:
+        risers = price_changes[price_changes["price_change"] > 0]
+        fallers = price_changes[price_changes["price_change"] < 0].sort_values("price_change")
+
+        rcol1, rcol2 = st.columns(2)
+        with rcol1:
+            st.subheader(f"📈 Risers ({len(risers)})")
+            if risers.empty:
+                st.caption("No risers yet.")
+            else:
+                st.dataframe(
+                    risers[["name", "position", "team", "start_cost", "cost", "price_change"]]
+                    .rename(columns={
+                        "name": "Player", "position": "Pos", "team": "Team",
+                        "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
+                    }),
+                    use_container_width=True, hide_index=True,
+                )
+        with rcol2:
+            st.subheader(f"📉 Fallers ({len(fallers)})")
+            if fallers.empty:
+                st.caption("No fallers yet.")
+            else:
+                st.dataframe(
+                    fallers[["name", "position", "team", "start_cost", "cost", "price_change"]]
+                    .rename(columns={
+                        "name": "Player", "position": "Pos", "team": "Team",
+                        "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
+                    }),
+                    use_container_width=True, hide_index=True,
+                )
