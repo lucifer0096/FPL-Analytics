@@ -217,12 +217,17 @@ def test_squad_card_hover_stats():
         assert col in squad_df.columns, f"build_live_squad_df missing {col}"
     html = shared._player_card_html(squad_df.iloc[0])
     assert "\n" not in html, "card HTML must stay single-line (Markdown-then-HTML rendering bug)"
-    assert "THIS GW" in html and "SEASON" in html, "hover tooltip must carry both gameweek and season sections"
+    assert "fpl-has-tooltip" in html, "card must carry the CSS-tooltip trigger class"
+    assert 'class="fpl-tooltip-content"' in html, "tooltip must be real HTML block content, not a native title attribute (title-attribute line breaks aren't reliable across browsers -- confirmed directly)"
+    assert "This gameweek" in html and "Season so far" in html, "hover tooltip must carry both gameweek and season section headings"
     assert "DEFCON" in html, "hover tooltip must include DEFCON per explicit request"
-    assert "&#10;" in html, "the two tooltip sections must be separated by a real line break (&#10;), not run together on one line"
-    gw_idx, season_idx, break_idx = html.find("THIS GW"), html.find("SEASON"), html.find("&#10;")
-    assert gw_idx < break_idx < season_idx, "the line break must sit between the THIS GW and SEASON sections"
-    print("PASS: My Squad card hover tooltip carries real per-GW + season stats on separate lines (incl. DEFCON)")
+    # Each section heading must be its own separate <div>, not text glued
+    # into one line -- this is what actually guarantees separate lines in
+    # the rendered tooltip (real HTML block layout), unlike a title
+    # attribute's unreliable \n/&#10; rendering.
+    assert '<div class="fpl-tooltip-heading">This gameweek</div>' in html
+    assert '<div class="fpl-tooltip-heading">Season so far</div>' in html
+    print("PASS: My Squad card hover tooltip is a real CSS tooltip with separate GW/season sections (incl. DEFCON)")
 
 
 def test_player_season_stats_and_optimizer_card_hover():
@@ -242,7 +247,7 @@ def test_player_season_stats_and_optimizer_card_hover():
         "team": "Test Team", "cost": 5.0, "predicted_points": 1.0, "in_starting_xi": True,
     })
     html = shared._player_card_html(row)
-    assert "SEASON" in html and "THIS GW" not in html, "optimizer-built card must show season stats only, no per-GW section"
+    assert "Season so far" in html and "This gameweek" not in html, "optimizer-built card must show season stats only, no per-GW section"
     print("PASS: player_season_stats() + optimizer-built card hover (Team of the Season etc.) both work")
 
 

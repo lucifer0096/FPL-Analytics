@@ -1767,52 +1767,46 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
     # Real per-gameweek stat breakdown (this specific gameweek, only present
     # on a live squad's build_live_squad_df row -- an optimizer-built squad
-    # has no single-gameweek minutes/goals/assists/bonus to show) shown as a
-    # native browser hover tooltip (the title attribute -- same mechanism
-    # every other badge on this card already uses).
-    gw_stats_line = ""
+    # has no single-gameweek minutes/goals/assists/bonus to show) and real
+    # SEASON-cumulative stats (player_season_stats(), 60s-ttl live data),
+    # each built as a REAL HTML row rather than a single joined text string.
+    # A native browser `title` attribute was tried first, but title-attribute
+    # line-break rendering (via \n or the &#10; entity) is NOT reliable
+    # across real browsers -- confirmed directly: it rendered as a literal
+    # "||" separator instead of a line break for the user. A genuine
+    # CSS-only tooltip (a hidden child div shown via :hover, styled in
+    # inject_shared_css's .fpl-stats-tooltip rules) guarantees each stat
+    # section renders on its own real line in every browser, since it's
+    # actual HTML block layout, not a single attribute string.
+    gw_rows_html = ""
     if "minutes_played" in row.index and pd.notna(row.get("minutes_played")):
         bonus = row.get("bonus")
-        bonus_line = f"Bonus {int(bonus)}" if pd.notna(bonus) else "Bonus not yet calculated"
-        gw_stats_line = (
-            f"THIS GW -- Minutes: {int(row['minutes_played'])} | "
-            f"Goals: {int(row.get('goals_scored') or 0)} | "
-            f"Assists: {int(row.get('assists') or 0)} | "
-            f"GW points: {int(row.get('gw_total_points') or 0)} | "
-            f"{bonus_line}"
+        bonus_text = f"Bonus {int(bonus)}" if pd.notna(bonus) else "Bonus not yet calculated"
+        gw_rows_html = (
+            '<div class="fpl-tooltip-heading">This gameweek</div>'
+            f'<div>Minutes {int(row["minutes_played"])} · Goals {int(row.get("goals_scored") or 0)} · '
+            f'Assists {int(row.get("assists") or 0)}</div>'
+            f'<div>GW points {int(row.get("gw_total_points") or 0)} · {bonus_text}</div>'
         )
-    # Real SEASON-cumulative stats (player_season_stats(), 60s-ttl live
-    # data) appended to the same tooltip -- requested explicitly so a
-    # squad card's hover shows the full season picture, not just this one
-    # gameweek's numbers. Only attempted when a real player_id is present
-    # (every card-building path has this column) and the season lookup
-    # actually finds the player (should always succeed for a real squad
-    # member, but guarded rather than assumed).
-    season_stats_line = ""
+    season_rows_html = ""
     if "player_id" in row.index and pd.notna(row.get("player_id")):
         season = player_season_stats(int(row["player_id"]))
         if season:
-            season_stats_line = (
-                f"SEASON -- Pts: {season['total_points']} | Mins: {season['minutes']} | "
-                f"Goals: {season['goals_scored']} | Assists: {season['assists']} | "
-                f"DEFCON: {season['defensive_contribution']} | Bonus: {season['bonus']} | "
-                f"xG: {season['expected_goals']:.1f} | xA: {season['expected_assists']:.1f} | "
-                f"Yellow/Red: {season['yellow_cards']}/{season['red_cards']}"
+            season_rows_html = (
+                '<div class="fpl-tooltip-heading">Season so far</div>'
+                f'<div>Points {season["total_points"]} · Minutes {season["minutes"]} · '
+                f'Goals {season["goals_scored"]} · Assists {season["assists"]}</div>'
+                f'<div>DEFCON {season["defensive_contribution"]} · Bonus {season["bonus"]} · '
+                f'Yellow/Red {season["yellow_cards"]}/{season["red_cards"]}</div>'
+                f'<div>xG {season["expected_goals"]:.1f} · xA {season["expected_assists"]:.1f}</div>'
             )
-    # "THIS GW" and "SEASON" need to show on their own separate lines in
-    # the native browser tooltip, not run together on one line -- but this
-    # whole f-string is later passed to st.markdown(unsafe_allow_html=True),
-    # which treats an embedded literal newline as a potential Markdown
-    # code-block trigger (see this function's docstring). Using the HTML
-    # numeric character entity &#10; instead of an actual "\n" byte gets a
-    # real line break inside the title attribute's rendered tooltip while
-    # keeping the generated HTML STRING itself a genuine single line with
-    # zero embedded newlines, exactly like every other line this function
-    # builds.
-    stats_tooltip = "&#10;".join(line for line in (gw_stats_line, season_stats_line) if line)
-    title_attr = f' title="{stats_tooltip}"' if stats_tooltip else ""
+    tooltip_html = (
+        f'<div class="fpl-tooltip-content">{gw_rows_html}{season_rows_html}</div>'
+        if (gw_rows_html or season_rows_html) else ""
+    )
+    tooltip_wrapper_class = " fpl-has-tooltip" if tooltip_html else ""
     return (
-        f'<div class="fpl-player-card"{title_attr} style="position: relative; background: rgba(255,255,255,0.94); '
+        f'<div class="fpl-player-card{tooltip_wrapper_class}" style="position: relative; background: rgba(255,255,255,0.94); '
         f'border-radius: 8px; padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
         f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
         f'{badge_html}'
@@ -1828,6 +1822,7 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'{points_label}</div>'
         f'{ppg_html}'
         f'{fixtures_html}'
+        f'{tooltip_html}'
         f'</div>'
     )
 
@@ -2063,6 +2058,48 @@ def inject_shared_css() -> None:
     div[data-testid="column"]:nth-child(9) .fpl-player-card { animation-delay: 0.24s; }
     div[data-testid="column"]:nth-child(10) .fpl-player-card { animation-delay: 0.27s; }
     div[data-testid="column"]:nth-child(11) .fpl-player-card { animation-delay: 0.30s; }
+
+    /* ---- Player card stat tooltip: real CSS hover, not a native title
+       attribute -- title-attribute line breaks (via \n or &#10;) aren't
+       reliably rendered across real browsers (confirmed directly: showed
+       as a literal "||" instead of separate lines), so this uses genuine
+       HTML block layout instead, guaranteeing each stat section renders on
+       its own line everywhere. Hidden by default, shown on hover with a
+       short delay-free fade so it doesn't flicker on a quick mouse pass. */
+    .fpl-has-tooltip { overflow: visible; }
+    .fpl-tooltip-content {
+        display: none;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a1a;
+        color: #f0f0f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 10.5px;
+        line-height: 1.5;
+        text-align: left;
+        white-space: nowrap;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+        z-index: 10;
+    }
+    .fpl-tooltip-content::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: #1a1a1a;
+    }
+    .fpl-tooltip-heading {
+        font-weight: 700;
+        color: #ffb300;
+        margin-top: 4px;
+    }
+    .fpl-tooltip-heading:first-child { margin-top: 0; }
+    .fpl-has-tooltip:hover .fpl-tooltip-content { display: block; }
 
     /* ---- Hero: subtle shimmer sweep, not distracting ---- */
     @keyframes fpl-hero-shimmer {
