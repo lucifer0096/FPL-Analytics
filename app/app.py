@@ -23,7 +23,7 @@ from shared import (
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
     tonight_price_projections,
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
-    season_leaderboards, team_insights,
+    season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -179,6 +179,12 @@ def _render_my_squad_tab():
             f"publicly visible until THAT gameweek's own deadline passes (no public endpoint "
             f"exposes a squad mid-transfer-window). This will update automatically to your real "
             f"GW{latest_gw + 1} squad once its deadline passes and the collector picks it up."
+        )
+
+        st.caption(
+            "💡 Hover any player card above for their full real 2026-27 SEASON stats "
+            "(minutes, goals, assists, DEFCON, bonus, xG/xA, ICT, and more) — every number is "
+            "a running season total FPL itself tracks, not a single-gameweek figure."
         )
 
         # Store the live squad in the SAME session_state keys the historical

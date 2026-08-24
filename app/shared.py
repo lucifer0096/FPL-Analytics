@@ -1480,6 +1480,57 @@ def season_leaderboards(top_n: int = 10) -> dict:
 
 
 @st.cache_data(ttl=60)
+def player_season_stats(player_id: int) -> dict:
+    """Every real, current 2026-27 SEASON-cumulative stat for one player,
+    read verbatim from bootstrap-static (no per-gameweek recomputation --
+    FPL already tracks these as running season totals). Returns an empty
+    dict if the player id isn't found (shouldn't normally happen for a
+    real squad member, but guarded rather than assumed).
+
+    Deliberately includes DEFCON (`defensive_contribution`) alongside the
+    more commonly-shown goals/assists/bonus -- the 2025-26+ scoring
+    category is easy to overlook since it's newer than the rest, but it's
+    real points on the board same as anything else here. Numeric-as-string
+    fields FPL publishes that way (`ict_index`, `points_per_game`,
+    `selected_by_percent`, `form`, `expected_goals`/`expected_assists`/
+    `expected_goal_involvements`) are cast to float here so callers never
+    have to remember which fields need that."""
+    raw = _load_bootstrap()
+    player = next((p for p in raw["elements"] if p["id"] == player_id), None)
+    if player is None:
+        return {}
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    return {
+        "name": f"{player['first_name']} {player['second_name']}",
+        "team": team_by_id.get(player["team"]),
+        "position": _POSITION_MAP_APP[player["element_type"]],
+        "cost": player["now_cost"] / 10.0,
+        "minutes": player["minutes"],
+        "starts": player["starts"],
+        "total_points": player["total_points"],
+        "points_per_game": float(player["points_per_game"] or 0),
+        "goals_scored": player["goals_scored"],
+        "assists": player["assists"],
+        "expected_goals": float(player["expected_goals"] or 0),
+        "expected_assists": float(player["expected_assists"] or 0),
+        "expected_goal_involvements": float(player["expected_goal_involvements"] or 0),
+        "clean_sheets": player["clean_sheets"],
+        "goals_conceded": player["goals_conceded"],
+        "defensive_contribution": player["defensive_contribution"],
+        "bonus": player["bonus"],
+        "bps": player["bps"],
+        "yellow_cards": player["yellow_cards"],
+        "red_cards": player["red_cards"],
+        "saves": player["saves"],
+        "ict_index": float(player["ict_index"] or 0),
+        "form": float(player["form"] or 0),
+        "selected_by_percent": float(player["selected_by_percent"] or 0),
+        "status": player["status"],
+        "news": player.get("news") or "",
+    }
+
+
+@st.cache_data(ttl=60)
 def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     """Each real Premier League team's next N gameweeks' opponents and FPL's
     own published fixture-difficulty rating (1-5, verified directly against
@@ -1714,25 +1765,41 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
             for f in row["next_fixtures"]
         )
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
-    # Real per-gameweek stat breakdown shown as a native browser hover
-    # tooltip (the title attribute -- same mechanism every other badge on
-    # this card already uses) -- only present when build_live_squad_df has
-    # attached these columns (a real live squad, not an optimizer-built
-    # one, which has no per-gameweek minutes/goals/assists/bonus to show).
-    # minutes_played is checked rather than gw_total_points/etc individually
-    # since it's always populated together with the others by the same
-    # build_live_squad_df row.
-    stats_tooltip = ""
+    # Real per-gameweek stat breakdown (this specific gameweek, only present
+    # on a live squad's build_live_squad_df row -- an optimizer-built squad
+    # has no single-gameweek minutes/goals/assists/bonus to show) shown as a
+    # native browser hover tooltip (the title attribute -- same mechanism
+    # every other badge on this card already uses).
+    gw_stats_line = ""
     if "minutes_played" in row.index and pd.notna(row.get("minutes_played")):
         bonus = row.get("bonus")
-        bonus_line = f"Bonus: {int(bonus)}" if pd.notna(bonus) else "Bonus: not yet calculated"
-        stats_tooltip = (
-            f"Minutes: {int(row['minutes_played'])} | "
+        bonus_line = f"Bonus {int(bonus)}" if pd.notna(bonus) else "Bonus not yet calculated"
+        gw_stats_line = (
+            f"THIS GW -- Minutes: {int(row['minutes_played'])} | "
             f"Goals: {int(row.get('goals_scored') or 0)} | "
             f"Assists: {int(row.get('assists') or 0)} | "
             f"GW points: {int(row.get('gw_total_points') or 0)} | "
             f"{bonus_line}"
         )
+    # Real SEASON-cumulative stats (player_season_stats(), 60s-ttl live
+    # data) appended to the same tooltip -- requested explicitly so a
+    # squad card's hover shows the full season picture, not just this one
+    # gameweek's numbers. Only attempted when a real player_id is present
+    # (every card-building path has this column) and the season lookup
+    # actually finds the player (should always succeed for a real squad
+    # member, but guarded rather than assumed).
+    season_stats_line = ""
+    if "player_id" in row.index and pd.notna(row.get("player_id")):
+        season = player_season_stats(int(row["player_id"]))
+        if season:
+            season_stats_line = (
+                f"SEASON -- Pts: {season['total_points']} | Mins: {season['minutes']} | "
+                f"Goals: {season['goals_scored']} | Assists: {season['assists']} | "
+                f"DEFCON: {season['defensive_contribution']} | Bonus: {season['bonus']} | "
+                f"xG: {season['expected_goals']:.1f} | xA: {season['expected_assists']:.1f} | "
+                f"Yellow/Red: {season['yellow_cards']}/{season['red_cards']}"
+            )
+    stats_tooltip = " || ".join(line for line in (gw_stats_line, season_stats_line) if line)
     title_attr = f' title="{stats_tooltip}"' if stats_tooltip else ""
     return (
         f'<div class="fpl-player-card"{title_attr} style="position: relative; background: rgba(255,255,255,0.94); '

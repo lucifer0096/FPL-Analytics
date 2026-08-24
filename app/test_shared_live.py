@@ -20,6 +20,8 @@ Covers everything added by the 2026-08-24 live-sync work:
 import os
 import sys
 
+import pandas as pd
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shared
 
@@ -82,7 +84,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "_load_bootstrap", "_load_fixtures_df", "_load_entry_history",
         "load_current_squad_picks", "load_live_gw_points", "load_live_gw_minutes",
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
-        "load_current_season_progress", "_team_fixture_started",
+        "load_current_season_progress", "_team_fixture_started", "player_season_stats",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -215,8 +217,30 @@ def test_squad_card_hover_stats():
         assert col in squad_df.columns, f"build_live_squad_df missing {col}"
     html = shared._player_card_html(squad_df.iloc[0])
     assert "\n" not in html, "card HTML must stay single-line (Markdown-then-HTML rendering bug)"
-    assert "Minutes:" in html and "Bonus:" in html, "hover tooltip must be present in the card HTML"
-    print("PASS: My Squad card hover tooltip carries real minutes/goals/assists/bonus/points")
+    assert "THIS GW" in html and "SEASON" in html, "hover tooltip must carry both gameweek and season sections"
+    assert "DEFCON" in html, "hover tooltip must include DEFCON per explicit request"
+    print("PASS: My Squad card hover tooltip carries real per-GW + season stats (incl. DEFCON)")
+
+
+def test_player_season_stats_and_optimizer_card_hover():
+    raw = shared._load_bootstrap()
+    player = raw["elements"][0]
+    stats = shared.player_season_stats(player["id"])
+    assert stats, "player_season_stats must find a real player by id"
+    for field in ["total_points", "minutes", "goals_scored", "assists", "defensive_contribution", "bonus", "expected_goals", "expected_assists"]:
+        assert field in stats, f"player_season_stats missing {field}"
+
+    # An optimizer-built card (no per-gameweek columns at all) should still
+    # get a real season-stats tooltip -- this is what makes the hover work
+    # on Team of the Season / any non-live-squad pitch view too, not just
+    # My Squad.
+    row = pd.Series({
+        "player_id": player["id"], "name": "Test Player", "position": "FWD",
+        "team": "Test Team", "cost": 5.0, "predicted_points": 1.0, "in_starting_xi": True,
+    })
+    html = shared._player_card_html(row)
+    assert "SEASON" in html and "THIS GW" not in html, "optimizer-built card must show season stats only, no per-GW section"
+    print("PASS: player_season_stats() + optimizer-built card hover (Team of the Season etc.) both work")
 
 
 def test_not_yet_played_vs_no_game_time_split():
@@ -248,6 +272,7 @@ if __name__ == "__main__":
     test_premier_league_table_movement()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
+    test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()
     print("\nAll shared.py live-sync checks passed.")
