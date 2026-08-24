@@ -606,6 +606,42 @@ def load_live_gw_points(gw: int) -> dict:
 
 
 @st.cache_data(ttl=60)
+def load_live_gw_stats(gw: int) -> dict:
+    """Every player's FULL real per-gameweek stats dict for one gameweek
+    (minutes, goals_scored, assists, total_points, bonus, bps, etc. --
+    every field FPL's own event/{gw}/live endpoint returns per player, not
+    a fixed subset), keyed by player id. Same live-first/60s-ttl/fallback
+    pattern as load_live_gw_points/load_live_gw_minutes -- kept as a
+    separate function (rather than changing what those two return) so
+    existing callers of the narrower point/minutes-only functions are
+    unaffected; this one is for callers that need the fuller picture (see
+    build_live_squad_df's hover-tooltip fields on My Squad).
+
+    `bonus` here is FPL's own REAL bonus points already awarded for this
+    gameweek -- 0 until bonus is calculated (mid-match or shortly after
+    full time), then the real final number once it is. Deliberately not a
+    projected/expected bonus derived from BPS ranking -- BPS ranking
+    changes constantly while a match is live, so a "projected bonus" would
+    be this project's own guess dressed up as a fact FPL doesn't publish,
+    not a real number.
+
+    Falls back to the collector's saved data/raw/2026-27/live/gw{n}.json if
+    the live call fails. Returns an empty dict if genuinely nothing's
+    available."""
+    try:
+        live = fpl_api.get_event_live(gw)
+        return {e["id"]: e["stats"] for e in live["elements"]}
+    except Exception:
+        pass
+    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        live = json.load(f)
+    return {e["id"]: e["stats"] for e in live["elements"]}
+
+
+@st.cache_data(ttl=60)
 def load_live_gw_minutes(gw: int) -> dict:
     """Every player's real MINUTES for one gameweek -- used to tell apart
     "played and scored 0" from "didn't get any game time at all," a
@@ -681,6 +717,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
     live_points = load_live_gw_points(gw)
     live_minutes = load_live_gw_minutes(gw)
+    live_stats = load_live_gw_stats(gw)
     fixtures_by_team = team_upcoming_fixtures(3)
     fixture_started_by_team = _team_fixture_started(gw)
 
@@ -704,6 +741,13 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
         # started) and "played 0 minutes in a finished/live match" are two
         # different real situations, not the same "no game time" state.
         fixture_started = fixture_started_by_team.get(team_name)
+        # Real per-gameweek stats for the My Squad hover tooltip -- minutes,
+        # goals, assists, real bonus already awarded, and the real
+        # unmultiplied gameweek total (distinct from predicted_points below,
+        # which IS multiplier-applied for captaincy -- the tooltip shows the
+        # player's own real total before any captain doubling, since that's
+        # the number FPL itself reports for the player individually).
+        stats = live_stats.get(eid, {})
         rows.append({
             "player_id": eid,
             "player_code": player["code"],
@@ -714,6 +758,11 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
             "did_not_play": minutes == 0,
             "fixture_started": fixture_started,
+            "minutes_played": stats.get("minutes"),
+            "goals_scored": stats.get("goals_scored"),
+            "assists": stats.get("assists"),
+            "bonus": stats.get("bonus"),
+            "gw_total_points": stats.get("total_points"),
             "in_starting_xi": pick["multiplier"] > 0,
             "is_captain": pick["is_captain"],
             "is_vice_captain": pick["is_vice_captain"],
@@ -1665,8 +1714,28 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
             for f in row["next_fixtures"]
         )
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
+    # Real per-gameweek stat breakdown shown as a native browser hover
+    # tooltip (the title attribute -- same mechanism every other badge on
+    # this card already uses) -- only present when build_live_squad_df has
+    # attached these columns (a real live squad, not an optimizer-built
+    # one, which has no per-gameweek minutes/goals/assists/bonus to show).
+    # minutes_played is checked rather than gw_total_points/etc individually
+    # since it's always populated together with the others by the same
+    # build_live_squad_df row.
+    stats_tooltip = ""
+    if "minutes_played" in row.index and pd.notna(row.get("minutes_played")):
+        bonus = row.get("bonus")
+        bonus_line = f"Bonus: {int(bonus)}" if pd.notna(bonus) else "Bonus: not yet calculated"
+        stats_tooltip = (
+            f"Minutes: {int(row['minutes_played'])} | "
+            f"Goals: {int(row.get('goals_scored') or 0)} | "
+            f"Assists: {int(row.get('assists') or 0)} | "
+            f"GW points: {int(row.get('gw_total_points') or 0)} | "
+            f"{bonus_line}"
+        )
+    title_attr = f' title="{stats_tooltip}"' if stats_tooltip else ""
     return (
-        f'<div class="fpl-player-card" style="position: relative; background: rgba(255,255,255,0.94); '
+        f'<div class="fpl-player-card"{title_attr} style="position: relative; background: rgba(255,255,255,0.94); '
         f'border-radius: 8px; padding: 6px 8px; min-width: 92px; max-width: 118px; text-align: center; '
         f'box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-family: sans-serif;">'
         f'{badge_html}'

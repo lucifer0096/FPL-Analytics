@@ -159,6 +159,20 @@ def test_fixture_started_and_gameweek_live():
     print(f"PASS: _team_fixture_started/is_gameweek_live real data OK (is_gameweek_live={is_live})")
 
 
+def test_squad_card_hover_stats():
+    picks_data = shared.load_current_squad_picks(MANAGER_ENTRY_ID, 1)
+    if picks_data is None:
+        print("SKIP: hover stats (no real squad data for this entry/gw)")
+        return
+    squad_df = shared.build_live_squad_df(picks_data, 1)
+    for col in ["minutes_played", "goals_scored", "assists", "bonus", "gw_total_points"]:
+        assert col in squad_df.columns, f"build_live_squad_df missing {col}"
+    html = shared._player_card_html(squad_df.iloc[0])
+    assert "\n" not in html, "card HTML must stay single-line (Markdown-then-HTML rendering bug)"
+    assert "Minutes:" in html and "Bonus:" in html, "hover tooltip must be present in the card HTML"
+    print("PASS: My Squad card hover tooltip carries real minutes/goals/assists/bonus/points")
+
+
 def test_not_yet_played_vs_no_game_time_split():
     picks_data = shared.load_current_squad_picks(MANAGER_ENTRY_ID, 1)
     if picks_data is None:
@@ -186,6 +200,7 @@ if __name__ == "__main__":
     test_team_insights_consistency()
     test_premier_league_table_movement()
     test_tonight_price_projections_shape()
+    test_squad_card_hover_stats()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()
     print("\nAll shared.py live-sync checks passed.")
