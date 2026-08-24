@@ -219,7 +219,10 @@ def test_squad_card_hover_stats():
     assert "\n" not in html, "card HTML must stay single-line (Markdown-then-HTML rendering bug)"
     assert "THIS GW" in html and "SEASON" in html, "hover tooltip must carry both gameweek and season sections"
     assert "DEFCON" in html, "hover tooltip must include DEFCON per explicit request"
-    print("PASS: My Squad card hover tooltip carries real per-GW + season stats (incl. DEFCON)")
+    assert "&#10;" in html, "the two tooltip sections must be separated by a real line break (&#10;), not run together on one line"
+    gw_idx, season_idx, break_idx = html.find("THIS GW"), html.find("SEASON"), html.find("&#10;")
+    assert gw_idx < break_idx < season_idx, "the line break must sit between the THIS GW and SEASON sections"
+    print("PASS: My Squad card hover tooltip carries real per-GW + season stats on separate lines (incl. DEFCON)")
 
 
 def test_player_season_stats_and_optimizer_card_hover():

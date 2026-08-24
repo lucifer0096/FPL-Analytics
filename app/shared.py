@@ -1799,7 +1799,17 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
                 f"xG: {season['expected_goals']:.1f} | xA: {season['expected_assists']:.1f} | "
                 f"Yellow/Red: {season['yellow_cards']}/{season['red_cards']}"
             )
-    stats_tooltip = " || ".join(line for line in (gw_stats_line, season_stats_line) if line)
+    # "THIS GW" and "SEASON" need to show on their own separate lines in
+    # the native browser tooltip, not run together on one line -- but this
+    # whole f-string is later passed to st.markdown(unsafe_allow_html=True),
+    # which treats an embedded literal newline as a potential Markdown
+    # code-block trigger (see this function's docstring). Using the HTML
+    # numeric character entity &#10; instead of an actual "\n" byte gets a
+    # real line break inside the title attribute's rendered tooltip while
+    # keeping the generated HTML STRING itself a genuine single line with
+    # zero embedded newlines, exactly like every other line this function
+    # builds.
+    stats_tooltip = "&#10;".join(line for line in (gw_stats_line, season_stats_line) if line)
     title_attr = f' title="{stats_tooltip}"' if stats_tooltip else ""
     return (
         f'<div class="fpl-player-card"{title_attr} style="position: relative; background: rgba(255,255,255,0.94); '
