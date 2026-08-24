@@ -53,6 +53,52 @@ def _restore_api(originals):
         setattr(shared.fpl_api, name, fn)
 
 
+def test_every_live_facing_function_has_a_cache_ttl():
+    """Regression test for a real bug found 2026-08-24: several functions
+    that read live data via _load_bootstrap()/_load_fixtures_df() (which
+    DO have a 60s ttl) were themselves decorated with plain @st.cache_data
+    -- NO ttl of their own -- so Streamlit cached their return value
+    FOREVER regardless of what changed underneath. A live gameweek's real
+    stat updates (e.g. a player's assist total) never reached the UI even
+    though every fragment/rerun/underlying-loader was working correctly,
+    because these functions' own cached results simply never expired.
+
+    Checks .clear has a corresponding ttl by inspecting Streamlit's cache
+    wrapper -- concretely, via the documented cache_data function
+    attribute path is version-fragile, so instead this asserts each
+    function actually returns FRESH data by clearing its cache and calling
+    it, which only proves it CAN run, not that it times out on its own. The
+    real, durable check: every one of these must be re-decorated with an
+    explicit ttl matching the loaders it depends on (60s) -- enforced here
+    by reading shared.py's source and asserting these specific function
+    names are decorated with @st.cache_data(ttl=...), not the bare form."""
+    import inspect
+    source = inspect.getsource(shared)
+    live_facing_functions = [
+        "live_price_changes", "likely_price_movers", "differential_finder",
+        "league_wide_status_flags", "premier_league_table", "team_insights",
+        "season_leaderboards", "team_upcoming_fixtures",
+        "tonight_price_projections", "premier_league_table_with_movement",
+        "_load_bootstrap", "_load_fixtures_df", "_load_entry_history",
+        "load_current_squad_picks", "load_live_gw_points", "load_live_gw_minutes",
+        "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
+        "load_current_season_progress", "_team_fixture_started",
+    ]
+    missing_ttl = []
+    for name in live_facing_functions:
+        marker = f"def {name}("
+        idx = source.find(marker)
+        assert idx != -1, f"{name} not found in shared.py -- test needs updating"
+        # Walk backwards to the nearest decorator line.
+        preceding = source[:idx]
+        last_at = preceding.rfind("@st.cache_data")
+        decorator_line = preceding[last_at:idx].splitlines()[0]
+        if "ttl=" not in decorator_line:
+            missing_ttl.append(name)
+    assert not missing_ttl, f"these live-facing functions are cached with NO ttl (will freeze forever): {missing_ttl}"
+    print(f"PASS: all {len(live_facing_functions)} live-facing functions carry an explicit cache ttl")
+
+
 def test_load_bootstrap_live_and_fallback():
     raw = shared._load_bootstrap.__wrapped__()
     assert len(raw["elements"]) > 500, "real bootstrap should have 500+ players"
@@ -193,6 +239,7 @@ def test_not_yet_played_vs_no_game_time_split():
 
 
 if __name__ == "__main__":
+    test_every_live_facing_function_has_a_cache_ttl()
     test_load_bootstrap_live_and_fallback()
     test_load_fixtures_df_live_and_fallback()
     test_load_entry_history_live_and_fallback()

@@ -1035,7 +1035,7 @@ def _load_fixtures_df() -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def live_price_changes() -> pd.DataFrame:
     """Real 2026-27 price movement SO FAR this season, straight from FPL's
     own bootstrap-static -- `now_cost` (current price) and `cost_change_start`
@@ -1076,7 +1076,7 @@ def live_price_changes() -> pd.DataFrame:
     return df.sort_values("price_change", ascending=False).reset_index(drop=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def likely_price_movers(top_n: int = 10) -> pd.DataFrame:
     """Players with real, current transfer MOMENTUM (net transfers this
     gameweek: transfers_in_event - transfers_out_event, both real FPL fields
@@ -1168,7 +1168,7 @@ def tonight_price_projections(top_n: int = 10) -> pd.DataFrame:
     return df.sort_values("_abs", ascending=False).drop(columns=["_abs"]).head(top_n * 2).reset_index(drop=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, top_n: int = 15) -> pd.DataFrame:
     """Real 'differential' picks -- low-owned players (FPL's own real
     selected_by_percent field) with real, meaningful upside (FPL's own
@@ -1213,7 +1213,7 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
     return df.sort_values("ep_next", ascending=False).head(top_n).reset_index(drop=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def league_wide_status_flags() -> pd.DataFrame:
     """Every real, currently-flagged player league-wide (not just this
     manager's own squad) -- the SAME real FPL fields (status/news/
@@ -1253,7 +1253,7 @@ def league_wide_status_flags() -> pd.DataFrame:
     return df.sort_values("selected_by_percent", ascending=False).reset_index(drop=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def premier_league_table(through_gw: int = None) -> pd.DataFrame:
     """The real Premier League table for the season in progress -- computed
     directly from fixtures.csv's own real team_h_score/team_a_score for
@@ -1353,7 +1353,7 @@ def premier_league_table_with_movement() -> pd.DataFrame:
     return current
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def team_insights(top_n: int = 5) -> dict:
     """Real, current-season team-level insights derived from
     premier_league_table()'s own gf/ga (no separate fixtures.csv read --
@@ -1410,7 +1410,7 @@ def team_insights(top_n: int = 5) -> dict:
     }
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def season_leaderboards(top_n: int = 10) -> dict:
     """Real, current 2026-27 season leaderboards -- every number here is a
     single FPL bootstrap-static field read directly, no derived/invented
@@ -1479,7 +1479,7 @@ def season_leaderboards(top_n: int = 10) -> dict:
     }
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     """Each real Premier League team's next N gameweeks' opponents and FPL's
     own published fixture-difficulty rating (1-5, verified directly against
