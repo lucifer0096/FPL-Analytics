@@ -22,7 +22,8 @@ from shared import (
     load_manager_name, load_current_season_progress, calculate_free_transfers,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
     tonight_price_projections,
-    differential_finder, league_wide_status_flags, premier_league_table, season_leaderboards, team_insights,
+    differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
+    season_leaderboards, team_insights,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, POSITION_REQUIREMENTS,
@@ -70,6 +71,25 @@ def _collected_gws() -> list:
         if load_current_squad_picks(MANAGER_ENTRY_ID, gw) is not None:
             found.append(gw)
     return found
+
+
+def _arrow_price_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Prefixes a numeric price-movement column with a real green ▲ / red ▼
+    arrow matching the row's own actual sign -- a purely visual aid (the
+    real underlying number is unchanged) so a riser/faller table reads at
+    a glance without checking the sign of every row individually. Positive
+    values get ▲ (green), negative get ▼ (red), exactly zero gets neither
+    (there's no real movement to point an arrow at)."""
+    df = df.copy()
+
+    def _format(value):
+        if pd.isna(value) or value == 0:
+            return f"{value}"
+        arrow = "🟢▲" if value > 0 else "🔴▼"
+        return f"{arrow} {value}"
+
+    df[column] = df[column].map(_format)
+    return df
 
 
 tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_insights = st.tabs(
@@ -571,15 +591,16 @@ with tab_leagues:
         )
 
 # =============================================================================
-# PRICE CHANGES (live, updates automatically week by week)
+# PRICE CHANGES (live, auto-refreshes while a gameweek is live)
 # =============================================================================
-with tab_prices:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_price_changes_tab():
     st.header("Price changes")
     st.caption(
         "Real 2026-27 price movement so far this season — straight from FPL's own "
         "cost_change_start field (verified directly against the live API), the same real "
-        "number FPL itself uses to track price rises/falls. Updates automatically as the "
-        "collector runs each day; no separate action needed to keep this current."
+        "number FPL itself uses to track price rises/falls. Fetched live on every refresh "
+        "(60s cache) — no separate action needed to keep this current."
     )
 
     price_changes = live_price_changes()
@@ -602,8 +623,10 @@ with tab_prices:
                 st.caption("No risers yet.")
             else:
                 st.dataframe(
-                    risers[["name", "position", "team", "start_cost", "cost", "price_change"]]
-                    .rename(columns={
+                    _arrow_price_column(
+                        risers[["name", "position", "team", "start_cost", "cost", "price_change"]],
+                        "price_change",
+                    ).rename(columns={
                         "name": "Player", "position": "Pos", "team": "Team",
                         "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
                     }),
@@ -615,8 +638,10 @@ with tab_prices:
                 st.caption("No fallers yet.")
             else:
                 st.dataframe(
-                    fallers[["name", "position", "team", "start_cost", "cost", "price_change"]]
-                    .rename(columns={
+                    _arrow_price_column(
+                        fallers[["name", "position", "team", "start_cost", "cost", "price_change"]],
+                        "price_change",
+                    ).rename(columns={
                         "name": "Player", "position": "Pos", "team": "Team",
                         "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
                     }),
@@ -640,15 +665,17 @@ with tab_prices:
         with mcol1:
             st.caption("Likely risers (heavy net transfers IN)")
             st.dataframe(
-                likely_risers[["name", "position", "team", "cost", "net_transfers"]]
-                .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers in"}),
+                _arrow_price_column(
+                    likely_risers[["name", "position", "team", "cost", "net_transfers"]], "net_transfers",
+                ).rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers in"}),
                 use_container_width=True, hide_index=True,
             )
         with mcol2:
             st.caption("Likely fallers (heavy net transfers OUT)")
             st.dataframe(
-                likely_fallers[["name", "position", "team", "cost", "net_transfers"]]
-                .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
+                _arrow_price_column(
+                    likely_fallers[["name", "position", "team", "cost", "net_transfers"]], "net_transfers",
+                ).rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
                 use_container_width=True, hide_index=True,
             )
 
@@ -673,8 +700,9 @@ with tab_prices:
         with jcol1:
             st.caption("Projected to rise tonight")
             st.dataframe(
-                likely_rise[["name", "position", "team", "cost", "projected_percent", "likelihood"]]
-                .rename(columns={
+                _arrow_price_column(
+                    likely_rise[["name", "position", "team", "cost", "projected_percent", "likelihood"]], "likelihood",
+                ).rename(columns={
                     "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
                     "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
                 }),
@@ -683,50 +711,71 @@ with tab_prices:
         with jcol2:
             st.caption("Projected to fall tonight")
             st.dataframe(
-                likely_fall[["name", "position", "team", "cost", "projected_percent", "likelihood"]]
-                .rename(columns={
+                _arrow_price_column(
+                    likely_fall[["name", "position", "team", "cost", "projected_percent", "likelihood"]], "likelihood",
+                ).rename(columns={
                     "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
                     "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
                 }),
                 use_container_width=True, hide_index=True,
             )
 
+
+with tab_prices:
+    _render_price_changes_tab()
+
 # =============================================================================
 # PL TABLE (real league standings, computed from fixtures.csv's own scores)
 # =============================================================================
-with tab_table:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_pl_table_tab():
     st.header("Premier League table")
     st.caption(
         "The real, current 2026-27 table — computed directly from fixtures.csv's own recorded "
         "match scores, not FPL's strength ratings or any derived metric. A match's real score is "
         "counted as soon as it's recorded, without waiting on the 'finished' flag (verified "
         "directly: 'finished' stays False for hours after a match ends, until bonus points lock "
-        "in) so results appear here as soon as they're actually known. Updates automatically as "
-        "the collector runs each day."
+        "in) so results appear here as soon as they're actually known. Fetched live on every "
+        "refresh (60s cache)."
     )
-    table = premier_league_table()
+    table = premier_league_table_with_movement()
     if table.empty or table["played"].sum() == 0:
         st.info("No results recorded yet this season.")
     else:
+        display_table = table.copy()
+        display_table["movement"] = display_table["movement"].map(
+            lambda m: "—" if pd.isna(m) else ("🟢▲" if m > 0 else ("🔴▼" if m < 0 else "▬")) + f" {abs(m) if pd.notna(m) else ''}"
+        )
         st.dataframe(
-            table.rename(columns={
+            display_table.rename(columns={
                 "team": "Team", "played": "P", "won": "W", "drawn": "D", "lost": "L",
-                "gf": "GF", "ga": "GA", "gd": "GD", "points": "Pts",
+                "gf": "GF", "ga": "GA", "gd": "GD", "points": "Pts", "movement": "Since last GW",
             }),
             use_container_width=True, hide_index=True,
         )
+        st.caption(
+            "**Since last GW** — real table-position movement vs. one gameweek ago, computed "
+            "from the exact same fixtures data at both points in time (not a guess or a stored "
+            "snapshot) — a genuine re-derivable comparison. Shows '—' for GW1, since there's no "
+            "real earlier table to compare against yet."
+        )
+
+
+with tab_table:
+    _render_pl_table_tab()
 
 # =============================================================================
 # SEASON INSIGHTS (real, live 2026-27 leaderboards)
 # =============================================================================
-with tab_insights:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_season_insights_tab():
     st.header("2026-27 season insights")
     st.caption(
         "Real, current-season leaderboards — every number below is a single FPL field read "
         "directly (goals_scored, assists, yellow_cards, red_cards, defensive_contribution, "
         "total_points, form), not a derived or invented score, and not gated behind a "
-        "minimum-games cutoff this early in the season. Updates automatically as the collector "
-        "runs each day — no separate wiring needed."
+        "minimum-games cutoff this early in the season. Fetched live on every refresh (60s "
+        "cache) — no separate wiring needed."
     )
     boards = season_leaderboards()
 
@@ -849,3 +898,7 @@ with tab_insights:
             }),
             use_container_width=True, hide_index=True,
         )
+
+
+with tab_insights:
+    _render_season_insights_tab()

@@ -1205,16 +1205,23 @@ def league_wide_status_flags() -> pd.DataFrame:
 
 
 @st.cache_data
-def premier_league_table() -> pd.DataFrame:
-    """The real, current Premier League table for the season in progress --
-    computed directly from fixtures.csv's own real team_h_score/team_a_score
-    for every match that has an actual result recorded, not FPL's own
-    strength ratings or any derived metric. Uses team_h_score.notna() (a
-    real score has been recorded) rather than the 'finished' column, since
-    'finished' verifiably stays False on a played match until bonus points
-    are fully locked in -- real final scores are already known well before
-    that, so waiting on 'finished' would hide results for hours after a
-    match actually ends.
+def premier_league_table(through_gw: int = None) -> pd.DataFrame:
+    """The real Premier League table for the season in progress -- computed
+    directly from fixtures.csv's own real team_h_score/team_a_score for
+    every match that has an actual result recorded, not FPL's own strength
+    ratings or any derived metric. Uses team_h_score.notna() (a real score
+    has been recorded) rather than the 'finished' column, since 'finished'
+    verifiably stays False on a played match until bonus points are fully
+    locked in -- real final scores are already known well before that, so
+    waiting on 'finished' would hide results for hours after a match
+    actually ends.
+
+    through_gw, if given, restricts to fixtures with event <= through_gw --
+    used to compute the REAL table as it stood after an earlier gameweek
+    (e.g. to diff table movement since last week in the PL Table tab),
+    rather than only ever the current, all-played-matches table. None (the
+    default) includes every played match regardless of gameweek, i.e. the
+    current table.
 
     Returns team, played, won, drawn, lost, gf, ga, gd, points, sorted by
     points then goal difference descending -- the real, standard PL
@@ -1226,6 +1233,8 @@ def premier_league_table() -> pd.DataFrame:
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
 
     played = fx[fx["team_h_score"].notna() & fx["team_a_score"].notna()]
+    if through_gw is not None:
+        played = played[played["event"] <= through_gw]
 
     stats = {tid: {"played": 0, "won": 0, "drawn": 0, "lost": 0, "gf": 0, "ga": 0} for tid in team_by_id}
     for _, row in played.iterrows():
@@ -1252,6 +1261,47 @@ def premier_league_table() -> pd.DataFrame:
         })
     df = pd.DataFrame(rows)
     return df.sort_values(["points", "gd", "gf"], ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=60)
+def premier_league_table_with_movement() -> pd.DataFrame:
+    """premier_league_table()'s current table, with a real `movement`
+    column added: each team's rank NOW minus their rank as of ONE gameweek
+    earlier (both computed from the exact same real fixtures data via
+    premier_league_table(through_gw=...), not a stored/guessed snapshot --
+    genuinely re-derivable at any time from fixtures.csv alone). Positive
+    movement means the team has risen that many places since last
+    gameweek's table, negative means they've fallen, 0 means unchanged.
+
+    Uses the real current gameweek (bootstrap's own is_current) as the
+    reference point -- movement is null (not 0) for GW1, since there's no
+    real "last gameweek" table to compare against yet, and for any team
+    that didn't exist in the through_gw-1 table for some reason (shouldn't
+    normally happen with a fixed 20-team league, but guarded rather than
+    assumed)."""
+    current = premier_league_table()
+    if current.empty:
+        return current.assign(movement=pd.Series(dtype="Int64"))
+
+    raw = _load_bootstrap()
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+    if current_gw <= 1:
+        return current.assign(movement=pd.Series([None] * len(current), dtype="Int64"))
+
+    previous = premier_league_table(through_gw=current_gw - 1)
+    current = current.reset_index(drop=True)
+    previous = previous.reset_index(drop=True)
+    current_rank = {row["team"]: i + 1 for i, row in current.iterrows()}
+    previous_rank = {row["team"]: i + 1 for i, row in previous.iterrows()}
+
+    movement = []
+    for team in current["team"]:
+        prev = previous_rank.get(team)
+        now = current_rank.get(team)
+        movement.append((prev - now) if prev is not None and now is not None else None)
+    current["movement"] = pd.array(movement, dtype="Int64")
+    return current
 
 
 @st.cache_data

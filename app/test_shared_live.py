@@ -121,6 +121,26 @@ def test_team_insights_consistency():
     print("PASS: team_insights() reuses premier_league_table() data consistently")
 
 
+def test_premier_league_table_movement():
+    table = shared.premier_league_table_with_movement()
+    if table.empty or table["played"].sum() == 0:
+        print("SKIP: PL table movement (no results recorded yet this season)")
+        return
+    assert "movement" in table.columns
+    raw = shared._load_bootstrap()
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+    if current_gw <= 1:
+        assert table["movement"].isna().all(), "GW1 has no earlier table to compare against -- movement must be null, not 0"
+        print("PASS: premier_league_table_with_movement() correctly null for GW1")
+    else:
+        # Every team's movement must be a real integer within a plausible
+        # range (-19..+19 -- a 20-team league can't move further than that
+        # in one gameweek).
+        assert table["movement"].dropna().between(-19, 19).all()
+        print(f"PASS: premier_league_table_with_movement() real movement values OK for GW{current_gw}")
+
+
 def test_tonight_price_projections_shape():
     projections = shared.tonight_price_projections()
     assert set(["name", "position", "team", "cost", "projected_percent", "likelihood"]).issubset(projections.columns)
@@ -164,6 +184,7 @@ if __name__ == "__main__":
     test_load_entry_history_live_and_fallback()
     test_season_leaderboards_shape()
     test_team_insights_consistency()
+    test_premier_league_table_movement()
     test_tonight_price_projections_shape()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()
