@@ -257,7 +257,8 @@ with tab_squad:
 # =============================================================================
 # TRANSFERS (against the real live squad)
 # =============================================================================
-with tab_transfers:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_transfers_tab():
     st.header("Transfer optimizer")
     st.caption(
         "Suggests the transfer(s) — if any — worth actually making from your real squad, "
@@ -473,10 +474,15 @@ with tab_transfers:
                 else:
                     st.error("Too many squad players missing from this pool to run this check.")
 
+
+with tab_transfers:
+    _render_transfers_tab()
+
 # =============================================================================
 # CHIP ADVISOR (against the real live squad, historical seasons as the projection source)
 # =============================================================================
-with tab_chips:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_chip_advisor_tab():
     st.header("Chip-timing advisor")
     st.caption(
         "A genuine multi-gameweek chip-timing projection (ranking several upcoming gameweeks "
@@ -521,10 +527,15 @@ with tab_chips:
         else:
             st.caption("No starter with a positive `ep_next` right now — nothing to suggest.")
 
+
+with tab_chips:
+    _render_chip_advisor_tab()
+
 # =============================================================================
 # LEAGUE TRACKER
 # =============================================================================
-with tab_leagues:
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_league_tracker_tab():
     st.header("League tracker")
     st.caption(
         "Real standings for every PRIVATE classic (points-based) mini-league this manager "
@@ -589,6 +600,10 @@ with tab_leagues:
             f"read live from FPL's own `leagues-classic/{league['league']['id']}/standings` "
             f"endpoint via the collector, not hardcoded."
         )
+
+
+with tab_leagues:
+    _render_league_tracker_tab()
 
 # =============================================================================
 # PRICE CHANGES (live, auto-refreshes while a gameweek is live)
