@@ -227,6 +227,38 @@ def test_premier_league_table_movement():
         print(f"PASS: premier_league_table_with_movement() real movement values OK for GW{current_gw}")
 
 
+def test_explain_transfer_suggestion_no_key_returns_none():
+    """explain_transfer_suggestion() must return None cleanly (never raise,
+    never return a placeholder string) when OPENROUTER_API_KEY isn't set --
+    an LLM narration is a nice-to-have on top of real data, never something
+    the Transfers tab depends on. This test intentionally does NOT check
+    the with-a-real-key path (that would require a real OpenRouter API key
+    and make a real network call to a free-tier model, not appropriate for
+    a test that runs automatically)."""
+    original_key = os.environ.pop("OPENROUTER_API_KEY", None)
+    try:
+        assert not shared.openrouter.is_configured()
+        result = shared.explain_transfer_suggestion(["Test Player Out"], ["Test Player In"], 0, 2.5)
+        assert result is None, "must return None (not raise, not a placeholder) with no API key configured"
+    finally:
+        if original_key is not None:
+            os.environ["OPENROUTER_API_KEY"] = original_key
+    print("PASS: explain_transfer_suggestion() returns None cleanly with no OPENROUTER_API_KEY set")
+
+
+def test_openrouter_hardcoded_to_free_model():
+    """Regression guard: openrouter.py's FREE_MODEL must always end in
+    ':free' (OpenRouter's own naming convention for models that don't
+    consume paid credits) -- this project must never silently start
+    incurring API costs. Checked directly against the actual constant, not
+    assumed."""
+    assert shared.openrouter.FREE_MODEL.endswith(":free"), (
+        f"FREE_MODEL ({shared.openrouter.FREE_MODEL!r}) must end in ':free' -- "
+        "this project must only ever use free OpenRouter models"
+    )
+    print(f"PASS: openrouter.py is hardcoded to a free model ({shared.openrouter.FREE_MODEL})")
+
+
 def test_ep_next_player_pool_shape_and_optimizable():
     """Verifies the pool backing Chip Advisor's new Free Hit/Wildcard check:
     real shape (matches what optimize_squad() requires), only available
@@ -332,6 +364,8 @@ if __name__ == "__main__":
     test_season_leaderboards_shape()
     test_team_insights_consistency()
     test_premier_league_table_movement()
+    test_explain_transfer_suggestion_no_key_returns_none()
+    test_openrouter_hardcoded_to_free_model()
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()

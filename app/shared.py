@@ -22,12 +22,14 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "collector"))
+sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "llm"))
 
 from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
 import fpl_api
+import openrouter
 
 FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet")
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")
@@ -494,6 +496,56 @@ def load_current_season_progress(entry_id: int) -> pd.DataFrame:
         for g in current
     ])
     return df.sort_values("gw").reset_index(drop=True)
+
+
+def explain_transfer_suggestion(
+    out_names: list, in_names: list, hit_cost: int, net_points_gain: float,
+    out_reasons: dict = None, in_notes: dict = None,
+) -> str | None:
+    """Turns an ALREADY-COMPUTED real transfer suggestion into a short,
+    readable paragraph, using OpenRouter's free-tier LLM (see
+    src/llm/openrouter.py) purely as a NARRATOR -- every number in the
+    prompt (hit_cost, net_points_gain, real injury/status reasons from
+    out_reasons, real fixture/ownership notes from in_notes) is already
+    real, verified data computed by optimize_transfers()/the rest of this
+    file BEFORE this function is ever called. The model is explicitly
+    instructed to only use the facts it's given, never invent a stat --
+    this is presentation, not a second source of truth.
+
+    Returns None (not an empty string or a placeholder) if OpenRouter
+    isn't configured (no OPENROUTER_API_KEY) or the call fails for any
+    reason -- callers should show the existing plain OUT/IN display either
+    way and treat this as a nice-to-have addition on top, never something
+    the page depends on. See openrouter.py's own docstring for why this
+    is hardcoded to a free model with no paid fallback.
+
+    out_reasons/in_notes are optional {name: real_fact_string} dicts (e.g.
+    {"Pedro Porro": "Injured, expected back 29 Aug"}) -- when given, these
+    are the ONLY extra context handed to the model beyond the raw
+    transfer numbers, so a hallucinated reason isn't possible for a name
+    not present in either dict."""
+    if not openrouter.is_configured():
+        return None
+
+    facts = [f"Suggested transfer: OUT {', '.join(out_names)} / IN {', '.join(in_names)}."]
+    facts.append(f"Hit cost: {hit_cost} points." if hit_cost else "No hit cost (within free transfers).")
+    facts.append(f"Net real predicted points gain: {net_points_gain:+.1f}.")
+    for name in out_names:
+        if out_reasons and name in out_reasons:
+            facts.append(f"Real reason {name} is being transferred out: {out_reasons[name]}.")
+    for name in in_names:
+        if in_notes and name in in_notes:
+            facts.append(f"Real note on {name}: {in_notes[name]}.")
+
+    system_prompt = (
+        "You explain Fantasy Premier League transfer suggestions in 2-3 plain sentences. "
+        "You are given ONLY real, already-verified facts below -- use ONLY those facts. "
+        "Never invent a statistic, injury, fixture, or number not explicitly given to you. "
+        "Do not add a disclaimer or restate that these are real facts -- just explain the "
+        "transfer naturally, as if briefing a friend."
+    )
+    user_prompt = "\n".join(facts)
+    return openrouter.chat_completion(system_prompt, user_prompt)
 
 
 def calculate_free_transfers(entry_id: int) -> int:

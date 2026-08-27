@@ -25,7 +25,7 @@ from shared import (
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
-    ep_next_player_pool, _current_season_label,
+    ep_next_player_pool, _current_season_label, explain_transfer_suggestion,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
@@ -478,6 +478,33 @@ def _render_transfers_tab():
                                 + "<br>".join(in_names) + "</div>",
                                 unsafe_allow_html=True,
                             )
+
+                        # Optional LLM narration of the transfer ABOVE --
+                        # every fact handed to it (out_reasons/in_notes) is
+                        # already real data computed above (real injury
+                        # status, real ep_next) -- the model only narrates,
+                        # it never invents a number. Silently absent (no
+                        # error shown) if OPENROUTER_API_KEY isn't set or
+                        # the free-tier call fails for any reason -- this
+                        # is a nice-to-have on top of the real OUT/IN
+                        # display above, never something the page needs.
+                        out_reasons = {
+                            row["name"]: f"{STATUS_LABELS.get(row['status'], row['status'])}"
+                            + (f" — {row['news']}" if row["news"] else "")
+                            for _, row in flagged.iterrows()
+                        } if not flagged.empty else {}
+                        in_notes = {
+                            row["name"]: f"Real expected points next gameweek (ep_next): {row['ep_next']:.1f}"
+                            for _, row in next_pool[next_pool["player_id"].isin(result["transfers_in"])].iterrows()
+                            if "ep_next" in row.index and pd.notna(row.get("ep_next"))
+                        }
+                        explanation = explain_transfer_suggestion(
+                            out_names, in_names, result["hit_cost"], result["net_points_gain"],
+                            out_reasons=out_reasons, in_notes=in_notes,
+                        )
+                        if explanation:
+                            st.caption("🤖 AI summary (free model, narrates the real numbers above — never a separate source of truth):")
+                            st.markdown(f"> {explanation}")
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
                 else:
