@@ -207,6 +207,34 @@ def test_team_insights_consistency():
     print("PASS: team_insights() reuses premier_league_table() data consistently")
 
 
+def test_ownership_swing_and_overall_most_owned():
+    """Verifies the real ownership-swing derivation and the new
+    league-wide (not per-team) most-owned board, added per explicit
+    request. ownership_swing_pct is derived from two real FPL fields
+    (transfers_in_event - transfers_out_event, divided by total_players)
+    since FPL doesn't publish an ownership-delta field directly."""
+    insights = shared.team_insights()
+    for key in ("most_owned_players", "overall_most_owned"):
+        board = insights[key]
+        assert "ownership_swing_pct" in board.columns, f"{key} missing ownership_swing_pct"
+        if not board.empty:
+            # A real swing must be a small, plausible number -- one
+            # gameweek's net transfers can't realistically move ownership
+            # by more than a few percentage points for any single player.
+            assert board["ownership_swing_pct"].abs().max() < 20, f"{key} has an implausibly large swing value"
+
+    overall = insights["overall_most_owned"]
+    if not overall.empty:
+        assert overall["selected_by_percent"].is_monotonic_decreasing, "overall_most_owned must be sorted by ownership descending"
+        # The single most-owned player league-wide must be at least as
+        # owned as any one team's own most-owned player (a real
+        # consistency check between the two boards, same underlying data).
+        per_team = insights["most_owned_players"]
+        if not per_team.empty:
+            assert overall.iloc[0]["selected_by_percent"] >= per_team["selected_by_percent"].max() - 1e-6
+    print(f"PASS: ownership_swing_pct and overall_most_owned() verified against real data ({len(overall)} league-wide entries)")
+
+
 def test_premier_league_table_movement():
     table = shared.premier_league_table_with_movement()
     if table.empty or table["played"].sum() == 0:
@@ -534,6 +562,7 @@ if __name__ == "__main__":
     test_load_entry_history_live_and_fallback()
     test_season_leaderboards_shape()
     test_team_insights_consistency()
+    test_ownership_swing_and_overall_most_owned()
     test_premier_league_table_movement()
     test_explain_transfer_suggestion_no_key_returns_none()
     test_explain_transfer_suggestion_debug_gives_real_reasons()

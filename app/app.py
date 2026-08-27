@@ -1077,14 +1077,40 @@ def _render_season_insights_tab():
                 use_container_width=True, hide_index=True,
             )
 
-    st.caption("Most-owned player per team")
-    owned_board = tinsights["most_owned_players"]
+    st.caption(
+        "Most-owned player per team, plus this gameweek's real ownership swing — FPL doesn't "
+        "publish an ownership-change field directly, so this is derived from two real fields it "
+        "does publish (`transfers_in_event` minus `transfers_out_event`, divided by FPL's own "
+        "real `total_players` count) — a genuine +/- percentage-point change in ownership this "
+        "gameweek, resetting each gameweek (not cumulative)."
+    )
+    owned_board = tinsights["most_owned_players"].copy()
     if owned_board.empty:
         st.caption("Nothing recorded yet.")
     else:
+        owned_board["ownership_swing_pct"] = owned_board["ownership_swing_pct"].round(2)
         st.dataframe(
-            owned_board.rename(columns={
+            _arrow_price_column(owned_board, "ownership_swing_pct").rename(columns={
                 "team": "Team", "name": "Player", "position": "Pos", "selected_by_percent": "Owned (%)",
+                "ownership_swing_pct": "This GW's swing (pts)",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+
+    st.divider()
+    st.caption(
+        "Overall most-owned players league-wide (not limited to one per team) — same real "
+        "`selected_by_percent` and gameweek ownership swing as above."
+    )
+    overall_owned_board = tinsights["overall_most_owned"].copy()
+    if overall_owned_board.empty:
+        st.caption("Nothing recorded yet.")
+    else:
+        overall_owned_board["ownership_swing_pct"] = overall_owned_board["ownership_swing_pct"].round(2)
+        st.dataframe(
+            _arrow_price_column(overall_owned_board, "ownership_swing_pct").rename(columns={
+                "team": "Team", "name": "Player", "position": "Pos", "selected_by_percent": "Owned (%)",
+                "ownership_swing_pct": "This GW's swing (pts)",
             }),
             use_container_width=True, hide_index=True,
         )

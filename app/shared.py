@@ -1599,7 +1599,19 @@ def team_insights(top_n: int = 5) -> dict:
     - "most_owned_players": each team's single most-selected player
       (FPL's own real selected_by_percent), one row per team with at least
       one played minute -- a real, checkable "who's the team's most-picked
-      asset" view, not a guess.
+      asset" view, not a guess. Includes a real "ownership_swing_pct"
+      column: this gameweek's real net transfer activity
+      (transfers_in_event - transfers_out_event, both real FPL fields)
+      divided by FPL's own real total_players count, expressed as a real
+      +/- percentage-POINT change in ownership this gameweek -- FPL
+      doesn't publish an ownership-delta field directly, so this is
+      derived from two real fields it does publish, the same
+      transfers_in_event/transfers_out_event pair likely_price_movers()
+      already uses elsewhere, just expressed as an ownership swing instead
+      of a raw transfer count. Resets each gameweek (not cumulative).
+    - "overall_most_owned": the top players LEAGUE-WIDE by real
+      selected_by_percent, regardless of team -- the same real field as
+      above, just not limited to one-per-team.
 
     Empty DataFrames (not an error) if premier_league_table() has no
     results yet this season."""
@@ -1608,7 +1620,8 @@ def team_insights(top_n: int = 5) -> dict:
         empty_cols = {
             "best_attack": ["team", "played", "gf"],
             "best_defense": ["team", "played", "ga"],
-            "most_owned_players": ["team", "name", "position", "selected_by_percent"],
+            "most_owned_players": ["team", "name", "position", "selected_by_percent", "ownership_swing_pct"],
+            "overall_most_owned": ["name", "position", "team", "selected_by_percent", "ownership_swing_pct"],
         }
         return {k: pd.DataFrame(columns=v) for k, v in empty_cols.items()}
 
@@ -1618,14 +1631,17 @@ def team_insights(top_n: int = 5) -> dict:
 
     raw = _load_bootstrap()
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    total_players = raw.get("total_players") or 1  # guard against a real 0/missing value rather than dividing by zero
 
     rows = []
     for p in raw["elements"]:
+        net_transfers = p["transfers_in_event"] - p["transfers_out_event"]
         rows.append({
             "team": team_by_id.get(p["team"]),
             "name": f"{p['first_name']} {p['second_name']}",
             "position": _POSITION_MAP_APP[p["element_type"]],
             "selected_by_percent": float(p["selected_by_percent"] or 0),
+            "ownership_swing_pct": net_transfers / total_players * 100,
         })
     players_df = pd.DataFrame(rows)
     most_owned = (
@@ -1634,11 +1650,18 @@ def team_insights(top_n: int = 5) -> dict:
         .sort_values("selected_by_percent", ascending=False)
         .reset_index(drop=True)
     )
+    overall_most_owned = (
+        players_df[["name", "position", "team", "selected_by_percent", "ownership_swing_pct"]]
+        .sort_values("selected_by_percent", ascending=False)
+        .head(top_n * 2)
+        .reset_index(drop=True)
+    )
 
     return {
         "best_attack": best_attack,
         "best_defense": best_defense,
         "most_owned_players": most_owned,
+        "overall_most_owned": overall_most_owned,
     }
 
 
