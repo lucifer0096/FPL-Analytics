@@ -8,6 +8,7 @@ page so it stays about "what should I do this gameweek," not a crowded
 seven-tab methodology tour.
 """
 
+import html
 import os
 
 import pandas as pd
@@ -537,8 +538,25 @@ def _render_transfers_tab():
                             out_reasons=out_reasons, in_notes=in_notes,
                         )
                         if explanation:
-                            st.caption("💬 Why this transfer:")
-                            st.markdown(f"> {explanation}")
+                            # explanation is real LLM output -- escaped via
+                            # html.escape() before being embedded in this
+                            # unsafe_allow_html block, since a raw model
+                            # response could otherwise inject arbitrary HTML
+                            # (the plain st.markdown(f"> ...") version this
+                            # replaced was safe by default since it never
+                            # passed unsafe_allow_html=True; this styled
+                            # version does, so the escape is required, not
+                            # optional, to keep the same safety guarantee).
+                            st.markdown(
+                                '<div style="background: linear-gradient(135deg, rgba(42,150,80,0.14), '
+                                'rgba(90,60,180,0.12)); border: 1px solid rgba(90,60,180,0.35); '
+                                'border-radius: 12px; padding: 12px 16px; margin-top: 8px;">'
+                                '<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; '
+                                'letter-spacing: 0.04em; opacity: 0.75; margin-bottom: 4px;">💬 Why this transfer</div>'
+                                f'<div style="font-size: 14px; line-height: 1.5;">{html.escape(explanation)}</div>'
+                                '</div>',
+                                unsafe_allow_html=True,
+                            )
                         elif explanation_error and not explanation_error.startswith(RATE_LIMIT_PREFIX):
                             # A real, honest diagnostic (never the API key itself) for why
                             # narration didn't appear -- e.g. "OPENROUTER_API_KEY is not set"
@@ -575,15 +593,46 @@ def _render_chip_advisor_tab():
     )
 
     chip_status = chip_usage_status(MANAGER_ENTRY_ID)
-    st.caption("Real chip usage this season (straight from FPL's own entry history, not tracked locally):")
+    st.caption(
+        "Real chip usage this half of the season (straight from FPL's own entry history and its "
+        "real per-half chip windows, not tracked locally) — every chip resets once per half, not "
+        "just Wildcard, so a chip used earlier this season can show available again once its next "
+        "real window opens."
+    )
+    CHIP_ICONS = {"Wildcard": "🃏", "Free Hit": "🎯", "Bench Boost": "🪑", "Triple Captain": "👑"}
     chip_cols = st.columns(4)
     for col, (chip_name, status) in zip(chip_cols, chip_status.items()):
         with col:
+            icon = CHIP_ICONS.get(chip_name, "🎫")
             if status["used"]:
                 gws = ", ".join(f"GW{g}" for g in status["gameweeks"])
-                st.metric(chip_name, "Used", help=f"Played in {gws}.")
+                st.markdown(
+                    f'<div style="text-align: center; opacity: 0.45; padding: 8px 4px;">'
+                    f'<div style="font-size: 28px;">{icon}</div>'
+                    f'<div style="font-size: 12px; font-weight: 600;">{chip_name}</div>'
+                    f'<div style="font-size: 11px;">Used — {gws}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            elif status.get("not_yet_open"):
+                st.markdown(
+                    f'<div style="text-align: center; opacity: 0.6; padding: 8px 4px;">'
+                    f'<div style="font-size: 28px;">{icon}</div>'
+                    f'<div style="font-size: 12px; font-weight: 600;">{chip_name}</div>'
+                    f'<div style="font-size: 11px;">Not open yet</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
             else:
-                st.metric(chip_name, "Available")
+                st.markdown(
+                    f'<div style="text-align: center; padding: 8px 4px; background: rgba(42,150,80,0.12); '
+                    f'border-radius: 8px;">'
+                    f'<div style="font-size: 28px;">{icon}</div>'
+                    f'<div style="font-size: 12px; font-weight: 700; color: #2a9650;">{chip_name}</div>'
+                    f'<div style="font-size: 11px; color: #2a9650;">Available</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
     if "built_squad" not in st.session_state or st.session_state.get("built_squad_season_gw") != "live_squad":
         st.warning("Build your real squad in the **My Squad** tab first (requires at least one collected gameweek).")
@@ -643,11 +692,13 @@ def _render_chip_advisor_tab():
             else:
                 st.caption("Gap isn't large enough to clearly justify a chip on ep_next alone — holding is a reasonable call.")
             if chip_status["Free Hit"]["used"] and chip_status["Wildcard"]["used"]:
-                st.caption("⚠️ Both Free Hit and Wildcard already show as used this half based on your real chip history above — double-check FPL directly if you expected either to still be available (e.g. a new half's chips resetting).")
+                st.caption("⚠️ Both Free Hit and Wildcard already show as used this half based on your real chip history above.")
             elif chip_status["Free Hit"]["used"]:
                 st.caption("⚠️ Free Hit already shows as used this half — this gap would apply to a Wildcard instead.")
             elif chip_status["Wildcard"]["used"]:
                 st.caption("⚠️ Wildcard already shows as used this half — this gap would apply to a Free Hit instead.")
+            elif chip_status["Wildcard"].get("not_yet_open") and chip_status["Free Hit"].get("not_yet_open"):
+                st.caption("ℹ️ Neither chip's real window has opened yet this half (Wildcard/Free Hit typically open a gameweek or two into each half) — this gap is still a real number, just not actionable until FPL's own window opens.")
         except Exception as e:
             st.caption(f"Couldn't run the optimizer against the live ep_next pool right now ({e}).")
 

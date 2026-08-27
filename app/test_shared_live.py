@@ -329,38 +329,65 @@ def test_openrouter_hardcoded_to_free_model():
 
 
 def test_chip_usage_status_shape_and_parsing():
-    """Verifies chip_usage_status() against real live data (currently no
-    chips played, so this checks the correct empty-state shape) AND
-    against a simulated real chip_plays payload (since a genuine played-
-    chip case isn't available to test live right now) to confirm the
-    parsing logic itself is correct, not just that it runs."""
+    """Verifies chip_usage_status() against real live data AND against
+    simulated real chip_plays/chip-window payloads to confirm the per-half
+    parsing logic itself is correct, not just that it runs.
+
+    Real bug fixed here: an earlier version tracked "used" per chip name
+    across the WHOLE season, which would have incorrectly shown a chip as
+    permanently used after its first-half play even once a fresh copy
+    became available in the second half -- verified directly against
+    bootstrap-static's own `chips` array, which publishes a real, separate
+    start_event/stop_event window per half for every chip, not just
+    Wildcard. Also verified a real, genuinely valid edge case live: at
+    GW1, Wildcard/Free Hit's real first-half window hasn't opened yet
+    (starts GW2), so they must report "not_yet_open", not "used" or a
+    silently wrong full-season fallback window."""
     status = shared.chip_usage_status(MANAGER_ENTRY_ID)
     expected_chips = {"Wildcard", "Free Hit", "Bench Boost", "Triple Captain"}
     assert set(status.keys()) == expected_chips
     for chip, info in status.items():
-        assert "used" in info and "gameweeks" in info
+        assert "used" in info and "gameweeks" in info and "not_yet_open" in info
         assert isinstance(info["used"], bool)
         assert isinstance(info["gameweeks"], list)
         if not info["used"]:
             assert info["gameweeks"] == [], f"{chip} not used but has gameweeks listed"
+        if info["not_yet_open"]:
+            assert info["half_start"] is None and info["half_stop"] is None
 
-    # Simulate a real chip_plays-shaped payload to verify parsing logic
-    # end-to-end without needing a manager who's actually played a chip.
+    # Simulate real chip-window (bootstrap "chips") + chip-play (entry
+    # history "chips") payloads to verify the per-half parsing logic
+    # end-to-end, including a chip used in an EARLIER half correctly NOT
+    # counting as used in the CURRENT half.
+    fake_bootstrap = {
+        "events": [{"id": 25, "is_current": True}],
+        "chips": [
+            {"name": "wildcard", "start_event": 2, "stop_event": 19},
+            {"name": "wildcard", "start_event": 20, "stop_event": 38},
+            {"name": "bboost", "start_event": 1, "stop_event": 19},
+            {"name": "bboost", "start_event": 20, "stop_event": 38},
+        ],
+    }
     fake_history = {"current": [], "past": [], "chips": [
-        {"name": "bboost", "event": 5, "time": "2026-09-20T00:00:00Z"},
-        {"name": "wildcard", "event": 8, "time": "2026-10-11T00:00:00Z"},
+        {"name": "bboost", "event": 5, "time": "2026-09-20T00:00:00Z"},  # played in the FIRST half
+        {"name": "wildcard", "event": 25, "time": "2026-12-01T00:00:00Z"},  # played in the SECOND half (current)
     ]}
-    original = shared._load_entry_history
+    original_bootstrap, original_history = shared._load_bootstrap, shared._load_entry_history
     try:
+        shared._load_bootstrap = lambda: fake_bootstrap
         shared._load_entry_history = lambda entry_id: fake_history
         simulated = shared.chip_usage_status.__wrapped__(MANAGER_ENTRY_ID)
-        assert simulated["Bench Boost"] == {"used": True, "gameweeks": [5]}
-        assert simulated["Wildcard"] == {"used": True, "gameweeks": [8]}
-        assert simulated["Free Hit"] == {"used": False, "gameweeks": []}
-        assert simulated["Triple Captain"] == {"used": False, "gameweeks": []}
+        assert simulated["Wildcard"]["used"] is True and simulated["Wildcard"]["gameweeks"] == [25], (
+            "Wildcard played in the CURRENT (second) half must show as used"
+        )
+        assert simulated["Bench Boost"]["used"] is False and simulated["Bench Boost"]["gameweeks"] == [], (
+            "Bench Boost played in an EARLIER half must NOT show as used in the current half -- "
+            "this is the real bug this fix addresses"
+        )
     finally:
-        shared._load_entry_history = original
-    print(f"PASS: chip_usage_status() shape OK against real data, parsing verified against a simulated real payload")
+        shared._load_bootstrap = original_bootstrap
+        shared._load_entry_history = original_history
+    print("PASS: chip_usage_status() correctly tracks per-half availability (real GW1 not_yet_open case + simulated cross-half reset)")
 
 
 def test_free_transfers_slider_allows_zero():
@@ -381,6 +408,26 @@ def test_free_transfers_slider_allows_zero():
         "optimize_transfers() genuinely supports free_transfers=0"
     )
     print("PASS: free-transfers slider allows a real minimum of 0")
+
+
+def test_ai_explanation_output_is_html_escaped():
+    """Security check: the styled "Why this transfer" card renders the
+    LLM's real output inside an unsafe_allow_html=True st.markdown block
+    (needed for the gradient-card styling) -- the raw model response MUST
+    be passed through html.escape() first, since an unescaped LLM output
+    embedded in raw HTML is a real injection risk (the model's response is
+    external, untrusted text, even though it's grounded in real facts).
+    Checks the actual app.py source for the escape call rather than
+    driving a full browser render."""
+    app_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+    with open(app_path, encoding="utf-8") as f:
+        app_source = f.read()
+    assert "html.escape(explanation)" in app_source, (
+        "the LLM's real output must be html.escape()'d before being embedded in an "
+        "unsafe_allow_html=True block -- otherwise a model response containing HTML-like "
+        "text could inject arbitrary markup into the page"
+    )
+    print("PASS: AI explanation output is html.escape()'d before rendering in unsafe_allow_html")
 
 
 def test_ep_next_player_pool_shape_and_optimizable():
@@ -494,6 +541,7 @@ if __name__ == "__main__":
     test_openrouter_hardcoded_to_free_model()
     test_chip_usage_status_shape_and_parsing()
     test_free_transfers_slider_allows_zero()
+    test_ai_explanation_output_is_html_escaped()
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()

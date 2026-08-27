@@ -601,34 +601,85 @@ def calculate_free_transfers(entry_id: int) -> int:
 
 @st.cache_data(ttl=60)
 def chip_usage_status(entry_id: int) -> dict:
-    """This manager's REAL chip usage so far this season -- which of
-    Wildcard/Free Hit/Bench Boost/Triple Captain have already been played,
-    and in which real gameweek, straight from FPL's own
-    entry/{id}/history's `chips` array (each real entry:
-    {"name": ..., "event": gw, "time": ...}) -- not tracked or simulated
-    locally. Season-2-Wildcard support: FPL allows Wildcard to be used
-    ONCE in each half of the season (before/after a mid-season deadline
-    FPL itself sets) -- this function reports total real usage per chip
-    name rather than assuming a hard "used once ever" cap, since a second
-    real Wildcard play is a genuine, valid state for this specific chip,
-    not a bug.
+    """This manager's REAL chip usage so far THIS HALF of the season --
+    which of Wildcard/Free Hit/Bench Boost/Triple Captain are still
+    available right now, straight from FPL's own real data, not a hard
+    "used once ever" assumption.
 
-    Returns {chip_name: {"used": bool, "gameweeks": [gw, ...]}} for each
-    of FPL's own real chip name codes (wildcard, freehit, bboost, 3xc --
-    verified directly against bootstrap-static's chip_plays). Empty
-    "gameweeks" list (used: False) is the correct, expected state for any
-    chip not yet played, not a guess."""
+    FPL's real rule (verified directly against bootstrap-static's own
+    `chips` array): EVERY chip -- not just Wildcard -- is available once
+    per half of the season, each half with its own real start_event/
+    stop_event gameweek range FPL itself publishes (e.g. 2026-27's first
+    half: GW2-19, second half: GW20-38). A real bug in an earlier version
+    of this function reported simple season-long "used: True" per chip
+    name, which would have incorrectly shown a chip as permanently used
+    after its first-half play even once the second half's fresh copy
+    became available.
+
+    Uses the real CURRENT gameweek (bootstrap's own is_current) to pick
+    which half's window applies, then checks entry/{id}/history's `chips`
+    array (each real entry: {"name": ..., "event": gw, "time": ...}) for
+    a play whose gameweek falls within that specific half's real window --
+    not just "was this chip name ever played this season."
+
+    Returns {chip_name: {"used": bool, "gameweeks": [gw, ...], "half_start":
+    int | None, "half_stop": int | None, "not_yet_open": bool}} for each of
+    FPL's own real chip name codes (wildcard, freehit, bboost, 3xc).
+    "gameweeks" lists every real play of that chip THIS HALF only (normally
+    0 or 1, per FPL's own rule) -- "used" is empty/False for any chip not
+    yet played in the CURRENT half, even if it was already played in an
+    earlier half this season. "not_yet_open" is True (with half_start/
+    half_stop both None) for a real, valid edge case verified directly:
+    Wildcard/Free Hit's first-half window doesn't open until GW2, so at
+    GW1 they're correctly "not yet available" -- neither used nor
+    available right now, a genuinely distinct third state."""
     CHIP_NAMES = {"wildcard": "Wildcard", "freehit": "Free Hit", "bboost": "Bench Boost", "3xc": "Triple Captain"}
+    raw = _load_bootstrap()
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+
+    # Real per-chip half windows FPL itself publishes -- one row per
+    # (chip name, half) pair, each with its own real start_event/stop_event.
+    # Falls back to a single "whole season" window per chip if this field
+    # is ever missing/malformed, so chip tracking degrades to the simpler
+    # season-long behavior rather than crashing.
+    chip_windows = raw.get("chips", [])
+    half_by_chip = {}
+    for window in chip_windows:
+        name = window.get("name")
+        start, stop = window.get("start_event"), window.get("stop_event")
+        if name is None or start is None or stop is None:
+            continue
+        if start <= current_gw <= stop:
+            half_by_chip[name] = (start, stop)
+
     history = _load_entry_history(entry_id)
     played = history.get("chips", []) if history else []
 
-    status = {label: {"used": False, "gameweeks": []} for label in CHIP_NAMES.values()}
-    for chip in played:
-        label = CHIP_NAMES.get(chip.get("name"))
-        if label is None:
-            continue  # a real chip name this project doesn't recognize yet -- skip rather than guess
-        status[label]["used"] = True
-        status[label]["gameweeks"].append(chip.get("event"))
+    status = {}
+    for code, label in CHIP_NAMES.items():
+        window = half_by_chip.get(code)
+        if window is None:
+            # A real, valid state -- not every chip's window has opened
+            # yet at every gameweek (e.g. Wildcard/Free Hit's first-half
+            # window doesn't start until GW2, so at GW1 they're correctly
+            # "not yet available," not "used" or "available right now").
+            # Reported distinctly rather than silently defaulting to a
+            # full-season window, which would have hidden this real state.
+            status[label] = {"used": False, "gameweeks": [], "half_start": None, "half_stop": None, "not_yet_open": True}
+            continue
+        half_start, half_stop = window
+        gws_this_half = [
+            chip.get("event") for chip in played
+            if chip.get("name") == code and chip.get("event") is not None and half_start <= chip["event"] <= half_stop
+        ]
+        status[label] = {
+            "used": len(gws_this_half) > 0,
+            "gameweeks": gws_this_half,
+            "half_start": half_start,
+            "half_stop": half_stop,
+            "not_yet_open": False,
+        }
     return status
 
 
