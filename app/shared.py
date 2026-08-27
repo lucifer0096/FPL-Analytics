@@ -1860,6 +1860,28 @@ def _team_name_to_badge_code() -> dict:
     return {t["name"]: t["code"] for t in raw["teams"]}
 
 
+# Real, well-known primary shirt colors for each of the 20 real 2026-27
+# Premier League clubs (verified against the actual, current club list --
+# see _team_name_to_badge_code()'s docstring for how that list itself is
+# fetched live). NOT sourced from FPL's own API -- FPL's bootstrap-static
+# has no team-color field at all, confirmed directly -- these are genuine
+# public facts about each club's real identity, same category of "real,
+# not invented" information as a club's real name, just not something
+# this project's usual live-API-first pattern applies to since there's no
+# live source for it. Used only as a decorative tint for a player's
+# missing-photo fallback box (see _player_card_html) -- purely visual,
+# never treated as FPL data or shown as if it came from the live API.
+TEAM_PRIMARY_COLOR = {
+    "Arsenal": "#EF0107", "Aston Villa": "#670E36", "Bournemouth": "#DA291C",
+    "Brentford": "#E30613", "Brighton": "#0057B8", "Chelsea": "#034694",
+    "Coventry City": "#78D0F7", "Crystal Palace": "#1B458F", "Everton": "#003399",
+    "Fulham": "#000000", "Hull City": "#F18A01", "Ipswich Town": "#0044A9",
+    "Leeds": "#FFFFFF", "Liverpool": "#C8102E", "Man City": "#6CABDD",
+    "Man Utd": "#DA291C", "Newcastle": "#241F20", "Nott'm Forest": "#DD0000",
+    "Spurs": "#132257", "Sunderland": "#EB172B",
+}
+
+
 def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     """One player's shirt-style card: name, price, predicted points, and an
     optional corner badge (e.g. MVP / Player of the Week) for the single
@@ -1993,8 +2015,25 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
         f'background-size: 44px; background-repeat: no-repeat; background-position: center;'
         if team_code else ""
     )
+    # A flat neutral gray (#d8dde3) reads the same for every club, which
+    # looked out of place next to the rest of the app's team-aware styling
+    # (fixtures already color-code by real difficulty, etc.). Tinted to
+    # each team's own real primary shirt color instead (TEAM_PRIMARY_COLOR
+    # -- see that table's own docstring for why this one value isn't
+    # sourced from FPL's API) at a light 12% mix over white, so the real
+    # team badge drawn on top (badge_fallback_css above) stays fully
+    # legible rather than getting lost against a saturated background.
+    team_color = TEAM_PRIMARY_COLOR.get(row["team"], "#d8dde3")
+    # Two background-color declarations in a row: the plain neutral gray
+    # first (a real, always-valid fallback for a browser too old to
+    # understand color-mix()), then the color-mix() version -- CSS applies
+    # the LAST valid declaration for a property, and silently ignores an
+    # entire declaration whose value it doesn't understand, so an old
+    # browser correctly keeps the plain gray instead of ending up with no
+    # background color at all.
+    fallback_bg = f'background-color: #d8dde3; background-color: color-mix(in srgb, {team_color} 12%, #d8dde3);'
     img_html = (
-        f'<div style="width: 100%; height: 68px; background-color: #d8dde3; {badge_fallback_css} '
+        f'<div style="width: 100%; height: 68px; {fallback_bg} {badge_fallback_css} '
         f'border-radius: 6px; margin-bottom: 2px; overflow: hidden;">'
         f'<img src="https://resources.premierleague.com/premierleague/photos/players/110x140/p{photo_code}.png" '
         f'style="width: 100%; height: 100%; object-fit: contain;" loading="lazy" />'
@@ -2124,19 +2163,37 @@ def render_pitch(squad: pd.DataFrame, top_player_badge: str = None) -> None:
 
     bench_cards = "".join(_card(r) for _, r in bench.iterrows())
 
+    # Real football-pitch field markings, drawn entirely with CSS gradients
+    # layered via background-image (no extra DOM elements, so this stays a
+    # single-line HTML string -- see this function's docstring on why).
+    # A center circle (radial-gradient ring), a halfway line, and two
+    # penalty-box outlines (top/bottom) turn the previous flat green
+    # rectangle into something that actually reads as a pitch at a glance.
+    pitch_markings = (
+        "radial-gradient(circle at 50% 50%, transparent 34px, rgba(255,255,255,0.35) 35px, "
+        "rgba(255,255,255,0.35) 36px, transparent 37px), "
+        "linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)) 0 50% / 100% 2px no-repeat, "
+        "linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)) 0 0 / 2px 100% no-repeat, "
+        "linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)) 100% 0 / 2px 100% no-repeat, "
+        "linear-gradient(rgba(255,255,255,0.3), rgba(255,255,255,0.3)) 30% 0 / 40% 40px no-repeat, "
+        "linear-gradient(rgba(255,255,255,0.3), rgba(255,255,255,0.3)) 30% 100% / 40% 40px no-repeat"
+    )
     pitch_html = (
-        '<div style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
-        '#1f7a3f 100%); border-radius: 12px; padding: 20px 12px; margin-top: 8px; '
-        'border: 2px solid rgba(255,255,255,0.3);">'
-        '<div style="text-align: center; color: white; font-size: 12px; opacity: 0.85; '
-        'margin-bottom: 8px; font-family: sans-serif; letter-spacing: 0.5px;">'
-        f'FORMATION {formation}</div>'
-        f'{rows_html}'
+        f'<div style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
+        f'#1f7a3f 100%), {pitch_markings}; background-blend-mode: normal; '
+        f'border-radius: 12px; padding: 20px 12px; margin-top: 8px; '
+        f'border: 2px solid rgba(255,255,255,0.3); position: relative;">'
+        '<div style="text-align: center; color: white; font-size: 12px; opacity: 0.9; '
+        'margin-bottom: 8px; font-family: sans-serif; letter-spacing: 0.5px; font-weight: 700; '
+        'text-shadow: 0 1px 2px rgba(0,0,0,0.3); position: relative; z-index: 1;">'
+        f'⚽ FORMATION {formation}</div>'
+        f'<div style="position: relative; z-index: 1;">{rows_html}</div>'
         '</div>'
-        '<div style="background: #222; border-radius: 10px; padding: 14px 12px; '
-        'margin-top: 10px;">'
-        '<div style="text-align: center; color: #aaa; font-size: 11px; margin-bottom: 8px; '
-        'font-family: sans-serif; letter-spacing: 0.5px;">BENCH</div>'
+        '<div style="background: linear-gradient(160deg, rgba(26,26,26,0.96), rgba(42,21,64,0.9)); '
+        'border-radius: 10px; padding: 14px 12px; margin-top: 10px; '
+        'border: 1px solid rgba(90,60,180,0.25);">'
+        '<div style="text-align: center; color: #ccc; font-size: 11px; margin-bottom: 8px; '
+        'font-family: sans-serif; letter-spacing: 0.5px; font-weight: 700;">🪑 BENCH</div>'
         '<div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">'
         f'{bench_cards}'
         '</div>'
@@ -2280,7 +2337,18 @@ def inject_shared_css() -> None:
         color: white;
     }
 
-    /* ---- Dataframes: rounder, less spreadsheet-y ---- */
+    /* ---- Dataframes: rounder, less spreadsheet-y ----
+       A colored HEADER-ROW tint (to visually tie Season Insights/PL
+       Table/Price Changes' tables into the same purple/green palette as
+       the rest of the app) was considered and confirmed NOT achievable
+       here: st.dataframe renders via glide-data-grid, a canvas-drawn
+       grid, not real DOM <thead>/<tr> elements -- there is no CSS
+       selector or Streamlit column_config/Styler API that reaches inside
+       a canvas element's own header row. The container-level styling
+       below (rounded corners, border) is the real achievable ceiling for
+       this component without replacing st.dataframe with custom HTML
+       tables everywhere, a much larger rewrite that would trade away
+       real sorting/resizing/scroll performance for a header-color tint. */
     div[data-testid="stDataFrame"] {
         border-radius: 12px;
         overflow: hidden;

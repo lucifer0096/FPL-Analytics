@@ -514,6 +514,23 @@ def test_squad_card_hover_stats():
     print("PASS: My Squad card hover tooltip is a real CSS tooltip with separate GW/season sections (incl. DEFCON)")
 
 
+def test_team_primary_color_covers_every_real_team():
+    """Regression test for the visual pass's team-tinted photo fallback:
+    TEAM_PRIMARY_COLOR must have a real entry for every one of the actual
+    current 20 Premier League clubs (fetched live from bootstrap, not
+    hardcoded here) -- a missing entry would silently fall back to plain
+    gray for that one team's players, a real visual regression if the
+    real team list ever changes (promotion/relegation) without this table
+    being updated to match."""
+    raw = shared._load_bootstrap()
+    real_teams = {t["name"] for t in raw["teams"]}
+    missing = real_teams - set(shared.TEAM_PRIMARY_COLOR.keys())
+    assert not missing, f"TEAM_PRIMARY_COLOR is missing real current teams: {missing}"
+    for team, color in shared.TEAM_PRIMARY_COLOR.items():
+        assert color.startswith("#") and len(color) == 7, f"{team}'s color {color!r} isn't a valid hex code"
+    print(f"PASS: TEAM_PRIMARY_COLOR covers all {len(real_teams)} real current Premier League teams")
+
+
 def test_player_season_stats_and_optimizer_card_hover():
     raw = shared._load_bootstrap()
     player = raw["elements"][0]
@@ -574,6 +591,7 @@ if __name__ == "__main__":
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
+    test_team_primary_color_covers_every_real_team()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()

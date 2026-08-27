@@ -304,6 +304,15 @@ Everything about the manager's REAL, current team, not a demo:
 
 A running log of real bugs found (mostly via direct user reports against the live app, some via direct verification against real data) and how each was actually diagnosed and fixed — kept as one place to see the project's real failure modes, rather than scattered across commit messages. Newest first.
 
+### Pitch/card visual pass (2026-08-27)
+
+Asked for aesthetic recommendations; built the ones that were genuinely achievable, documented the one that wasn't rather than faking it:
+
+- **Real pitch field markings** — the pitch view (`render_pitch()`) was a flat green gradient with no lines. Added a center circle, halfway line, and penalty-box outlines, drawn entirely with layered CSS `background-image` gradients (no extra DOM elements, keeping the single-line-HTML constraint every card here has to respect).
+- **Bench box palette mismatch** — the bench strip used a flat `#222` gray, visually disconnected from the rest of the app's purple/green gradient language. Restyled to match.
+- **Team-tinted missing-photo fallback** — a player with no FPL headshot showed a flat neutral gray box for every club. Added `TEAM_PRIMARY_COLOR`, a small reference table of each real 2026-27 club's actual primary shirt color — **not sourced from FPL's API** (confirmed directly: bootstrap-static has no team-color field at all), a deliberate, documented exception to this project's usual live-API-first rule, since these are genuine public facts about a club's identity, not something that changes or needs live verification. Uses `color-mix()` at a light 12% blend so the real team badge drawn on top stays legible; a plain-gray fallback declaration is layered underneath for a browser too old to understand `color-mix()`.
+- **Dataframe header-row tinting was investigated and confirmed NOT achievable**: `st.dataframe` renders via `glide-data-grid`, a canvas-drawn grid, not real DOM `<thead>` elements — there's no CSS selector or Streamlit `column_config`/`Styler` API that reaches inside a canvas element's header row. Documented directly in `inject_shared_css()` so this isn't silently reattempted later; the container-level rounding/border already applied is the real achievable ceiling without replacing every table with custom HTML (a much larger rewrite trading away real sorting/scroll performance for a header-color tint).
+
 ### Chip tracking correctness + visual pass (2026-08-27)
 
 - **`chip_usage_status()` incorrectly treated a chip as used for the whole season, not per half.** FPL's own real rule (verified directly against bootstrap-static's `chips` array): EVERY chip, not just Wildcard, is available once per half of the season, each half with its own real `start_event`/`stop_event` window. The original version would have shown a chip as permanently "used" after its first-half play even once a fresh copy became available in the second half. **Fix:** now derives the real current half's window from bootstrap and only counts a play as "used" if its gameweek falls inside that specific half's real window.
