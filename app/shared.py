@@ -558,7 +558,7 @@ def load_current_squad_picks(entry_id: int, gw: int) -> dict:
             return live_picks
     except Exception:
         pass
-    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "picks", f"gw{gw}.json")
+    path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(entry_id), "picks", f"gw{gw}.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             return json.load(f)
@@ -592,7 +592,7 @@ def load_live_gw_points(gw: int) -> dict:
         return {e["id"]: e["stats"]["total_points"] for e in live["elements"]}
     except Exception:
         pass
-    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "live", f"gw{gw}.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             live = json.load(f)
@@ -633,7 +633,7 @@ def load_live_gw_stats(gw: int) -> dict:
         return {e["id"]: e["stats"] for e in live["elements"]}
     except Exception:
         pass
-    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "live", f"gw{gw}.json")
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8") as f:
@@ -662,7 +662,7 @@ def load_live_gw_minutes(gw: int) -> dict:
         return {e["id"]: e["stats"]["minutes"] for e in live["elements"]}
     except Exception:
         pass
-    path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "live", f"gw{gw}.json")
+    path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "live", f"gw{gw}.json")
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8") as f:
@@ -712,6 +712,15 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
     points scored that gameweek (from load_live_gw_points), not a
     prediction -- named that only for compatibility with the shared
     rendering code, which doesn't care what produced the number."""
+    # load_current_squad_picks() can genuinely return None (documented on
+    # that function itself -- e.g. this gameweek's picks aren't available
+    # in any form yet). Currently unreachable from app.py's one real caller
+    # (which already only calls this after confirming picks_data isn't
+    # None), but guarded here too rather than relying on every future
+    # caller to remember that precondition -- a raw KeyError/TypeError from
+    # indexing into None is a worse failure mode than an empty DataFrame.
+    if not picks_data:
+        return pd.DataFrame()
     raw = _load_bootstrap()
     element_by_id = {p["id"]: p for p in raw["elements"]}
     team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
@@ -843,7 +852,7 @@ def load_joined_leagues(entry_id: int) -> list:
         return [fpl_api.get_league_standings(l["id"]) for l in private_leagues]
     except Exception:
         pass
-    leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(entry_id), "leagues")
+    leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(entry_id), "leagues")
     if os.path.isdir(leagues_dir):
         leagues = []
         for fname in sorted(os.listdir(leagues_dir)):
@@ -896,7 +905,7 @@ def scout_picks_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") 
     current_teams = set(team_id_to_name.values())
     promoted_teams = current_teams - prior_teams
 
-    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    fixtures_path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "fixtures.csv")
     gw1_opponent_by_team = {}
     if os.path.exists(fixtures_path):
         fx = pd.read_csv(fixtures_path)
@@ -969,6 +978,26 @@ def _load_bootstrap() -> dict:
             return json.load(f)
 
 
+@st.cache_data(ttl=60)
+def _current_season_label() -> str:
+    """The real, current season label (e.g. "2026-27"), derived from the
+    live bootstrap's own first gameweek deadline -- same derivation
+    src/collector/snapshot.py's own _season_label() uses, kept as a
+    separate small function here rather than importing that script module
+    (which carries its own CLI/argparse-oriented top-level code this app
+    has no reason to depend on).
+
+    Fixes a real bug found in an audit: every data/raw/ fallback path in
+    this file used to hardcode the literal string "2026-27" -- correct
+    today, but silently wrong (pointing at a folder that will no longer
+    exist) the day the season rolls over to 2027-28. Every caller below
+    now derives this fresh from live data instead of a hardcoded literal."""
+    raw = _load_bootstrap()
+    first_deadline = raw["events"][0]["deadline_time"]
+    year = int(first_deadline[:4])
+    return f"{year}-{str(year + 1)[2:]}"
+
+
 def is_gameweek_live() -> bool:
     """Real, current "is a gameweek actually in progress right now" check --
     FPL's own is_current flag AND NOT finished (checked directly: is_current
@@ -1002,7 +1031,7 @@ def _fixtures_path() -> str:
     already accepted for data/dashboard_bootstrap.json). Returns None (not
     an exception) if neither exists -- these features already treat a
     missing fixtures file as "nothing collected yet," not an error."""
-    live_path = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "fixtures.csv")
+    live_path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "fixtures.csv")
     if os.path.exists(live_path):
         return live_path
     fallback = os.path.join(PROJECT_DIR, "data", "dashboard_fixtures.csv")
@@ -1196,7 +1225,7 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
 
     rows = []
     for p in raw["elements"]:
-        owned = float(p["selected_by_percent"])
+        owned = float(p["selected_by_percent"] or 0)
         ep_next = float(p["ep_next"] or 0)
         if owned > max_ownership or ep_next < min_ep_next:
             continue
@@ -1211,6 +1240,45 @@ def differential_finder(max_ownership: float = 10.0, min_ep_next: float = 2.0, t
         })
     df = pd.DataFrame(rows, columns=["name", "position", "team", "cost", "selected_by_percent", "ep_next", "is_penalty_taker"])
     return df.sort_values("ep_next", ascending=False).head(top_n).reset_index(drop=True)
+
+
+@st.cache_data(ttl=60)
+def ep_next_player_pool() -> pd.DataFrame:
+    """Every real, currently-available player, in the exact shape
+    optimize_squad()/optimize_transfers() expect (player_id/position/team/
+    cost/predicted_points), with predicted_points set to FPL's own real
+    `ep_next` field -- the same real "expected points next gameweek" number
+    suggest_captain()/differential_finder()/the Chip Advisor tab's Bench
+    Boost and Triple Captain sections already use.
+
+    Built specifically to let Chip Advisor's Free Hit/Wildcard check reuse
+    the SAME real single-gameweek signal already used elsewhere on this
+    tab, rather than preseason_pool()'s last-season-closing-form
+    predicted_points -- mixing the two would silently compare a squad's
+    real next-gameweek ep_next total against an "optimal" squad scored on
+    a completely different (stale, prior-season) metric, an apples-to-
+    oranges comparison that would look like a real projection while not
+    being one.
+
+    A genuinely unavailable player (status != 'a') is excluded entirely --
+    optimizing a hypothetical Free Hit/Wildcard squad around an injured
+    player's real ep_next would recommend a squad that can't actually
+    play, defeating the point of a rebuild-timing check."""
+    raw = _load_bootstrap()
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    rows = []
+    for p in raw["elements"]:
+        if p["status"] != "a":
+            continue
+        rows.append({
+            "player_id": p["id"],
+            "name": f"{p['first_name']} {p['second_name']}",
+            "position": _POSITION_MAP_APP[p["element_type"]],
+            "team": team_by_id.get(p["team"]),
+            "cost": p["now_cost"] / 10.0,
+            "predicted_points": float(p["ep_next"] or 0),
+        })
+    return pd.DataFrame(rows, columns=["player_id", "name", "position", "team", "cost", "predicted_points"])
 
 
 @st.cache_data(ttl=60)
@@ -1241,7 +1309,7 @@ def league_wide_status_flags() -> pd.DataFrame:
             "position": _POSITION_MAP_APP[p["element_type"]],
             "team": team_by_id.get(p["team"]),
             "cost": p["now_cost"] / 10.0,
-            "selected_by_percent": float(p["selected_by_percent"]),
+            "selected_by_percent": float(p["selected_by_percent"] or 0),
             "status": p["status"],
             "news": p.get("news") or "",
             "chance_of_playing_next_round": p.get("chance_of_playing_next_round"),
@@ -1393,7 +1461,7 @@ def team_insights(top_n: int = 5) -> dict:
             "team": team_by_id.get(p["team"]),
             "name": f"{p['first_name']} {p['second_name']}",
             "position": _POSITION_MAP_APP[p["element_type"]],
-            "selected_by_percent": float(p["selected_by_percent"]),
+            "selected_by_percent": float(p["selected_by_percent"] or 0),
         })
     players_df = pd.DataFrame(rows)
     most_owned = (

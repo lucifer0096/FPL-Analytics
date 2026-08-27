@@ -146,5 +146,48 @@ if __name__ == "__main__":
         print(f"Paid transfers: {result['num_paid_transfers']} (hit cost: -{result['hit_cost']} pts)")
         print(f"Net points gain: {result['net_points_gain']:.1f}")
         verify_squad(result["new_squad"])
+
+        print(f"\n\n### Test 4: unlimited_transfers=True path (Wildcard/Free Hit/GW1) ###\n")
+        # Previously untested (an audit finding) despite being the real code
+        # path a Wildcard, Free Hit, or GW1 squad build takes -- every gate
+        # (free_transfers/max_paid_transfers/hit cost) is bypassed entirely
+        # here, so this exercises genuinely different code
+        # (_optimize_transfers_unlimited) than the gated test above.
+        unlimited_result = optimize_transfers(
+            current_squad_ids=squad_ids_for_transfer,
+            players=next_gw_pool,
+            free_transfers=1,  # ignored entirely when unlimited_transfers=True
+            bank=0.0,
+            unlimited_transfers=True,
+        )
+        print(f"Transfers out: {unlimited_result['transfers_out']}")
+        print(f"Transfers in: {unlimited_result['transfers_in']}")
+        assert unlimited_result["num_paid_transfers"] == 0, "unlimited transfers must never report a paid transfer"
+        assert unlimited_result["hit_cost"] == 0, "unlimited transfers must never incur a hit cost"
+        print(f"Net points gain: {unlimited_result['net_points_gain']:.1f}")
+        verify_squad(unlimited_result["new_squad"])
+        # An unlimited rebuild is at least as good as (never worse than) a
+        # gated one with the same starting squad/pool -- it has strictly
+        # more freedom (any number of transfers, full squad's sell value as
+        # budget), so its real point total should never fall short.
+        assert unlimited_result["new_squad"]["predicted_points"].sum() >= result["new_squad"]["predicted_points"].sum() - 1e-6, (
+            "an unrestricted rebuild should never score worse than a gated one from the same starting point"
+        )
+        print("Unlimited-transfers path verified: no hit cost, no paid-transfer cap, at least as good as the gated result.")
+
+        print(f"\n\n### Test 5: optimize_transfers raises on a squad id missing from the pool ###\n")
+        # Previously untested (an audit finding): the unlimited path's real
+        # ValueError guard (a squad member no longer in the live pool --
+        # e.g. already sold in a real transfer window) should raise a clear
+        # error, not a confusing raw KeyError from deep inside the solver.
+        bad_squad_ids = squad_ids_for_transfer[:-1] + [-999999]  # a fabricated id that can't exist
+        try:
+            optimize_transfers(
+                current_squad_ids=bad_squad_ids, players=next_gw_pool,
+                free_transfers=1, bank=0.0, unlimited_transfers=True,
+            )
+            raise AssertionError("expected a ValueError for a squad id missing from the pool, got none")
+        except ValueError as e:
+            print(f"Correctly raised ValueError: {e}")
     else:
         print("Skipping transfer test: squad player set changed too much between gameweeks.")

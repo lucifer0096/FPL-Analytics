@@ -41,6 +41,20 @@ def _latest(pattern: str) -> str:
     return paths[-1] if paths else None
 
 
+def _current_season_dir() -> str:
+    """The most recent season directory data/raw/ actually has (e.g.
+    "2026-27"), found by globbing RAW_DIR/* rather than a hardcoded
+    literal -- fixes a real bug found in an audit: refresh_current_squad(),
+    refresh_fixtures(), and refresh_leagues() used to hardcode "2026-27"
+    while refresh_bootstrap() correctly globbed RAW_DIR/* -- the three
+    hardcoded ones would have silently pointed at a nonexistent directory
+    (just a non-fatal "skipping" print, no error) the day the season rolls
+    over to 2027-28. Returns None if data/raw/ has no season directories at
+    all yet (expected before the collector's first run)."""
+    season_dirs = sorted(d for d in glob.glob(os.path.join(RAW_DIR, "*")) if os.path.isdir(d))
+    return os.path.basename(season_dirs[-1]) if season_dirs else None
+
+
 def refresh_bootstrap() -> bool:
     path = _latest(os.path.join(RAW_DIR, "*", "bootstrap", "bootstrap_*.json"))
     if not path:
@@ -90,7 +104,11 @@ def refresh_current_squad(entry_id: str) -> bool:
     gameweek's live per-player points into ONE fallback file (rather than
     two separate ones) since app.py's load_current_squad_picks/
     load_live_gw_points always need both together to render a squad."""
-    picks_dir = os.path.join(RAW_DIR, "2026-27", "entry", entry_id, "picks")
+    season = _current_season_dir()
+    if season is None:
+        print("No season directory found -- skipping dashboard_current_squad.json")
+        return False
+    picks_dir = os.path.join(RAW_DIR, season, "entry", entry_id, "picks")
     if not os.path.isdir(picks_dir):
         print("No picks directory found -- skipping dashboard_current_squad.json")
         return False
@@ -106,7 +124,7 @@ def refresh_current_squad(entry_id: str) -> bool:
     with open(os.path.join(picks_dir, f"gw{latest_gw}.json"), encoding="utf-8") as f:
         picks = json.load(f)
 
-    live_path = os.path.join(RAW_DIR, "2026-27", "live", f"gw{latest_gw}.json")
+    live_path = os.path.join(RAW_DIR, season, "live", f"gw{latest_gw}.json")
     live_points = {}
     if os.path.exists(live_path):
         with open(live_path, encoding="utf-8") as f:
@@ -121,7 +139,7 @@ def refresh_current_squad(entry_id: str) -> bool:
 
 
 def refresh_fixtures() -> bool:
-    """Copies data/raw/2026-27/fixtures.csv straight to
+    """Copies data/raw/{current season}/fixtures.csv straight to
     data/dashboard_fixtures.csv (not glob-latest like the others -- there's
     only ever one live fixtures.csv per season, re-fetched in place, not a
     new timestamped file per run). data/raw/ is gitignored, so without this
@@ -129,9 +147,13 @@ def refresh_fixtures() -> bool:
     breaking the PL Table tab and every fixture-difficulty feature (see
     shared.py's _fixtures_path()) until the next scheduled collector run
     happens to also be a same-day deploy."""
-    path = os.path.join(RAW_DIR, "2026-27", "fixtures.csv")
+    season = _current_season_dir()
+    if season is None:
+        print("No season directory found -- skipping dashboard_fixtures.csv")
+        return False
+    path = os.path.join(RAW_DIR, season, "fixtures.csv")
     if not os.path.exists(path):
-        print("No 2026-27 fixtures.csv found -- skipping dashboard_fixtures.csv")
+        print(f"No {season} fixtures.csv found -- skipping dashboard_fixtures.csv")
         return False
     with open(path, encoding="utf-8") as f:
         contents = f.read()
@@ -143,7 +165,11 @@ def refresh_fixtures() -> bool:
 
 
 def refresh_leagues(entry_id: str) -> bool:
-    leagues_dir = os.path.join(RAW_DIR, "2026-27", "entry", entry_id, "leagues")
+    season = _current_season_dir()
+    if season is None:
+        print("No season directory found -- skipping dashboard_leagues.json")
+        return False
+    leagues_dir = os.path.join(RAW_DIR, season, "entry", entry_id, "leagues")
     if not os.path.isdir(leagues_dir):
         print("No leagues directory found -- skipping dashboard_leagues.json")
         return False

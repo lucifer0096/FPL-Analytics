@@ -85,6 +85,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_current_squad_picks", "load_live_gw_points", "load_live_gw_minutes",
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
+        "_current_season_label", "ep_next_player_pool",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -99,6 +100,43 @@ def test_every_live_facing_function_has_a_cache_ttl():
             missing_ttl.append(name)
     assert not missing_ttl, f"these live-facing functions are cached with NO ttl (will freeze forever): {missing_ttl}"
     print(f"PASS: all {len(live_facing_functions)} live-facing functions carry an explicit cache ttl")
+
+
+def test_no_hardcoded_season_path_in_shared():
+    """Regression test for a real bug found in an audit: 7 fallback-path
+    functions in shared.py (plus one in app.py, found in a follow-up sweep)
+    hardcoded the literal path segment "2026-27" (e.g.
+    os.path.join(..., "2026-27", "live", ...)) instead of deriving it live
+    via _current_season_label() -- correct today, but silently wrong
+    (pointing at a folder that no longer exists) the day the season rolls
+    over to 2027-28. Fixed by adding _current_season_label() and routing
+    every one of those call sites through it.
+
+    Checks specifically for the literal used as a PATH ARGUMENT (a quoted
+    "2026-27" immediately preceded by a comma and whitespace, the actual
+    os.path.join(...) call shape every real bug site had) rather than
+    banning the substring outright -- plain prose mentions in docstrings
+    ("2026-27 pre-season player pool", "2026-27 progress", etc.) are fine
+    and expected; only a literal PATH SEGMENT is the real regression risk.
+    Checks BOTH shared.py and app.py -- the app.py bug (_collected_gws())
+    was in a different file than the original 7 and wasn't caught by an
+    earlier, shared.py-only version of this same test."""
+    import inspect
+    import re
+    path_literal_pattern = re.compile(r',\s*["\']2026-27["\']\s*,')
+
+    shared_source = inspect.getsource(shared)
+    app_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+    with open(app_path, encoding="utf-8") as f:
+        app_source = f.read()
+
+    for source, label in ((shared_source, "shared.py"), (app_source, "app.py")):
+        matches = path_literal_pattern.findall(source)
+        assert not matches, (
+            f"found {len(matches)} hardcoded \"2026-27\" path-segment literal(s) in {label} -- "
+            "use _current_season_label() instead so this doesn't silently break next season"
+        )
+    print("PASS: no hardcoded season path-segment literal remains in shared.py or app.py")
 
 
 def test_load_bootstrap_live_and_fallback():
@@ -189,6 +227,21 @@ def test_premier_league_table_movement():
         print(f"PASS: premier_league_table_with_movement() real movement values OK for GW{current_gw}")
 
 
+def test_ep_next_player_pool_shape_and_optimizable():
+    """Verifies the pool backing Chip Advisor's new Free Hit/Wildcard check:
+    real shape (matches what optimize_squad() requires), only available
+    players (status == 'a'), and genuinely optimizable end-to-end."""
+    pool = shared.ep_next_player_pool()
+    assert set(["player_id", "name", "position", "team", "cost", "predicted_points"]).issubset(pool.columns)
+    assert not pool.empty, "real player pool should never be empty mid-season"
+    assert (pool["predicted_points"] >= 0).all(), "ep_next should never be negative"
+
+    from optimizer import optimize_squad
+    optimal = optimize_squad(pool)
+    assert len(optimal) == 15, "optimize_squad must return a real 15-man squad from this pool"
+    print(f"PASS: ep_next_player_pool() shape OK ({len(pool)} available players), optimizes to a real 15-man squad")
+
+
 def test_tonight_price_projections_shape():
     projections = shared.tonight_price_projections()
     assert set(["name", "position", "team", "cost", "projected_percent", "likelihood"]).issubset(projections.columns)
@@ -272,12 +325,14 @@ def test_not_yet_played_vs_no_game_time_split():
 
 if __name__ == "__main__":
     test_every_live_facing_function_has_a_cache_ttl()
+    test_no_hardcoded_season_path_in_shared()
     test_load_bootstrap_live_and_fallback()
     test_load_fixtures_df_live_and_fallback()
     test_load_entry_history_live_and_fallback()
     test_season_leaderboards_shape()
     test_team_insights_consistency()
     test_premier_league_table_movement()
+    test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
     test_player_season_stats_and_optimizer_card_hover()

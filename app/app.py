@@ -25,8 +25,9 @@ from shared import (
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
+    ep_next_player_pool, _current_season_label,
     render_pitch, inject_shared_css, render_sidebar,
-    optimize_transfers, POSITION_REQUIREMENTS,
+    optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
 
 st.set_page_config(
@@ -53,7 +54,7 @@ def _collected_gws() -> list:
     """Which gameweeks this manager's real picks have actually been
     collected for -- checks disk directly rather than re-deriving "current
     gameweek" from a live bootstrap call on every page load."""
-    picks_dir = os.path.join(PROJECT_DIR, "data", "raw", "2026-27", "entry", str(MANAGER_ENTRY_ID), "picks")
+    picks_dir = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(MANAGER_ENTRY_ID), "picks")
     if os.path.isdir(picks_dir):
         local = sorted(
             int(f[2:-5]) for f in os.listdir(picks_dir) if f.startswith("gw") and f.endswith(".json")
@@ -280,14 +281,16 @@ def _render_transfers_tab():
             next_pool = preseason_pool(df)
             pool_label = "the live current player pool (re-fetched, in case prices moved)"
             st.info(
-                "⚠️ This early in the season, predicted_points still comes from last season's "
-                "**closing 2025-26 form**, not real 2026-27 in-season data — there aren't enough "
-                "finished 2026-27 gameweeks yet for the trained model to use real fixture "
-                "difficulty/current form (see the Historical & Model page's Model Performance tab "
-                "for how that model works once it can be used here). Treat suggested transfers as "
-                "a rough signal, not a confident recommendation, until this improves — a real "
-                "current-season model will automatically start being used here once enough live "
-                "gameweeks are collected."
+                "⚠️ predicted_points here comes from last season's **closing 2025-26 form** "
+                "(`preseason_pool()`), not real 2026-27 in-season data or the trained model's "
+                "real fixture-difficulty/current-form features (see the Historical & Model "
+                "page's Model Performance tab for how that model works on already-finished "
+                "gameweeks). Treat suggested transfers as a rough signal, not a confident "
+                "recommendation. **This is a standing limitation, not a temporary one** — "
+                "wiring live 2026-27 gameweeks into the trained model's own feature pipeline "
+                "(fixture_difficulty, rolling form, etc.) is a real data-engineering step that "
+                "hasn't been built yet, so this pool won't silently improve just because more "
+                "gameweeks pass; it needs that pipeline work first."
             )
         except FileNotFoundError as e:
             st.error(str(e))
@@ -533,6 +536,33 @@ def _render_chip_advisor_tab():
         else:
             st.caption("No starter with a positive `ep_next` right now — nothing to suggest.")
 
+        st.subheader("🔄 Free Hit / Wildcard — next gameweek only")
+        st.caption(
+            "Real gap between your current squad's real `ep_next` total and a freshly "
+            "optimized 15-man squad's `ep_next` total, both scored on the SAME real field "
+            "(unlike Transfers, which uses last season's closing form for pre-season "
+            "predicted_points — mixing the two here would compare apples to oranges). "
+            "**Wildcard's real value is a multi-gameweek strategic call, not just this one "
+            "gap** — treat this as a weaker signal than Free Hit's, which genuinely only "
+            "ever affects a single gameweek by design."
+        )
+        ep_pool = ep_next_player_pool()
+        current_total_ep = squad_df["ep_next"].sum() if "ep_next" in squad_df.columns else 0.0
+        try:
+            optimal_squad = optimize_squad(ep_pool)
+            optimal_total_ep = optimal_squad["predicted_points"].sum()
+            gap = optimal_total_ep - current_total_ep
+            fcol1, fcol2, fcol3 = st.columns(3)
+            fcol1.metric("Your squad's real ep_next", f"{current_total_ep:.1f}")
+            fcol2.metric("Freshly optimized squad's real ep_next", f"{optimal_total_ep:.1f}")
+            fcol3.metric("Gap", f"{gap:.1f}", help="A big gap means a Free Hit/Wildcard rebuild would score meaningfully more real expected points next gameweek than your current squad.")
+            if gap > 15:
+                st.info("💡 A real, meaningful gap — worth genuinely considering a Free Hit here, or a Wildcard if you're also thinking multi-gameweek.")
+            else:
+                st.caption("Gap isn't large enough to clearly justify a chip on ep_next alone — holding is a reasonable call.")
+        except Exception as e:
+            st.caption(f"Couldn't run the optimizer against the live ep_next pool right now ({e}).")
+
 
 with tab_chips:
     _render_chip_advisor_tab()
@@ -777,8 +807,8 @@ def _render_pl_table_tab():
         st.caption(
             "**Since last GW** — real table-position movement vs. one gameweek ago, computed "
             "from the exact same fixtures data at both points in time (not a guess or a stored "
-            "snapshot) — a genuine re-derivable comparison. Shows '—' for GW1, since there's no "
-            "real earlier table to compare against yet."
+            "snapshot) — a genuine re-derivable comparison. Shows '—' for the season's opening "
+            "gameweek, since there's no real earlier table to compare against yet."
         )
 
 
