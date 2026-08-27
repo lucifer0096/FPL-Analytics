@@ -599,6 +599,39 @@ def calculate_free_transfers(entry_id: int) -> int:
     return banked
 
 
+@st.cache_data(ttl=60)
+def chip_usage_status(entry_id: int) -> dict:
+    """This manager's REAL chip usage so far this season -- which of
+    Wildcard/Free Hit/Bench Boost/Triple Captain have already been played,
+    and in which real gameweek, straight from FPL's own
+    entry/{id}/history's `chips` array (each real entry:
+    {"name": ..., "event": gw, "time": ...}) -- not tracked or simulated
+    locally. Season-2-Wildcard support: FPL allows Wildcard to be used
+    ONCE in each half of the season (before/after a mid-season deadline
+    FPL itself sets) -- this function reports total real usage per chip
+    name rather than assuming a hard "used once ever" cap, since a second
+    real Wildcard play is a genuine, valid state for this specific chip,
+    not a bug.
+
+    Returns {chip_name: {"used": bool, "gameweeks": [gw, ...]}} for each
+    of FPL's own real chip name codes (wildcard, freehit, bboost, 3xc --
+    verified directly against bootstrap-static's chip_plays). Empty
+    "gameweeks" list (used: False) is the correct, expected state for any
+    chip not yet played, not a guess."""
+    CHIP_NAMES = {"wildcard": "Wildcard", "freehit": "Free Hit", "bboost": "Bench Boost", "3xc": "Triple Captain"}
+    history = _load_entry_history(entry_id)
+    played = history.get("chips", []) if history else []
+
+    status = {label: {"used": False, "gameweeks": []} for label in CHIP_NAMES.values()}
+    for chip in played:
+        label = CHIP_NAMES.get(chip.get("name"))
+        if label is None:
+            continue  # a real chip name this project doesn't recognize yet -- skip rather than guess
+        status[label]["used"] = True
+        status[label]["gameweeks"].append(chip.get("event"))
+    return status
+
+
 _DASHBOARD_CURRENT_SQUAD_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_current_squad.json")
 
 
@@ -842,6 +875,16 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             "assists": stats.get("assists"),
             "bonus": stats.get("bonus"),
             "gw_total_points": stats.get("total_points"),
+            # FPL's own real, official Team of the Week flag for THIS
+            # gameweek -- already fetched via live_stats above (the same
+            # event/{gw}/live call load_live_gw_points/load_live_gw_stats
+            # use), just never attached to the live-squad row before now.
+            # _player_card_html() already renders a badge for this column
+            # when present (built originally for historical/optimizer
+            # pools) -- this was a real gap: the badge worked everywhere
+            # EXCEPT the one place (My Squad) a manager would most want to
+            # know FPL's own Dream Team agreed with their real picks.
+            "in_dreamteam": stats.get("in_dreamteam"),
             "in_starting_xi": pick["multiplier"] > 0,
             "is_captain": pick["is_captain"],
             "is_vice_captain": pick["is_vice_captain"],

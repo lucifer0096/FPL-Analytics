@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shared import (
     PROJECT_DIR, MANAGER_ENTRY_ID,
     load_features, preseason_pool,
-    load_manager_name, load_current_season_progress, calculate_free_transfers,
+    load_manager_name, load_current_season_progress, calculate_free_transfers, chip_usage_status,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
     tonight_price_projections,
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
@@ -364,12 +364,46 @@ def _render_transfers_tab():
             if not unlimited:
                 real_free_transfers = calculate_free_transfers(MANAGER_ENTRY_ID)
                 free_transfers = st.slider(
-                    "Free transfers available", 1, 5, real_free_transfers, key="ft_slider_home",
+                    # Real minimum is 0, not 1 -- optimize_transfers() genuinely
+                    # supports free_transfers=0 (every suggested transfer would
+                    # take a real hit), a real, useful state when you've already
+                    # queued a transfer for next gameweek that the public API
+                    # can't see yet (see the caveat below) and want to check
+                    # whether a FURTHER change is worth a hit on top of that.
+                    "Free transfers available", 0, 5, real_free_transfers, key="ft_slider_home",
                     help="Pre-filled from your REAL transfer history (event_transfers each gameweek, "
                          "banked per FPL's real rule: 1 per week, up to 5 max) — not a guess. Override "
-                         "if you know it's wrong (e.g. a chip changed the normal accounting).",
+                         "if you know it's wrong -- e.g. you've already queued a transfer for next "
+                         "gameweek the API can't see yet, and want to check if changing something "
+                         "else is worth a real -4pt hit on top of it. Set to 0 for that case.",
                 )
                 st.caption(f"Your real banked free transfers, computed from transfer history: **{real_free_transfers}**.")
+                st.caption(
+                    "⚠️ If you've already made a transfer for the NEXT gameweek, this number won't "
+                    "reflect it yet — same real API limitation as My Squad: "
+                    "`entry/{id}/event/{gw}/picks` (and the transfer counts derived from it) aren't "
+                    "publicly visible until that gameweek's own deadline passes. This isn't a bug; "
+                    "there's no public endpoint for a squad mid-transfer-window. It resolves itself "
+                    "automatically once that deadline passes."
+                )
+
+                # Real transfers already made THIS gameweek -- FPL's own
+                # event_transfers field for the current (possibly still
+                # in-progress) gameweek, distinct from the banked-forward
+                # number above. GW1 is excluded (event_transfers is always
+                # 0 there regardless of squad size -- see
+                # calculate_free_transfers' own docstring for why), so this
+                # is only shown from GW2 onward, when it's a real, live
+                # transfer count rather than a meaningless always-zero row.
+                transfers_progress = load_current_season_progress(MANAGER_ENTRY_ID)
+                if not transfers_progress.empty and transfers_progress["gw"].max() > 1:
+                    this_gw_row = transfers_progress[transfers_progress["gw"] == transfers_progress["gw"].max()].iloc[0]
+                    used_this_gw = int(this_gw_row["event_transfers"])
+                    hit_cost_this_gw = int(this_gw_row["event_transfers_cost"])
+                    used_caption = f"Real transfers made so far this gameweek: **{used_this_gw}**"
+                    if hit_cost_this_gw:
+                        used_caption += f" (already incurred a real -{hit_cost_this_gw}pt hit)"
+                    st.caption(used_caption + " — updates live as FPL records each real transfer you make.")
 
             if unlimited:
                 st.caption(f"Checking against {pool_label}. Unlimited transfers this gameweek — no hit cost, no minimum-gain bar.")
@@ -540,6 +574,17 @@ def _render_chip_advisor_tab():
         "gameweek, using that same real `ep_next` field — see below."
     )
 
+    chip_status = chip_usage_status(MANAGER_ENTRY_ID)
+    st.caption("Real chip usage this season (straight from FPL's own entry history, not tracked locally):")
+    chip_cols = st.columns(4)
+    for col, (chip_name, status) in zip(chip_cols, chip_status.items()):
+        with col:
+            if status["used"]:
+                gws = ", ".join(f"GW{g}" for g in status["gameweeks"])
+                st.metric(chip_name, "Used", help=f"Played in {gws}.")
+            else:
+                st.metric(chip_name, "Available")
+
     if "built_squad" not in st.session_state or st.session_state.get("built_squad_season_gw") != "live_squad":
         st.warning("Build your real squad in the **My Squad** tab first (requires at least one collected gameweek).")
     else:
@@ -597,6 +642,12 @@ def _render_chip_advisor_tab():
                 st.info("💡 A real, meaningful gap — worth genuinely considering a Free Hit here, or a Wildcard if you're also thinking multi-gameweek.")
             else:
                 st.caption("Gap isn't large enough to clearly justify a chip on ep_next alone — holding is a reasonable call.")
+            if chip_status["Free Hit"]["used"] and chip_status["Wildcard"]["used"]:
+                st.caption("⚠️ Both Free Hit and Wildcard already show as used this half based on your real chip history above — double-check FPL directly if you expected either to still be available (e.g. a new half's chips resetting).")
+            elif chip_status["Free Hit"]["used"]:
+                st.caption("⚠️ Free Hit already shows as used this half — this gap would apply to a Wildcard instead.")
+            elif chip_status["Wildcard"]["used"]:
+                st.caption("⚠️ Wildcard already shows as used this half — this gap would apply to a Free Hit instead.")
         except Exception as e:
             st.caption(f"Couldn't run the optimizer against the live ep_next pool right now ({e}).")
 

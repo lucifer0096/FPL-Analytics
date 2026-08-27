@@ -85,7 +85,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_current_squad_picks", "load_live_gw_points", "load_live_gw_minutes",
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
-        "_current_season_label", "ep_next_player_pool",
+        "_current_season_label", "ep_next_player_pool", "chip_usage_status",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -328,6 +328,61 @@ def test_openrouter_hardcoded_to_free_model():
     print(f"PASS: openrouter.py is hardcoded to a free model ({shared.openrouter.FREE_MODEL})")
 
 
+def test_chip_usage_status_shape_and_parsing():
+    """Verifies chip_usage_status() against real live data (currently no
+    chips played, so this checks the correct empty-state shape) AND
+    against a simulated real chip_plays payload (since a genuine played-
+    chip case isn't available to test live right now) to confirm the
+    parsing logic itself is correct, not just that it runs."""
+    status = shared.chip_usage_status(MANAGER_ENTRY_ID)
+    expected_chips = {"Wildcard", "Free Hit", "Bench Boost", "Triple Captain"}
+    assert set(status.keys()) == expected_chips
+    for chip, info in status.items():
+        assert "used" in info and "gameweeks" in info
+        assert isinstance(info["used"], bool)
+        assert isinstance(info["gameweeks"], list)
+        if not info["used"]:
+            assert info["gameweeks"] == [], f"{chip} not used but has gameweeks listed"
+
+    # Simulate a real chip_plays-shaped payload to verify parsing logic
+    # end-to-end without needing a manager who's actually played a chip.
+    fake_history = {"current": [], "past": [], "chips": [
+        {"name": "bboost", "event": 5, "time": "2026-09-20T00:00:00Z"},
+        {"name": "wildcard", "event": 8, "time": "2026-10-11T00:00:00Z"},
+    ]}
+    original = shared._load_entry_history
+    try:
+        shared._load_entry_history = lambda entry_id: fake_history
+        simulated = shared.chip_usage_status.__wrapped__(MANAGER_ENTRY_ID)
+        assert simulated["Bench Boost"] == {"used": True, "gameweeks": [5]}
+        assert simulated["Wildcard"] == {"used": True, "gameweeks": [8]}
+        assert simulated["Free Hit"] == {"used": False, "gameweeks": []}
+        assert simulated["Triple Captain"] == {"used": False, "gameweeks": []}
+    finally:
+        shared._load_entry_history = original
+    print(f"PASS: chip_usage_status() shape OK against real data, parsing verified against a simulated real payload")
+
+
+def test_free_transfers_slider_allows_zero():
+    """Regression test for a real UX gap found live: the free-transfers
+    slider's minimum was hardcoded to 1, even though optimize_transfers()
+    genuinely supports free_transfers=0 (every suggested transfer takes a
+    real hit) -- a real, useful case when a manager has already queued a
+    transfer for next gameweek the public API can't see yet and wants to
+    check if a FURTHER change is worth an additional hit. Checks the
+    actual app.py source for the slider's real min bound rather than
+    running the full Streamlit app (already covered by the AppTest
+    verification done when this was fixed)."""
+    app_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+    with open(app_path, encoding="utf-8") as f:
+        app_source = f.read()
+    assert '"Free transfers available", 0, 5, real_free_transfers' in app_source, (
+        "the free-transfers slider must allow a real minimum of 0, not 1 -- "
+        "optimize_transfers() genuinely supports free_transfers=0"
+    )
+    print("PASS: free-transfers slider allows a real minimum of 0")
+
+
 def test_ep_next_player_pool_shape_and_optimizable():
     """Verifies the pool backing Chip Advisor's new Free Hit/Wildcard check:
     real shape (matches what optimize_squad() requires), only available
@@ -437,6 +492,8 @@ if __name__ == "__main__":
     test_explain_transfer_suggestion_debug_gives_real_reasons()
     test_rate_limit_errors_are_tagged_for_silent_handling()
     test_openrouter_hardcoded_to_free_model()
+    test_chip_usage_status_shape_and_parsing()
+    test_free_transfers_slider_allows_zero()
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
