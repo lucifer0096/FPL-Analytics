@@ -25,7 +25,7 @@ from shared import (
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
-    ep_next_player_pool, _current_season_label, explain_transfer_suggestion,
+    ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
@@ -498,13 +498,20 @@ def _render_transfers_tab():
                             for _, row in next_pool[next_pool["player_id"].isin(result["transfers_in"])].iterrows()
                             if "ep_next" in row.index and pd.notna(row.get("ep_next"))
                         }
-                        explanation = explain_transfer_suggestion(
+                        explanation, explanation_error = explain_transfer_suggestion_debug(
                             out_names, in_names, result["hit_cost"], result["net_points_gain"],
                             out_reasons=out_reasons, in_notes=in_notes,
                         )
                         if explanation:
                             st.caption("🤖 AI summary (free model, narrates the real numbers above — never a separate source of truth):")
                             st.markdown(f"> {explanation}")
+                        elif explanation_error:
+                            # A real, honest diagnostic (never the API key itself) for why
+                            # narration didn't appear -- e.g. "OPENROUTER_API_KEY is not set"
+                            # vs. "OpenRouter returned HTTP 401" vs. rate-limited. A silent
+                            # None here was genuinely undebuggable once the key WAS set on
+                            # Streamlit Cloud but narration still didn't show up.
+                            st.caption(f"🤖 AI summary unavailable: {explanation_error}")
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
                 else:

@@ -246,6 +246,31 @@ def test_explain_transfer_suggestion_no_key_returns_none():
     print("PASS: explain_transfer_suggestion() returns None cleanly with no OPENROUTER_API_KEY set")
 
 
+def test_explain_transfer_suggestion_debug_gives_real_reasons():
+    """Regression test for a real debugging gap found live: with no key,
+    the debug variant must give a specific, honest reason (not just None)
+    -- and with an invalid key, it must surface OpenRouter's own real HTTP
+    error (never the key value itself) rather than swallowing it into an
+    undebuggable None, which is what happened when narration silently
+    didn't appear even after a real key was set on Streamlit Cloud."""
+    original_key = os.environ.pop("OPENROUTER_API_KEY", None)
+    try:
+        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
+        assert content is None
+        assert error and "OPENROUTER_API_KEY is not set" in error
+
+        os.environ["OPENROUTER_API_KEY"] = "sk-invalid-test-key-not-real"
+        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
+        assert content is None
+        assert error is not None, "an invalid key must produce a real error message, not a silent None"
+        assert "sk-invalid-test-key-not-real" not in error, "the error message must never echo back the key value"
+        print(f"PASS: explain_transfer_suggestion_debug() gives real, specific reasons (no key: clear message; invalid key: {error!r})")
+    finally:
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        if original_key is not None:
+            os.environ["OPENROUTER_API_KEY"] = original_key
+
+
 def test_openrouter_hardcoded_to_free_model():
     """Regression guard: openrouter.py's FREE_MODEL must always end in
     ':free' (OpenRouter's own naming convention for models that don't
@@ -365,6 +390,7 @@ if __name__ == "__main__":
     test_team_insights_consistency()
     test_premier_league_table_movement()
     test_explain_transfer_suggestion_no_key_returns_none()
+    test_explain_transfer_suggestion_debug_gives_real_reasons()
     test_openrouter_hardcoded_to_free_model()
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()

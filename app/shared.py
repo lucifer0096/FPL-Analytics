@@ -524,8 +524,25 @@ def explain_transfer_suggestion(
     are the ONLY extra context handed to the model beyond the raw
     transfer numbers, so a hallucinated reason isn't possible for a name
     not present in either dict."""
+    content, _ = explain_transfer_suggestion_debug(
+        out_names, in_names, hit_cost, net_points_gain, out_reasons, in_notes,
+    )
+    return content
+
+
+def explain_transfer_suggestion_debug(
+    out_names: list, in_names: list, hit_cost: int, net_points_gain: float,
+    out_reasons: dict = None, in_notes: dict = None,
+) -> tuple:
+    """Same real call as explain_transfer_suggestion(), but also returns a
+    real, human-readable reason when narration is unavailable -- NEVER the
+    API key itself. Lets the Transfers tab show an honest diagnostic (e.g.
+    "OPENROUTER_API_KEY is not set" vs. "OpenRouter returned HTTP 401" vs.
+    "rate-limited") instead of the plain function's silent None, which is
+    the right default for a normal user but was genuinely undebuggable
+    when narration went missing after the key was set on Streamlit Cloud."""
     if not openrouter.is_configured():
-        return None
+        return None, "OPENROUTER_API_KEY is not set in this environment."
 
     facts = [f"Suggested transfer: OUT {', '.join(out_names)} / IN {', '.join(in_names)}."]
     facts.append(f"Hit cost: {hit_cost} points." if hit_cost else "No hit cost (within free transfers).")
@@ -545,7 +562,7 @@ def explain_transfer_suggestion(
         "transfer naturally, as if briefing a friend."
     )
     user_prompt = "\n".join(facts)
-    return openrouter.chat_completion(system_prompt, user_prompt)
+    return openrouter._chat_completion_with_error(system_prompt, user_prompt)
 
 
 def calculate_free_transfers(entry_id: int) -> int:

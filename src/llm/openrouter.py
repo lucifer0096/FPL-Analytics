@@ -66,9 +66,57 @@ def chat_completion(system_prompt: str, user_prompt: str, timeout: int = 20) -> 
         },
         method="POST",
     )
+    content, _ = _chat_completion_with_error(system_prompt, user_prompt, timeout)
+    return content
+
+
+def _chat_completion_with_error(system_prompt: str, user_prompt: str, timeout: int = 20) -> tuple[str | None, str | None]:
+    """Same real call as chat_completion(), but also returns a real,
+    human-readable reason when it fails -- NEVER the API key itself, and
+    never the raw response body (which could theoretically echo request
+    data back). Used by explain_transfer_suggestion_debug() so a user can
+    actually tell "no key set" apart from "OpenRouter rejected the key"
+    apart from "the free tier is rate-limited right now" instead of a
+    silent, undebuggable None -- chat_completion() itself stays the plain,
+    error-swallowing version for any caller that genuinely doesn't need
+    to know why."""
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None, "OPENROUTER_API_KEY is not set in this environment."
+
+    payload = {
+        "model": FREE_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    req = urllib.request.Request(
+        BASE_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/lucifer0096/FPL-Analytics",
+            "X-Title": "FPL-Analytics",
+        },
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.load(resp)
-        return data["choices"][0]["message"]["content"].strip() or None
-    except (urllib.error.URLError, TimeoutError, KeyError, IndexError, json.JSONDecodeError):
-        return None
+        content = data["choices"][0]["message"]["content"].strip()
+        return (content, None) if content else (None, "OpenRouter returned an empty response.")
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.load(e)
+            reason = body.get("error", {}).get("message", str(e))
+        except Exception:
+            reason = str(e)
+        return None, f"OpenRouter returned HTTP {e.code}: {reason}"
+    except urllib.error.URLError as e:
+        return None, f"Could not reach OpenRouter: {e.reason}"
+    except TimeoutError:
+        return None, f"OpenRouter request timed out after {timeout}s."
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        return None, f"OpenRouter returned an unexpected response shape: {e}"
