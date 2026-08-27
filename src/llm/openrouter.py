@@ -24,7 +24,16 @@ BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Hardcoded to a genuinely free (no-credits-required) OpenRouter model.
 # Never change this to a model without the ":free" suffix without also
 # changing the "free model only" guarantee described above.
-FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+#
+# CHANGED 2026-08-27: meta-llama/llama-3.3-70b-instruct:free was retired
+# from OpenRouter's free tier (confirmed live via a real HTTP 404 from
+# their own API: "This model is unavailable for free. The paid version is
+# available now"). Free-tier model availability on OpenRouter is NOT
+# permanent -- it changes as OpenRouter's own catalog changes, out of this
+# project's control. If this model also 404s in the future, check the
+# real current list at https://openrouter.ai/api/v1/models (filter for
+# ids ending in ":free") rather than guessing a replacement.
+FREE_MODEL = "google/gemma-4-31b-it:free"
 
 
 def is_configured() -> bool:
