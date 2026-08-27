@@ -30,6 +30,7 @@ from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
 import fpl_api
 import openrouter
+from openrouter import RATE_LIMIT_PREFIX
 
 FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet")
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")

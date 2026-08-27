@@ -35,6 +35,12 @@ BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 # ids ending in ":free") rather than guessing a replacement.
 FREE_MODEL = "google/gemma-4-31b-it:free"
 
+# Marks an error message as a real HTTP 429 (rate limited) -- a normal,
+# expected condition for a free-tier model under real load, not a genuine
+# problem. Callers can check error.startswith(RATE_LIMIT_PREFIX) to decide
+# whether to show it at all (see explain_transfer_suggestion_debug()).
+RATE_LIMIT_PREFIX = "RATE_LIMITED: "
+
 
 def is_configured() -> bool:
     """Whether an OpenRouter API key is actually set -- callers should
@@ -51,30 +57,6 @@ def chat_completion(system_prompt: str, user_prompt: str, timeout: int = 20) -> 
     unavailable right now," not an error to surface to the user, since
     every real number on this page already came from FPL's own API before
     this is ever called."""
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        return None
-
-    payload = {
-        "model": FREE_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    }
-    req = urllib.request.Request(
-        BASE_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            # OpenRouter asks free-tier callers to identify their app --
-            # not required for the API to function, but good citizenship.
-            "HTTP-Referer": "https://github.com/lucifer0096/FPL-Analytics",
-            "X-Title": "FPL-Analytics",
-        },
-        method="POST",
-    )
     content, _ = _chat_completion_with_error(system_prompt, user_prompt, timeout)
     return content
 
@@ -122,7 +104,14 @@ def _chat_completion_with_error(system_prompt: str, user_prompt: str, timeout: i
             reason = body.get("error", {}).get("message", str(e))
         except Exception:
             reason = str(e)
-        return None, f"OpenRouter returned HTTP {e.code}: {reason}"
+        # HTTP 429 (rate limited) is a real, EXPECTED condition for a free-
+        # tier model under load, not a genuine problem worth alarming a
+        # user over every time they click the button -- tagged with the
+        # RATE_LIMIT_PREFIX so callers (see explain_transfer_suggestion_debug())
+        # can choose to stay silent on this specific case while still
+        # surfacing every other real error (bad key, retired model, etc.).
+        prefix = RATE_LIMIT_PREFIX if e.code == 429 else ""
+        return None, f"{prefix}OpenRouter returned HTTP {e.code}: {reason}"
     except urllib.error.URLError as e:
         return None, f"Could not reach OpenRouter: {e.reason}"
     except TimeoutError:

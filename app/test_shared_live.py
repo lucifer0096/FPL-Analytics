@@ -271,6 +271,50 @@ def test_explain_transfer_suggestion_debug_gives_real_reasons():
             os.environ["OPENROUTER_API_KEY"] = original_key
 
 
+def test_rate_limit_errors_are_tagged_for_silent_handling():
+    """Regression test for a real UX issue found live: a genuine HTTP 429
+    (free-tier rate limit -- an expected, normal condition under load, not
+    a real problem) was showing the same alarming error caption as a
+    genuine failure (bad key, retired model). Verifies the real 429 path
+    is tagged with RATE_LIMIT_PREFIX so app.py can suppress it specifically
+    while still surfacing every other real error -- via a monkeypatched
+    urlopen that raises a real-shaped HTTPError(429), not a live network
+    call (a genuine rate limit isn't reliably reproducible on demand)."""
+    import io
+    import json as json_module
+    import urllib.error
+    import urllib.request
+
+    original_urlopen = urllib.request.urlopen
+    original_key = os.environ.get("OPENROUTER_API_KEY")
+
+    class _Fake429(urllib.error.HTTPError):
+        def __init__(self):
+            body = json_module.dumps({"error": {"message": "Provider returned error"}}).encode()
+            super().__init__("url", 429, "Too Many Requests", {}, io.BytesIO(body))
+
+        def read(self):
+            return json_module.dumps({"error": {"message": "Provider returned error"}}).encode()
+
+    def _raise_429(*args, **kwargs):
+        raise _Fake429()
+
+    urllib.request.urlopen = _raise_429
+    os.environ["OPENROUTER_API_KEY"] = "sk-fake-for-test"
+    try:
+        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
+        assert content is None
+        assert error is not None
+        assert error.startswith(shared.RATE_LIMIT_PREFIX), f"a real 429 must be tagged with RATE_LIMIT_PREFIX, got: {error!r}"
+        assert "429" in error, "the underlying real HTTP code should still be visible in the tagged message"
+        print(f"PASS: a real HTTP 429 is correctly tagged for silent handling ({error!r})")
+    finally:
+        urllib.request.urlopen = original_urlopen
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        if original_key is not None:
+            os.environ["OPENROUTER_API_KEY"] = original_key
+
+
 def test_openrouter_hardcoded_to_free_model():
     """Regression guard: openrouter.py's FREE_MODEL must always end in
     ':free' (OpenRouter's own naming convention for models that don't
@@ -391,6 +435,7 @@ if __name__ == "__main__":
     test_premier_league_table_movement()
     test_explain_transfer_suggestion_no_key_returns_none()
     test_explain_transfer_suggestion_debug_gives_real_reasons()
+    test_rate_limit_errors_are_tagged_for_silent_handling()
     test_openrouter_hardcoded_to_free_model()
     test_ep_next_player_pool_shape_and_optimizable()
     test_tonight_price_projections_shape()
