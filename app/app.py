@@ -27,6 +27,7 @@ from shared import (
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug, RATE_LIMIT_PREFIX,
+    _load_bootstrap, gameweek_fixtures,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
@@ -94,8 +95,8 @@ def _arrow_price_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
     return df
 
 
-tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_insights = st.tabs(
-    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table", "🔥 Season Insights"]
+tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_insights, tab_fixtures = st.tabs(
+    ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table", "🔥 Season Insights", "📅 Fixtures & Results"]
 )
 
 # =============================================================================
@@ -1118,3 +1119,78 @@ def _render_season_insights_tab():
 
 with tab_insights:
     _render_season_insights_tab()
+
+# =============================================================================
+# FIXTURES & RESULTS (real, per-gameweek match list)
+# =============================================================================
+@st.fragment(run_every=60 if is_gameweek_live() else None)
+def _render_fixtures_tab():
+    st.header("Fixtures & Results")
+    st.caption(
+        "Every real match for one gameweek — a real final/provisional score once played, real "
+        "kickoff time and FPL's own 1-5 fixture-difficulty rating (same color scheme used "
+        "throughout this app) beforehand. Keys off a real score being recorded rather than the "
+        "'finished' flag (verified directly: 'finished' stays False for hours after a match "
+        "ends, until bonus points lock in), so a just-finished result shows up here immediately."
+    )
+
+    try:
+        raw_bootstrap = _load_bootstrap()
+        events = raw_bootstrap.get("events", [])
+        current_gw = next((e["id"] for e in events if e.get("is_current")), None)
+        default_gw = current_gw or 1
+        max_gw = max((e["id"] for e in events), default=38) if events else 38
+    except Exception:
+        default_gw = 1
+        max_gw = 38
+
+    selected_gw = st.slider("Gameweek", 1, max_gw, default_gw, key="fixtures_gw_slider")
+    fixtures = gameweek_fixtures(selected_gw)
+
+    if fixtures.empty:
+        st.info(f"No real fixtures found for GW{selected_gw}.")
+    else:
+        DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
+
+        def _difficulty_chip(diff):
+            if diff is None:
+                return ""
+            color = DIFFICULTY_COLORS.get(diff, "#999")
+            return (
+                f'<span style="display: inline-block; width: 18px; height: 18px; line-height: 18px; '
+                f'border-radius: 4px; background: {color}; color: white; font-size: 10px; '
+                f'font-weight: 700; text-align: center;">{diff}</span>'
+            )
+
+        rows_html = '<div style="display: flex; flex-direction: column; gap: 8px;">'
+        for _, row in fixtures.iterrows():
+            played = row["team_h_score"] is not None
+            if played:
+                score_html = (
+                    f'<div style="font-size: 18px; font-weight: 800; min-width: 70px; text-align: center;">'
+                    f'{row["team_h_score"]} - {row["team_a_score"]}</div>'
+                )
+            else:
+                kickoff = row["kickoff_time"]
+                kickoff_label = kickoff[:16].replace("T", " ") + " UTC" if kickoff else "TBC"
+                score_html = (
+                    f'<div style="font-size: 11px; opacity: 0.75; min-width: 70px; text-align: center;">'
+                    f'{kickoff_label}</div>'
+                )
+            rows_html += (
+                '<div style="display: flex; align-items: center; justify-content: space-between; '
+                'background: rgba(127,127,127,0.06); border: 1px solid rgba(127,127,127,0.15); '
+                'border-radius: 10px; padding: 10px 14px;">'
+                f'<div style="flex: 1; text-align: right; font-weight: 600; font-size: 14px;">{row["team_h"]}'
+                f' {_difficulty_chip(row["difficulty_h"])}</div>'
+                f'<div style="margin: 0 16px;">{score_html}</div>'
+                f'<div style="flex: 1; text-align: left; font-weight: 600; font-size: 14px;">'
+                f'{_difficulty_chip(row["difficulty_a"])} {row["team_a"]}</div>'
+                '</div>'
+            )
+        rows_html += "</div>"
+        st.markdown(rows_html, unsafe_allow_html=True)
+
+
+with tab_fixtures:
+    _render_fixtures_tab()

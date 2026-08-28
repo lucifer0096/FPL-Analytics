@@ -86,6 +86,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
         "_current_season_label", "ep_next_player_pool", "chip_usage_status", "sidebar_summary",
+        "gameweek_fixtures",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -533,10 +534,11 @@ def test_team_primary_color_covers_every_real_team():
 
 def test_sidebar_summary_shape_and_deadline():
     """Verifies the sidebar's real live summary (points, rank, next
-    deadline) against real data -- replaces the earlier sidebar's static
-    dev-pipeline description, which carried no live data at all."""
+    deadline, squad's own next fixtures) against real data -- replaces the
+    earlier sidebar's static dev-pipeline description, which carried no
+    live data at all."""
     summary = shared.sidebar_summary(MANAGER_ENTRY_ID)
-    for key in ("total_points", "overall_rank", "top_pct", "next_gw", "next_deadline"):
+    for key in ("total_points", "overall_rank", "top_pct", "next_gw", "next_deadline", "squad_next_fixtures"):
         assert key in summary
     if summary["total_points"] is not None:
         assert isinstance(summary["total_points"], int) and summary["total_points"] >= 0
@@ -548,7 +550,34 @@ def test_sidebar_summary_shape_and_deadline():
         parsed = datetime.fromisoformat(summary["next_deadline"].replace("Z", "+00:00"))
         assert parsed.year >= 2026, "parsed deadline year looks implausible"
         assert isinstance(summary["next_gw"], int) and 1 <= summary["next_gw"] <= 38
-    print(f"PASS: sidebar_summary() real data OK (points={summary['total_points']}, next_gw={summary['next_gw']})")
+    assert isinstance(summary["squad_next_fixtures"], list)
+    for f in summary["squad_next_fixtures"]:
+        assert set(("team", "opponent", "is_home", "difficulty")).issubset(f.keys())
+        assert 1 <= f["difficulty"] <= 5
+        assert f["team"] != f["opponent"], "a real fixture can't have a team playing itself"
+    print(f"PASS: sidebar_summary() real data OK (points={summary['total_points']}, next_gw={summary['next_gw']}, {len(summary['squad_next_fixtures'])} squad fixture(s))")
+
+
+def test_gameweek_fixtures_played_vs_upcoming():
+    """Verifies gameweek_fixtures() against a real PLAYED gameweek (GW1,
+    must have real recorded scores) and a real UPCOMING one, confirming
+    both states are represented correctly and consistently."""
+    played = shared.gameweek_fixtures(1)
+    assert not played.empty, "GW1 should have real fixtures"
+    assert played["team_h_score"].notna().any(), "GW1 should have at least one real recorded score by now"
+    for _, row in played.iterrows():
+        assert row["team_h"] != row["team_a"], "a real fixture can't have a team playing itself"
+        if row["team_h_score"] is not None:
+            assert isinstance(row["team_h_score"], int) and row["team_h_score"] >= 0
+
+    # Find a real gameweek genuinely still in the future relative to GW1
+    # (GW1 is confirmed played above) to verify the "not played yet" state.
+    raw = shared._load_bootstrap()
+    current_gw = next((e["id"] for e in raw["events"] if e.get("is_current")), 1)
+    upcoming = shared.gameweek_fixtures(current_gw + 1)
+    if not upcoming.empty:
+        assert upcoming["team_h_score"].isna().all(), f"GW{current_gw + 1} shouldn't have real scores yet"
+    print(f"PASS: gameweek_fixtures() correctly distinguishes played (GW1) from upcoming (GW{current_gw + 1}) real fixtures")
 
 
 def test_player_season_stats_and_optimizer_card_hover():
@@ -613,6 +642,7 @@ if __name__ == "__main__":
     test_squad_card_hover_stats()
     test_team_primary_color_covers_every_real_team()
     test_sidebar_summary_shape_and_deadline()
+    test_gameweek_fixtures_played_vs_upcoming()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()

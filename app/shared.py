@@ -1197,11 +1197,26 @@ def sidebar_summary(entry_id: int) -> dict:
 
     Returns {"total_points": int | None, "overall_rank": int | None,
     "top_pct": float | None, "next_gw": int | None, "next_deadline": str |
-    None (ISO 8601, FPL's own real format)}. Any field is None if that
-    specific real data isn't available yet (e.g. no gameweek collected
-    yet for total_points/overall_rank, or genuinely no next gameweek left
-    in the season for next_gw/next_deadline) -- never a guess or a zero
-    standing in for missing data."""
+    None (ISO 8601, FPL's own real format), "squad_next_fixtures": list}.
+    "squad_next_fixtures" is a real, compact list of this manager's
+    CURRENT squad's real next-gameweek opponents (one entry per squad
+    player's real team, deduplicated -- several squad members can share a
+    team, e.g. two Arsenal players, and should only produce one fixture
+    row, not a repeated one) with FPL's own real 1-5 difficulty rating
+    (same field/color scheme every other fixture display in this app
+    already uses) -- {"team": str, "opponent": str, "is_home": bool,
+    "difficulty": int}. Fetched directly from the manager's own real,
+    most-recently-collected picks rather than reading
+    st.session_state["built_squad"] -- the sidebar renders before My
+    Squad's own fragment builds that session-state value on a fresh page
+    load, so relying on it here would show nothing on first paint. Empty
+    list (not an error) if no squad has been collected yet.
+
+    Any field is None if that specific real data isn't available yet
+    (e.g. no gameweek collected yet for total_points/overall_rank, or
+    genuinely no next gameweek left in the season for next_gw/
+    next_deadline) -- never a guess or a zero standing in for missing
+    data."""
     progress = load_current_season_progress(entry_id)
     total_points = overall_rank = top_pct = None
     if not progress.empty:
@@ -1211,16 +1226,40 @@ def sidebar_summary(entry_id: int) -> dict:
         if pd.notna(latest.get("overall_rank_percentage")):
             top_pct = float(latest["overall_rank_percentage"])
 
-    next_gw = next_deadline = None
+    next_gw = next_deadline = current_gw = None
     try:
         raw = _load_bootstrap()
         for event in raw.get("events", []):
             if event.get("is_next"):
                 next_gw = event["id"]
                 next_deadline = event["deadline_time"]
-                break
+            if event.get("is_current"):
+                current_gw = event["id"]
     except FileNotFoundError:
         pass
+
+    squad_next_fixtures = []
+    if current_gw is not None:
+        try:
+            picks_data = load_current_squad_picks(entry_id, current_gw)
+            if picks_data:
+                squad_df = build_live_squad_df(picks_data, current_gw)
+                if not squad_df.empty:
+                    fixtures_by_team = team_upcoming_fixtures(1)
+                    seen_teams = set()
+                    for team in squad_df["team"]:
+                        if team in seen_teams:
+                            continue
+                        seen_teams.add(team)
+                        team_fixtures = fixtures_by_team.get(team, [])
+                        if team_fixtures:
+                            f = team_fixtures[0]
+                            squad_next_fixtures.append({
+                                "team": team, "opponent": f["opponent"],
+                                "is_home": f["is_home"], "difficulty": f["difficulty"],
+                            })
+        except Exception:
+            pass  # sidebar fixtures are a nice-to-have -- never break the rest of the summary over this
 
     return {
         "total_points": total_points,
@@ -1228,6 +1267,7 @@ def sidebar_summary(entry_id: int) -> dict:
         "top_pct": top_pct,
         "next_gw": next_gw,
         "next_deadline": next_deadline,
+        "squad_next_fixtures": squad_next_fixtures,
     }
 
 
@@ -1710,6 +1750,51 @@ def team_insights(top_n: int = 5) -> dict:
         "most_owned_players": most_owned,
         "overall_most_owned": overall_most_owned,
     }
+
+
+@st.cache_data(ttl=60)
+def gameweek_fixtures(gw: int) -> pd.DataFrame:
+    """Every real fixture for ONE gameweek -- past (with real final/
+    provisional scores) or future (no score yet), straight from
+    fixtures.csv/the live fixtures API via _load_fixtures_df(). Unlike
+    premier_league_table(), which aggregates across ALL played fixtures
+    into a standings table, this returns the individual match list for a
+    single specified gameweek -- the real per-match view a "Fixtures &
+    Results" tab needs, not a table.
+
+    Uses team_h_score/team_a_score.notna() (a real score has been
+    recorded) rather than the 'finished' column to decide whether to show
+    a real score or "not played yet" -- same reasoning as
+    premier_league_table(): 'finished' stays False on a played match for
+    hours after full time, until bonus points lock in, so waiting on it
+    would hide an already-known real result.
+
+    Returns team_h, team_a (real team names, not ids), team_h_score,
+    team_a_score (None if not yet played), kickoff_time (FPL's own real
+    ISO 8601 timestamp), difficulty_h, difficulty_a (FPL's own real 1-5
+    ratings), sorted by real kickoff time. Empty DataFrame (not an error)
+    if no fixtures data is available at all for this environment."""
+    fx = _load_fixtures_df()
+    if fx.empty:
+        return pd.DataFrame(columns=["team_h", "team_a", "team_h_score", "team_a_score", "kickoff_time", "difficulty_h", "difficulty_a"])
+
+    raw = _load_bootstrap()
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+
+    gw_fixtures = fx[fx["event"] == gw].sort_values("kickoff_time").copy()
+    rows = []
+    for _, row in gw_fixtures.iterrows():
+        has_score = pd.notna(row["team_h_score"]) and pd.notna(row["team_a_score"])
+        rows.append({
+            "team_h": team_by_id.get(row["team_h"]),
+            "team_a": team_by_id.get(row["team_a"]),
+            "team_h_score": int(row["team_h_score"]) if has_score else None,
+            "team_a_score": int(row["team_a_score"]) if has_score else None,
+            "kickoff_time": row["kickoff_time"],
+            "difficulty_h": int(row["team_h_difficulty"]) if pd.notna(row["team_h_difficulty"]) else None,
+            "difficulty_a": int(row["team_a_difficulty"]) if pd.notna(row["team_a_difficulty"]) else None,
+        })
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=60)
@@ -2566,6 +2651,29 @@ def render_sidebar() -> None:
                 st.caption(f"GW{summary['next_gw']}'s deadline has passed — squad locked.")
         else:
             st.caption("No upcoming gameweek deadline found.")
+
+        if summary["squad_next_fixtures"]:
+            st.divider()
+            st.caption("Your squad's next fixtures")
+            # Same real 1-5 FPL difficulty rating and color scheme as the
+            # fixture strip on every squad card (see _player_card_html) --
+            # reused here, not a separate/invented color scale.
+            DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
+            rows_html = ""
+            for f in summary["squad_next_fixtures"]:
+                vs_at = "vs" if f["is_home"] else "@"
+                color = DIFFICULTY_COLORS.get(f["difficulty"], "#999")
+                rows_html += (
+                    '<div style="display: flex; align-items: center; justify-content: space-between; '
+                    'padding: 4px 0; font-size: 12px;">'
+                    f'<span>{f["team"]} {vs_at} {f["opponent"]}</span>'
+                    f'<span style="display: inline-block; width: 16px; height: 16px; line-height: 16px; '
+                    f'border-radius: 3px; background: {color}; color: white; font-size: 9px; '
+                    f'font-weight: 700; text-align: center; flex-shrink: 0; margin-left: 6px;">'
+                    f'{f["difficulty"]}</span>'
+                    '</div>'
+                )
+            st.markdown(rows_html, unsafe_allow_html=True)
 
         st.divider()
         st.markdown(
