@@ -304,6 +304,10 @@ Everything about the manager's REAL, current team, not a demo:
 
 A running log of real bugs found (mostly via direct user reports against the live app, some via direct verification against real data) and how each was actually diagnosed and fixed — kept as one place to see the project's real failure modes, rather than scattered across commit messages. Newest first.
 
+### Sidebar redesign (2026-08-28)
+
+- **The sidebar was genuinely static** — a title, a hardcoded description of this PROJECT's own data pipeline (dev-facing documentation, not something useful to someone actually managing their team), and two links. No live data at all, unchanged since the very first visual pass while every other part of the app grew real live content around it. **Fix:** added `sidebar_summary()` — real total points, overall rank, and "top X%" figure (same fields already used on My Squad's progress section), plus a real countdown to the next gameweek's actual deadline (FPL's own bootstrap `is_next` event) — glanceable on every tab, not just My Squad. Manager's real name now heads the sidebar instead of the app's own title. A subtle gradient wash (same green/purple pair as the hero banner) ties it visually into the rest of the app instead of sitting as a bare strip.
+
 ### Pitch/card visual pass (2026-08-27)
 
 Asked for aesthetic recommendations; built the ones that were genuinely achievable, documented the one that wasn't rather than faking it:

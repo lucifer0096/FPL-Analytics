@@ -85,7 +85,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_current_squad_picks", "load_live_gw_points", "load_live_gw_minutes",
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
-        "_current_season_label", "ep_next_player_pool", "chip_usage_status",
+        "_current_season_label", "ep_next_player_pool", "chip_usage_status", "sidebar_summary",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -531,6 +531,26 @@ def test_team_primary_color_covers_every_real_team():
     print(f"PASS: TEAM_PRIMARY_COLOR covers all {len(real_teams)} real current Premier League teams")
 
 
+def test_sidebar_summary_shape_and_deadline():
+    """Verifies the sidebar's real live summary (points, rank, next
+    deadline) against real data -- replaces the earlier sidebar's static
+    dev-pipeline description, which carried no live data at all."""
+    summary = shared.sidebar_summary(MANAGER_ENTRY_ID)
+    for key in ("total_points", "overall_rank", "top_pct", "next_gw", "next_deadline"):
+        assert key in summary
+    if summary["total_points"] is not None:
+        assert isinstance(summary["total_points"], int) and summary["total_points"] >= 0
+        assert isinstance(summary["overall_rank"], int) and summary["overall_rank"] > 0
+    if summary["next_deadline"] is not None:
+        # A real ISO 8601 deadline must actually parse -- a malformed
+        # string here would break the sidebar's countdown silently.
+        from datetime import datetime
+        parsed = datetime.fromisoformat(summary["next_deadline"].replace("Z", "+00:00"))
+        assert parsed.year >= 2026, "parsed deadline year looks implausible"
+        assert isinstance(summary["next_gw"], int) and 1 <= summary["next_gw"] <= 38
+    print(f"PASS: sidebar_summary() real data OK (points={summary['total_points']}, next_gw={summary['next_gw']})")
+
+
 def test_player_season_stats_and_optimizer_card_hover():
     raw = shared._load_bootstrap()
     player = raw["elements"][0]
@@ -592,6 +612,7 @@ if __name__ == "__main__":
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
     test_team_primary_color_covers_every_real_team()
+    test_sidebar_summary_shape_and_deadline()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()

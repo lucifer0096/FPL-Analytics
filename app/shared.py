@@ -1184,6 +1184,53 @@ def is_gameweek_live() -> bool:
     return False
 
 
+@st.cache_data(ttl=60)
+def sidebar_summary(entry_id: int) -> dict:
+    """Real, live glanceable data for the sidebar -- total points, overall
+    rank, real "top X%" figure, and the next real gameweek's deadline
+    (FPL's own bootstrap-static events, whichever has is_next set). Used
+    to replace the sidebar's earlier static content (a title and a
+    hardcoded description of this project's own data pipeline -- dev-
+    facing documentation, not something useful to someone actually using
+    the app to manage their team) with something that's actually live and
+    relevant no matter which tab is open.
+
+    Returns {"total_points": int | None, "overall_rank": int | None,
+    "top_pct": float | None, "next_gw": int | None, "next_deadline": str |
+    None (ISO 8601, FPL's own real format)}. Any field is None if that
+    specific real data isn't available yet (e.g. no gameweek collected
+    yet for total_points/overall_rank, or genuinely no next gameweek left
+    in the season for next_gw/next_deadline) -- never a guess or a zero
+    standing in for missing data."""
+    progress = load_current_season_progress(entry_id)
+    total_points = overall_rank = top_pct = None
+    if not progress.empty:
+        latest = progress.iloc[-1]
+        total_points = int(latest["total_points"])
+        overall_rank = int(latest["overall_rank"])
+        if pd.notna(latest.get("overall_rank_percentage")):
+            top_pct = float(latest["overall_rank_percentage"])
+
+    next_gw = next_deadline = None
+    try:
+        raw = _load_bootstrap()
+        for event in raw.get("events", []):
+            if event.get("is_next"):
+                next_gw = event["id"]
+                next_deadline = event["deadline_time"]
+                break
+    except FileNotFoundError:
+        pass
+
+    return {
+        "total_points": total_points,
+        "overall_rank": overall_rank,
+        "top_pct": top_pct,
+        "next_gw": next_gw,
+        "next_deadline": next_deadline,
+    }
+
+
 def _fixtures_path() -> str:
     """Same fallback pattern as _latest_bootstrap_path(): data/raw/2026-27/
     fixtures.csv is gitignored (lives under data/raw/), so a fresh Streamlit
@@ -2449,9 +2496,19 @@ def inject_shared_css() -> None:
         transform: translateY(0) scale(0.97);
     }
 
-    /* ---- Sidebar: subtle depth so it doesn't read as flat admin nav ---- */
+    /* ---- Sidebar: subtle depth so it doesn't read as flat admin nav ----
+       A gentle gradient wash (same green/purple pair as the hero banner
+       and metric cards, at low opacity so it works on both themes) ties
+       the sidebar into the rest of the app's palette instead of sitting
+       as a bare, undecorated strip -- content itself moved from a static
+       pipeline description to a real live summary (see render_sidebar's
+       own docstring for that change). */
     section[data-testid="stSidebar"] {
         border-right: 1px solid rgba(127,127,127,0.15);
+        background-image: linear-gradient(180deg, rgba(42,150,80,0.06), rgba(90,60,180,0.05) 40%, transparent 70%);
+    }
+    section[data-testid="stSidebar"] div[data-testid="stMetric"] {
+        padding: 10px 12px 8px 12px;
     }
 
     /* Respect users who've asked for reduced motion */
@@ -2467,20 +2524,49 @@ def inject_shared_css() -> None:
 
 def render_sidebar() -> None:
     """Shared sidebar content -- identical on every page, so it's here rather
-    than duplicated in app.py and pages/1_Historical_and_Model.py."""
+    than duplicated in app.py and pages/1_Historical_and_Model.py.
+
+    Replaced the earlier version's static content (a title plus a
+    hardcoded description of this project's OWN data pipeline -- dev-
+    facing documentation, not something useful to someone actually using
+    the app to manage their team) with a real, live glanceable summary
+    (sidebar_summary()): total points, overall rank, and a countdown to
+    the next real gameweek deadline -- the kind of thing you'd want
+    visible no matter which tab is open, not just on My Squad."""
+    manager_name = load_manager_name(MANAGER_ENTRY_ID)
+    summary = sidebar_summary(MANAGER_ENTRY_ID)
     with st.sidebar:
-        st.markdown("### ⚽ FPL Analytics")
-        st.caption("Model-driven FPL squad, transfer, and chip planning.")
+        st.markdown(f"### ⚽ {manager_name}")
+
+        if summary["total_points"] is not None:
+            scol1, scol2 = st.columns(2)
+            scol1.metric("Points", summary["total_points"])
+            scol2.metric("Rank", f"{summary['overall_rank']:,}")
+            if summary["top_pct"] is not None:
+                st.caption(f"Top {summary['top_pct']:.0f}% overall")
+        else:
+            st.caption("No gameweeks collected yet this season.")
+
         st.divider()
-        st.markdown(
-            "**Pipeline**\n\n"
-            "1. Live FPL API collector\n"
-            "2. Unified historical dataset\n"
-            "3. Feature engineering\n"
-            "4. Trained LightGBM model\n"
-            "5. Squad/transfer optimizer\n"
-            "6. Chip-timing advisor"
-        )
+
+        if summary["next_deadline"]:
+            from datetime import datetime, timezone
+            deadline = datetime.fromisoformat(summary["next_deadline"].replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            remaining = deadline - now
+            if remaining.total_seconds() > 0:
+                days, hours = remaining.days, remaining.seconds // 3600
+                if days > 0:
+                    countdown = f"{days}d {hours}h"
+                else:
+                    minutes = (remaining.seconds % 3600) // 60
+                    countdown = f"{hours}h {minutes}m"
+                st.metric(f"GW{summary['next_gw']} deadline", countdown)
+            else:
+                st.caption(f"GW{summary['next_gw']}'s deadline has passed — squad locked.")
+        else:
+            st.caption("No upcoming gameweek deadline found.")
+
         st.divider()
         st.markdown(
             "[GitHub repo](https://github.com/lucifer0096/FPL-Analytics) · "
