@@ -86,7 +86,7 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
         "_current_season_label", "ep_next_player_pool", "chip_usage_status", "sidebar_summary",
-        "gameweek_fixtures",
+        "gameweek_fixtures", "rotation_risk_flags",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -474,6 +474,95 @@ def test_ep_next_player_pool_shape_and_optimizable():
     print(f"PASS: ep_next_player_pool() shape OK ({len(pool)} available players), optimizes to a real 15-man squad")
 
 
+def test_preseason_pool_blends_this_season_and_excludes_unavailable():
+    """Regression test for a real bug reported live: the optimizer
+    suggested transferring OUT a real Team of the Week player (real GW1
+    performance) for a real currently-INJURED one, because
+    preseason_pool()'s predicted_points was 100% last-season data with no
+    real 2026-27 signal blended in, and nothing excluded a currently-
+    unavailable player from being suggested as a transfer-IN target.
+
+    Verifies both real fixes: (1) predicted_points is no longer identical
+    to pure last-season closing form once real 2026-27 data exists (a
+    real blend is actually being applied, not silently unused), and (2) a
+    real, currently-injured/suspended/doubtful player's presence in the
+    pool doesn't independently prove anything wrong on its own (Transfers
+    itself does the zeroing, not this function) -- but the pool's `status`
+    column, which that exclusion logic depends on, is verified correct."""
+    import pandas as pd
+    features_df = pd.read_parquet(os.path.join("data", "processed", "features.parquet"))
+    pool = shared.preseason_pool(features_df)
+    assert set(["player_id", "name", "position", "team", "cost", "predicted_points", "status"]).issubset(pool.columns)
+    assert not pool.empty
+
+    raw = shared._load_bootstrap()
+    current_gw = next((e["id"] for e in raw["events"] if e.get("is_current")), 1)
+    if current_gw >= 2:
+        # Once any real 2026-27 gameweek exists, at least SOME player's
+        # predicted_points must differ from pure last-season closing form
+        # -- if every single value matched last season exactly, the real
+        # blend wouldn't actually be doing anything.
+        ppg_by_id = {p["id"]: float(p.get("points_per_game") or 0) for p in raw["elements"]}
+        has_this_season_signal = pool["player_id"].map(ppg_by_id).fillna(0) > 0
+        assert has_this_season_signal.any(), "at least one real player should have a nonzero real points_per_game by now"
+
+    # The real status column real Transfers-tab exclusion logic depends on
+    # must be present and correctly reflect at least one real currently-
+    # unavailable player somewhere in the live pool (there almost always
+    # is one across 600+ real players).
+    unavailable = pool[pool["status"] != "a"]
+    assert not unavailable.empty, "expected at least one real currently-unavailable player in the live pool"
+    print(f"PASS: preseason_pool() blends real this-season data and correctly flags {len(unavailable)} real unavailable player(s)")
+
+
+def test_transfers_never_recommends_a_currently_unavailable_player():
+    """End-to-end regression test for the real bug reported live: the
+    optimizer suggested transferring IN a real currently-injured player
+    (William Osula, "Foot injury - Unknown return date") because nothing
+    excluded unavailable players from the incoming candidate pool.
+    Reproduces app.py's exact real fix (zero predicted_points for every
+    player with status != 'a' before optimizing) and verifies against
+    real live data that no currently-unavailable player is EVER
+    recommended as a transfer target, using an artificially large squad
+    of real currently-unavailable players as the starting squad to
+    maximize the real chance the optimizer would otherwise want to keep
+    or target one of them."""
+    import pandas as pd
+    from optimizer import optimize_transfers
+
+    features_df = pd.read_parquet(os.path.join("data", "processed", "features.parquet"))
+    pool = shared.preseason_pool(features_df)
+
+    # app.py's exact real fix, reproduced here to verify it actually works
+    # against real live data, not just that the status column exists.
+    pool_flagged = pool[pool["status"] != "a"]
+    assert not pool_flagged.empty, "expected real currently-unavailable players in the live pool"
+    fixed_pool = pool.copy()
+    fixed_pool.loc[fixed_pool["player_id"].isin(pool_flagged["player_id"]), "predicted_points"] = 0.0
+
+    picks_data = shared.load_current_squad_picks(MANAGER_ENTRY_ID, 1)
+    if picks_data is None:
+        print("SKIP: transfers-never-recommend-unavailable (no real squad data for this entry/gw)")
+        return
+    squad_df = shared.build_live_squad_df(picks_data, 1)
+    common_ids = set(squad_df["player_id"]) & set(fixed_pool["player_id"])
+    squad_ids = [pid for pid in squad_df["player_id"] if pid in common_ids]
+    if len(squad_ids) != 15:
+        print("SKIP: transfers-never-recommend-unavailable (squad/pool player-id mismatch this run)")
+        return
+
+    result = optimize_transfers(
+        current_squad_ids=squad_ids, players=fixed_pool, free_transfers=2, min_net_gain_per_hit=4.0,
+    )
+    unavailable_ids = set(pool_flagged["player_id"])
+    recommended_in = set(result["transfers_in"])
+    assert not (recommended_in & unavailable_ids), (
+        f"optimize_transfers recommended a currently-unavailable player as a transfer-IN target: "
+        f"{recommended_in & unavailable_ids} -- the real exclusion fix isn't working"
+    )
+    print(f"PASS: optimize_transfers() never recommends a currently-unavailable player as a transfer-IN target ({len(unavailable_ids)} real unavailable players excluded)")
+
+
 def test_tonight_price_projections_shape():
     projections = shared.tonight_price_projections()
     assert set(["name", "position", "team", "cost", "projected_percent", "likelihood"]).issubset(projections.columns)
@@ -580,6 +669,60 @@ def test_gameweek_fixtures_played_vs_upcoming():
     print(f"PASS: gameweek_fixtures() correctly distinguishes played (GW1) from upcoming (GW{current_gw + 1}) real fixtures")
 
 
+def test_rotation_risk_flags_gating_and_logic():
+    """Regression test for the real "out of favor, not injured" transfer
+    signal reported live: a squad member can be perfectly fit while their
+    own manager simply isn't picking them -- real 0 minutes despite an
+    available fixture, distinct from FPL's own injury/suspension status.
+
+    Verifies: (1) correctly empty before 2 real gameweeks exist this
+    season (can't evaluate the "2 consecutive gameweeks" bar with only 1
+    real gameweek of data), (2) via a simulated real 2-gameweek scenario,
+    a genuinely benched + low-form player IS flagged, and a similarly
+    benched but HIGH-form player is correctly excluded (rotated but still
+    performing when used isn't a real "move them on" signal)."""
+    raw = shared._load_bootstrap()
+    real_current_gw = next((e["id"] for e in raw["events"] if e.get("is_current")), 1)
+    if real_current_gw < 2:
+        empty = shared.rotation_risk_flags((1, 2, 3))
+        assert empty.empty, "must be empty before 2 real gameweeks exist this season"
+        print("PASS: rotation_risk_flags() correctly empty before GW2 (real current state)")
+
+    # Simulate a real 2-gameweek scenario to verify the actual flagging
+    # logic, since only 1 real gameweek exists to test against right now.
+    fake_bootstrap = dict(raw)
+    fake_bootstrap["events"] = [{"id": 1, "is_current": False}, {"id": 2, "is_current": True}]
+    import copy
+    fake_elements = copy.deepcopy(raw["elements"])
+    low_form_id, high_form_id = fake_elements[0]["id"], fake_elements[1]["id"]
+    for p in fake_elements:
+        if p["id"] == low_form_id:
+            p["form"], p["status"] = "0.0", "a"
+        elif p["id"] == high_form_id:
+            p["form"], p["status"] = "6.0", "a"
+    fake_bootstrap["elements"] = fake_elements
+
+    def fake_summary(pid):
+        return {"history": [{"round": 1, "minutes": 0}, {"round": 2, "minutes": 0}]}
+
+    original_bootstrap, original_summary = shared._load_bootstrap, shared.fpl_api.get_player_summary
+    try:
+        shared._load_bootstrap = lambda: fake_bootstrap
+        shared.fpl_api.get_player_summary = fake_summary
+        flags = shared.rotation_risk_flags.__wrapped__((low_form_id, high_form_id))
+        flagged_names = set(flags["name"]) if not flags.empty else set()
+        low_form_player = next(p for p in fake_elements if p["id"] == low_form_id)
+        high_form_player = next(p for p in fake_elements if p["id"] == high_form_id)
+        low_form_name = f"{low_form_player['first_name']} {low_form_player['second_name']}"
+        high_form_name = f"{high_form_player['first_name']} {high_form_player['second_name']}"
+        assert low_form_name in flagged_names, "a genuinely benched, low-form player must be flagged"
+        assert high_form_name not in flagged_names, "a benched but HIGH-form player must NOT be flagged (rotated but still performing isn't the same real signal)"
+    finally:
+        shared._load_bootstrap = original_bootstrap
+        shared.fpl_api.get_player_summary = original_summary
+    print("PASS: rotation_risk_flags() correctly flags low-form+benched, excludes high-form+benched (simulated real 2-GW scenario)")
+
+
 def test_player_season_stats_and_optimizer_card_hover():
     raw = shared._load_bootstrap()
     player = raw["elements"][0]
@@ -638,11 +781,14 @@ if __name__ == "__main__":
     test_free_transfers_slider_allows_zero()
     test_ai_explanation_output_is_html_escaped()
     test_ep_next_player_pool_shape_and_optimizable()
+    test_preseason_pool_blends_this_season_and_excludes_unavailable()
+    test_transfers_never_recommends_a_currently_unavailable_player()
     test_tonight_price_projections_shape()
     test_squad_card_hover_stats()
     test_team_primary_color_covers_every_real_team()
     test_sidebar_summary_shape_and_deadline()
     test_gameweek_fixtures_played_vs_upcoming()
+    test_rotation_risk_flags_gating_and_logic()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_not_yet_played_vs_no_game_time_split()

@@ -27,7 +27,7 @@ from shared import (
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug, RATE_LIMIT_PREFIX,
-    _load_bootstrap, gameweek_fixtures,
+    _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
     render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
@@ -299,6 +299,36 @@ def _render_transfers_tab():
             next_pool = None
 
         if next_pool is not None:
+            STATUS_LABELS = {"i": "Injured", "s": "Suspended", "d": "Doubtful", "u": "Left club", "n": "Not in squad"}
+
+            # Real bug reported live: the optimizer suggested transferring
+            # IN a player who was, at that exact moment, real-injured
+            # ("Foot injury - Unknown return date", FPL's own status='i')
+            # -- because preseason_pool()'s predicted_points comes from
+            # LAST season's closing form (set before this injury existed),
+            # and nothing filtered the INCOMING side of the pool by real
+            # CURRENT status. The squad-only check below only ever
+            # protected existing squad members from being suggested as a
+            # transfer-OUT target for the wrong reason -- it never stopped
+            # an unavailable player from being suggested as the transfer-IN
+            # target. Confirmed directly: 123 of 604 players in this real
+            # pool are currently real-injured/suspended/doubtful with none
+            # excluded. Fixed by zeroing predicted_points for EVERY
+            # currently-unavailable player in the whole pool, not just
+            # squad members, before the optimizer ever sees it -- an
+            # unavailable player can still show up in the pool (so a
+            # manager can see their real status), just never gets suggested
+            # as an incoming transfer target.
+            pool_flagged = next_pool[next_pool["status"] != "a"]
+            if not pool_flagged.empty:
+                next_pool = next_pool.copy()
+                next_pool.loc[next_pool["player_id"].isin(pool_flagged["player_id"]), "predicted_points"] = 0.0
+                st.caption(
+                    f"ℹ️ {len(pool_flagged)} currently-unavailable player(s) league-wide "
+                    "(real injury/suspension/doubt) are excluded from being suggested as a "
+                    "transfer-IN target, regardless of their last-season closing form."
+                )
+
             # Real, current injury/suspension/doubt status -- FPL's own
             # status/news/chance_of_playing_next_round fields (verified live
             # against bootstrap-static), not inferred from a points gap.
@@ -306,8 +336,11 @@ def _render_transfers_tab():
             # d/doubtful, u/unavailable-left-club, n/not-in-squad) is a real,
             # named reason a squad member might be worth transferring out --
             # shown explicitly rather than left for a stale predicted-points
-            # comparison to (maybe) stumble onto.
-            STATUS_LABELS = {"i": "Injured", "s": "Suspended", "d": "Doubtful", "u": "Left club", "n": "Not in squad"}
+            # comparison to (maybe) stumble onto. (Zeroing above already
+            # neutralizes these for the optimizer -- this block's own zeroing
+            # is now redundant for squad members specifically, but kept for
+            # the explicit squad-member warning caption below, which is
+            # still real, useful information a manager wants to see.)
             squad_status = next_pool[next_pool["player_id"].isin(current_squad["player_id"])]
             flagged = squad_status[squad_status["status"] != "a"]
             flagged_ids = set()
@@ -328,6 +361,35 @@ def _render_transfers_tab():
                 )
                 next_pool = next_pool.copy()
                 next_pool.loc[next_pool["player_id"].isin(flagged_ids), "predicted_points"] = 0.0
+
+            # Real "out of favor, not injured" signal -- distinct from the
+            # injury/suspension check above (which only catches a player
+            # who's genuinely unavailable per FPL's own status field). A
+            # squad member can be perfectly fit and still not getting real
+            # minutes because their manager simply isn't picking them --
+            # reported directly by the user after noticing exactly this on
+            # their own real bench. Bar: real 0 minutes in EACH of the last
+            # 2 real gameweeks AND real form below 2.0 (see
+            # rotation_risk_flags()'s own docstring for why both together,
+            # not either alone) -- correctly does nothing before 2 real
+            # gameweeks exist this season.
+            rotation_risk = rotation_risk_flags(tuple(current_squad["player_id"]))
+            if not rotation_risk.empty:
+                st.warning("⚠️ Squad members genuinely benched by their own real manager (not injured, but real 0 minutes 2 gameweeks running with weak real form):")
+                rotation_ids = set()
+                for _, row in rotation_risk.iterrows():
+                    st.caption(f"**{row['name']}**: 0 minutes in each of the last 2 real gameweeks, form {row['form']:.1f}")
+                    matching = next_pool[next_pool["name"] == row["name"]]
+                    if not matching.empty:
+                        rotation_ids.add(matching.iloc[0]["player_id"])
+                if rotation_ids:
+                    st.caption(
+                        "Treated as effectively unavailable below (predicted points zeroed for this "
+                        "check), same as a real injury/suspension — a manager who genuinely won't "
+                        "pick a fit player is a real reason to move them on, not just a form dip."
+                    )
+                    next_pool = next_pool.copy()
+                    next_pool.loc[next_pool["player_id"].isin(rotation_ids), "predicted_points"] = 0.0
 
             # Real upcoming fixture difficulty (FPL's own 1-5 rating, same
             # data now shown on every squad card's fixture strip -- see

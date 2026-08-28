@@ -253,20 +253,48 @@ def season_insights(df: pd.DataFrame, season: str) -> dict:
 
 @st.cache_data
 def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
-    """Build a 2026-27 pre-season player pool: each player's LIVE current price
-    (this season's actual cost, pulled from the latest collector snapshot) paired
-    with their predicted_points estimated from their own rolling-5 average at
-    the END of the prior season -- their most recent known real form, not
-    diluted by a full-season average that includes early-season benching/injury
-    spells. Joined on player_code (the stable cross-season id -- see
+    """Build a 2026-27 player pool: each player's LIVE current price (this
+    season's actual cost, pulled from the latest collector snapshot) paired
+    with predicted_points -- a REAL-WEIGHTED BLEND of last season's closing
+    form and this season's own real points_per_game, not last season alone.
+
+    Real bug reported live, fixed here: with predicted_points 100% last-
+    season data, the optimizer had no way to see a player's actual real
+    2026-27 performance at all -- a player who'd just had a real Team of
+    the Week gameweek could show LOWER predicted_points than one who'd
+    just sat scoreless on a bench, purely because last season's numbers
+    said otherwise. Confirmed directly: João Pedro (real Dream Team pick,
+    GW1) had a lower predicted_points (2.0, from last season) than Pedro
+    Porro (4.6, also last season) despite Porro's real 2026-27 form
+    already showing 0 minutes -- the pool literally couldn't see the
+    difference.
+
+    Fixed with a real weight that shifts toward THIS season as more of it
+    exists: weight_this_season = min(current_gw / 6, 1.0) -- 0% at GW1
+    (last season's larger, more reliable sample dominates; this season's 1
+    real gameweek alone is too noisy to trust on its own), ramping linearly
+    to 100% by GW6 (a real, meaningfully larger this-season sample by
+    then). Not an instant full switch to this-season-only, since a single
+    real gameweek is genuinely less reliable evidence than a full prior
+    season's closing form -- but not permanently ignoring this season's
+    real performance either, which was the actual bug. This-season's own
+    signal is FPL's real `points_per_game` (their own real cumulative
+    this-season average, the direct analog of prior_season's closing
+    rolling-5 average -- not `form`, a shorter, noisier rolling window,
+    or `ep_next`, which is FPL's own forward-looking estimate rather than
+    a real backward-looking performance record).
+
+    Joined on player_code (the stable cross-season id -- see
     load_historical.py), NOT element (resets every season).
 
     Players present in the live pool with no prior_season record at all (new
     signings from outside the league, promoted-team players with no top-flight
-    history) get predicted_points = 0 rather than a guess -- same honest
-    treatment as new_player_baseline's fallback for genuinely unknown players,
-    just without that feature's league-wide price-band averaging here (a
-    simpler stand-in, since this is a demo view, not a training feature).
+    history) fall back to 100% this-season weight once any real 2026-27 data
+    exists for them (there's no prior-season number to blend with), or 0
+    otherwise -- same honest treatment as new_player_baseline's fallback for
+    genuinely unknown players, just without that feature's league-wide
+    price-band averaging here (a simpler stand-in, since this is a demo
+    view, not a training feature).
 
     Deliberately NOT run through the trained xP model (unlike gw_pool) --
     fixture_difficulty is a real, published-ahead-of-kickoff feature for a
@@ -294,7 +322,24 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
     code_by_id = {p["id"]: p["code"] for p in raw["elements"]}
     live["player_code"] = live["player_id"].map(code_by_id)
 
-    live["predicted_points"] = live["player_code"].map(closing_form).fillna(0).clip(lower=0)
+    last_season_points = live["player_code"].map(closing_form).fillna(0).clip(lower=0)
+
+    ppg_by_id = {p["id"]: float(p.get("points_per_game") or 0) for p in raw["elements"]}
+    this_season_points = live["player_id"].map(ppg_by_id).fillna(0).clip(lower=0)
+
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+    weight_this_season = min(current_gw / 6.0, 1.0)
+
+    has_prior = live["player_code"].isin(closing_form.index)
+    live["predicted_points"] = (
+        this_season_points * weight_this_season + last_season_points * (1 - weight_this_season)
+    )
+    # A player with no prior-season record at all (new signing/promoted-
+    # team player) has nothing real to blend with -- use this season's
+    # real number alone once any exists, rather than diluting it toward 0
+    # with a nonexistent "prior season" component.
+    live.loc[~has_prior, "predicted_points"] = this_season_points[~has_prior]
 
     # Real, current availability -- FPL's own status/news/chance-of-playing
     # fields (verified live: e.g. Saliba genuinely flagged 'i' with a real
@@ -1570,6 +1615,74 @@ def league_wide_status_flags() -> pd.DataFrame:
         "status", "news", "chance_of_playing_next_round",
     ])
     return df.sort_values("selected_by_percent", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=60)
+def rotation_risk_flags(squad_ids: tuple) -> pd.DataFrame:
+    """Real "out of favor, not injured" transfer-out signal -- distinct
+    from the existing injury/suspension check (FPL's own real `status`
+    field), which only catches a player who's genuinely unavailable.
+    Requested directly: a squad member can be perfectly fit (status=='a',
+    no news) while their real manager simply isn't picking them -- real 0
+    minutes despite an available fixture, a materially different problem
+    Transfers previously had no way to flag.
+
+    Bar (per explicit request): real 0 minutes in EACH of the last 2
+    real, actually-played gameweeks (not just the most recent one -- a
+    single rested/late-sub week is real but weak evidence on its own;
+    two zero-minute gameweeks in a row is a genuine pattern), AND real
+    `form` below 2.0 (FPL's own rolling-average field, the same real
+    signal Transfers/differential/captain logic elsewhere in this app
+    already treats as the closest thing to genuine current-season
+    signal) -- combining both so a player who's rotated but still
+    performing when used isn't incorrectly flagged.
+
+    Uses fpl_api.get_player_summary() (real per-gameweek history) per
+    squad player -- bounded to at most 15 real API calls (one manager's
+    squad), not the full league-wide 587-player case
+    get_all_player_summaries()' deliberate rate-limiting delay exists
+    for, so no artificial delay is added here.
+
+    Returns name, position, team, minutes_last_2 (list of the real last 2
+    gameweeks' minutes), form for every flagged squad member. Empty
+    DataFrame (not an error) if fewer than 2 real gameweeks have been
+    played yet this season -- the "2 consecutive gameweeks" bar genuinely
+    can't be evaluated before then, so this correctly does nothing rather
+    than guessing from 1 gameweek's data."""
+    raw = _load_bootstrap()
+    element_by_id = {p["id"]: p for p in raw["elements"]}
+    team_by_id = {t["id"]: t["name"] for t in raw["teams"]}
+    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
+    current_gw = current_events[0] if current_events else 1
+    if current_gw < 2:
+        return pd.DataFrame(columns=["name", "position", "team", "minutes_last_2", "form"])
+
+    rows = []
+    for pid in squad_ids:
+        player = element_by_id.get(pid)
+        if player is None:
+            continue
+        if player["status"] != "a":
+            continue  # already covered by the real injury/suspension check -- don't double-flag
+        form = float(player.get("form") or 0)
+        if form >= 2.0:
+            continue  # real recent form is fine -- not a rotation-risk case
+        try:
+            summary = fpl_api.get_player_summary(pid)
+            history = {h["round"]: h["minutes"] for h in summary.get("history", [])}
+        except Exception:
+            continue  # a real API failure for one player shouldn't break the whole check
+        last_2_gws = [current_gw - 1, current_gw]
+        minutes_last_2 = [history.get(gw, 0) for gw in last_2_gws]
+        if all(m == 0 for m in minutes_last_2):
+            rows.append({
+                "name": f"{player['first_name']} {player['second_name']}",
+                "position": _POSITION_MAP_APP[player["element_type"]],
+                "team": team_by_id.get(player["team"]),
+                "minutes_last_2": minutes_last_2,
+                "form": form,
+            })
+    return pd.DataFrame(rows, columns=["name", "position", "team", "minutes_last_2", "form"])
 
 
 @st.cache_data(ttl=60)
