@@ -345,16 +345,33 @@ def test_rate_limit_errors_are_tagged_for_silent_handling():
 
 
 def test_openrouter_hardcoded_to_free_model():
-    """Regression guard: openrouter.py's FREE_MODEL must always end in
-    ':free' (OpenRouter's own naming convention for models that don't
-    consume paid credits) -- this project must never silently start
-    incurring API costs. Checked directly against the actual constant, not
-    assumed."""
-    assert shared.openrouter.FREE_MODEL.endswith(":free"), (
-        f"FREE_MODEL ({shared.openrouter.FREE_MODEL!r}) must end in ':free' -- "
-        "this project must only ever use free OpenRouter models"
-    )
-    print(f"PASS: openrouter.py is hardcoded to a free model ({shared.openrouter.FREE_MODEL})")
+    """Regression guard: every candidate in openrouter.py's
+    PREFERRED_FREE_MODELS must end in ':free' (OpenRouter's own naming
+    convention for models that don't consume paid credits) -- this
+    project must never silently start incurring API costs, no matter
+    which candidate _pick_available_free_model() ends up selecting.
+    Checked directly against the actual list, not assumed."""
+    candidates = shared.openrouter.PREFERRED_FREE_MODELS
+    assert candidates, "PREFERRED_FREE_MODELS must not be empty"
+    for model_id in candidates:
+        assert model_id.endswith(":free"), (
+            f"PREFERRED_FREE_MODELS contains {model_id!r}, which doesn't end in ':free' -- "
+            "this project must only ever use free OpenRouter models"
+        )
+    print(f"PASS: openrouter.py is hardcoded to free models only ({candidates})")
+
+
+def test_pick_available_free_model_always_returns_free():
+    """_pick_available_free_model() must always return something from
+    PREFERRED_FREE_MODELS (and therefore always ':free'), whether or not
+    the real live /models fetch succeeds -- verified against the actual
+    live OpenRouter catalog, not a mock, since this genuinely needs to
+    work against real network conditions."""
+    from openrouter import _pick_available_free_model, PREFERRED_FREE_MODELS
+    chosen = _pick_available_free_model()
+    assert chosen in PREFERRED_FREE_MODELS, f"{chosen!r} should be one of the real preferred candidates"
+    assert chosen.endswith(":free")
+    print(f"PASS: _pick_available_free_model() selected a real free candidate ({chosen})")
 
 
 def test_chip_usage_status_shape_and_parsing():
@@ -834,6 +851,7 @@ if __name__ == "__main__":
     test_explain_transfer_suggestion_debug_gives_real_reasons()
     test_rate_limit_errors_are_tagged_for_silent_handling()
     test_openrouter_hardcoded_to_free_model()
+    test_pick_available_free_model_always_returns_free()
     test_chip_usage_status_shape_and_parsing()
     test_free_transfers_slider_allows_zero()
     test_ai_explanation_output_is_html_escaped()

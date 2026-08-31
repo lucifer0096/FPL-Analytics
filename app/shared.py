@@ -2904,55 +2904,73 @@ def render_sidebar() -> None:
             st.markdown(rows_html, unsafe_allow_html=True)
 
         st.divider()
-        _render_chat_assistant(MANAGER_ENTRY_ID)
-
-        st.divider()
         st.markdown(
             "[GitHub repo](https://github.com/lucifer0096/FPL-Analytics) · "
             "[Manager history page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)"
         )
 
 
-def _render_chat_assistant(entry_id: int) -> None:
-    """Sidebar chat assistant UI -- ask about your real squad, transfers,
-    or the wider real season state (differentials, PL table). Grounded in
-    assemble_chat_context()'s real, live data on every turn; runs on
-    OpenRouter's free tier only (see src/llm/openrouter.py's FREE_MODEL
-    guarantee), so it costs nothing to run and degrades gracefully (a
-    plain caption, not a crash) if no API key is configured or the free
-    tier is genuinely rate-limited right now.
+def render_chat_assistant(entry_id: int = MANAGER_ENTRY_ID) -> None:
+    """Floating bottom-right chat popup -- ask about your real squad,
+    transfers, or the wider real season state (differentials, PL table).
+    Grounded in assemble_chat_context()'s real, live data on every turn;
+    runs on OpenRouter's free tier only (see src/llm/openrouter.py's
+    FREE_MODEL guarantee), so it costs nothing to run and degrades
+    gracefully (a plain caption, not a crash) if no API key is configured
+    or the free tier is genuinely rate-limited right now.
+
+    Moved out of the sidebar into a real st.popover() per explicit
+    request ("place it at bottom right or as a popup") -- st.popover()
+    is Streamlit's own native floating-trigger widget (no fixed-position
+    CSS hacks needed for the popup mechanics themselves), pinned visually
+    to the bottom-right corner via a small CSS rule targeting its own
+    container so it reads as a persistent chat bubble on every tab,
+    called once from app.py's main body (not per-page-per-tab) so only
+    one popup instance exists.
 
     Conversation history lives in st.session_state so it survives Streamlit
     reruns within the same browser session, same pattern as
     "built_squad" elsewhere in this app -- it does NOT persist across a
     real page reload or a new session, which is fine for a chat aid."""
-    st.caption("💬 Ask about your squad or transfers")
+    st.markdown("""
+    <style>
+    div[data-testid="stPopover"] {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 999;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    if not openrouter.is_configured():
-        st.caption("Chat assistant unavailable — no OPENROUTER_API_KEY configured in this environment.")
-        return
+    with st.popover("💬 Chat", use_container_width=False):
+        st.caption("Ask about your squad or transfers")
 
-    if "chat_history" not in st.session_state:
-        st.session_state["chat_history"] = []
+        if not openrouter.is_configured():
+            st.caption("Chat assistant unavailable — no OPENROUTER_API_KEY configured in this environment.")
+            return
 
-    for msg in st.session_state["chat_history"]:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        if "chat_history" not in st.session_state:
+            st.session_state["chat_history"] = []
 
-    user_msg = st.chat_input("e.g. Should I captain my forward this week?")
-    if user_msg:
-        st.session_state["chat_history"].append({"role": "user", "content": user_msg})
-        with st.chat_message("user"):
-            st.markdown(user_msg)
+        for msg in st.session_state["chat_history"]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-        context = assemble_chat_context(entry_id)
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                reply, error = chat_with_assistant(context, st.session_state["chat_history"])
-            if reply:
-                st.markdown(reply)
-                st.session_state["chat_history"].append({"role": "assistant", "content": reply})
-            elif error and error.startswith(openrouter.RATE_LIMIT_PREFIX):
-                st.caption("The free model is rate-limited right now — try again in a moment.")
-            else:
-                st.caption(f"Couldn't get a reply: {error}")
+        user_msg = st.chat_input("e.g. Should I captain my forward this week?")
+        if user_msg:
+            st.session_state["chat_history"].append({"role": "user", "content": user_msg})
+            with st.chat_message("user"):
+                st.markdown(user_msg)
+
+            context = assemble_chat_context(entry_id)
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    reply, error = chat_with_assistant(context, st.session_state["chat_history"])
+                if reply:
+                    st.markdown(reply)
+                    st.session_state["chat_history"].append({"role": "assistant", "content": reply})
+                elif error and error.startswith(openrouter.RATE_LIMIT_PREFIX):
+                    st.caption("The free model is rate-limited right now — try again in a moment.")
+                else:
+                    st.caption(f"Couldn't get a reply: {error}")

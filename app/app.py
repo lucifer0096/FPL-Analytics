@@ -28,7 +28,7 @@ from shared import (
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug, RATE_LIMIT_PREFIX,
     _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
-    render_pitch, inject_shared_css, render_sidebar,
+    render_pitch, inject_shared_css, render_sidebar, render_chat_assistant,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
 
@@ -40,6 +40,7 @@ st.set_page_config(
 )
 inject_shared_css()
 render_sidebar()
+render_chat_assistant()
 
 manager_name = load_manager_name(MANAGER_ENTRY_ID)
 st.markdown(f"""
