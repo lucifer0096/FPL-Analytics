@@ -61,7 +61,23 @@ def chat_completion(system_prompt: str, user_prompt: str, timeout: int = 20) -> 
     return content
 
 
-def _chat_completion_with_error(system_prompt: str, user_prompt: str, timeout: int = 20) -> tuple[str | None, str | None]:
+def chat_conversation(messages: list, timeout: int = 20) -> tuple[str | None, str | None]:
+    """Multi-turn variant of chat_completion() for the sidebar chat
+    assistant -- takes a full real conversation history (the system prompt
+    plus every real user/assistant turn so far, in OpenRouter's own
+    {"role": ..., "content": ...} message shape) instead of a single
+    system+user pair, so the model has real context from earlier in the
+    same conversation, not just the latest message in isolation.
+
+    Returns (content, error) -- same real error-reporting contract as
+    _chat_completion_with_error() (a real, specific reason on failure,
+    NEVER the API key itself), since the sidebar chat needs to show the
+    user why a reply didn't come back, same reasoning as
+    explain_transfer_suggestion_debug()."""
+    return _chat_completion_with_error(messages=messages, timeout=timeout)
+
+
+def _chat_completion_with_error(system_prompt: str = None, user_prompt: str = None, messages: list = None, timeout: int = 20) -> tuple[str | None, str | None]:
     """Same real call as chat_completion(), but also returns a real,
     human-readable reason when it fails -- NEVER the API key itself, and
     never the raw response body (which could theoretically echo request
@@ -70,17 +86,26 @@ def _chat_completion_with_error(system_prompt: str, user_prompt: str, timeout: i
     apart from "the free tier is rate-limited right now" instead of a
     silent, undebuggable None -- chat_completion() itself stays the plain,
     error-swallowing version for any caller that genuinely doesn't need
-    to know why."""
+    to know why.
+
+    Accepts EITHER a single system_prompt+user_prompt pair (the original
+    single-turn shape every existing caller uses) OR a full messages list
+    (chat_conversation()'s multi-turn shape) -- exactly one of the two
+    calling conventions must be used, not both, so there's one real
+    request-building/error-handling path shared by every caller instead of
+    two near-duplicate copies."""
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         return None, "OPENROUTER_API_KEY is not set in this environment."
 
-    payload = {
-        "model": FREE_MODEL,
-        "messages": [
+    if messages is None:
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ],
+        ]
+    payload = {
+        "model": FREE_MODEL,
+        "messages": messages,
     }
     req = urllib.request.Request(
         BASE_URL,

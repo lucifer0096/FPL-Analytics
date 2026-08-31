@@ -304,6 +304,17 @@ Everything about the manager's REAL, current team, not a demo:
 
 A running log of real bugs found (mostly via direct user reports against the live app, some via direct verification against real data) and how each was actually diagnosed and fixed — kept as one place to see the project's real failure modes, rather than scattered across commit messages. Newest first.
 
+### Sidebar chat assistant (2026-08-31)
+
+Added, per explicit request ("can we add a chat bot that talks to me regarding my team and transfers ... run it with the openrouter free AI models"): a conversational chat assistant in the sidebar, grounded in real live data and running on the same free-tier-only OpenRouter model already used for "Why this transfer" (`google/gemma-4-31b-it:free`) — never a paid model, same guarantee as `explain_transfer_suggestion()`.
+
+- **Grounding scope** (explicit choice: "Broader — also let it browse Season Insights / PL Table data", not squad-only): `assemble_chat_context()` in `shared.py` assembles one compact, real-data text block on every turn from already-existing real functions — the manager's real current squad (starting XI/bench, captain/vice-captain), real injury/suspension/doubt status, real rotation-risk flags (`rotation_risk_flags()`), real banked free transfers, real chip availability this half, real top-5 league-wide differential picks (`differential_finder()`), and the real current Premier League table top 5 (`premier_league_table()`). Every fact is a real number already verified elsewhere in this app — nothing is computed fresh just for the chat.
+- **Placement** (explicit choice: sidebar, not a dedicated tab): visible on every page via `render_sidebar()`, using `st.chat_input`/`st.chat_message` with conversation history kept in `st.session_state["chat_history"]` (survives reruns within a browser session, same pattern as `built_squad` elsewhere — not persisted across a real reload, which is fine for a chat aid).
+- **Multi-turn support**: `chat_conversation()`/`_chat_completion_with_error()` in `src/llm/openrouter.py` were extended to accept a full real conversation history (a `messages` list) as an alternative to the original single system+user pair, sharing one request/error-handling path with the existing single-turn `explain_transfer_suggestion()` caller rather than duplicating it.
+- **System prompt** explicitly instructs the model to answer ONLY from the real data it's given and say so plainly rather than guess when a question needs something it doesn't have — same "never invent a stat" principle as the existing transfer-narration feature.
+- **Graceful degradation**: shows a plain caption (not a crash) when `OPENROUTER_API_KEY` isn't configured; a real HTTP 429 (rate limit) shows a soft "try again in a moment" message using the same `RATE_LIMIT_PREFIX` tagging as the rest of the app, rather than an alarming raw error.
+- Verified with two new tests in `test_shared_live.py`: `assemble_chat_context()` genuinely contains the manager's real squad member names and the real current PL table leader; `chat_with_assistant()` returns a real, specific error (not a crash) with no key configured.
+
 ### Real transfer-pool bugs found live (2026-08-28)
 
 Two serious real bugs reported live and fixed:

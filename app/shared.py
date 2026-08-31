@@ -611,6 +611,121 @@ def explain_transfer_suggestion_debug(
     return openrouter._chat_completion_with_error(system_prompt, user_prompt)
 
 
+@st.cache_data(ttl=60)
+def assemble_chat_context(entry_id: int) -> str:
+    """Real, live context for the sidebar chat assistant -- every fact
+    assembled here is already computed by an existing real function
+    elsewhere in this file (never invented for the chat), so the model has
+    real grounding for questions about the manager's own squad AND
+    broader league-wide state, per explicit request that the chat "browse
+    Season Insights / PL Table data" too, not just the user's own squad.
+
+    Deliberately compact (short labeled lines, not full tables) -- this
+    text is resent as the system prompt on EVERY chat turn, so it needs to
+    stay well within the free model's real context window without costing
+    unnecessary tokens on every single message.
+
+    Returns a single formatted string combining: the manager's real squad
+    (name/position/team/cost/starting-or-bench), real injury/rotation
+    flags already computed for that squad, real banked free transfers,
+    real chip availability this half, real top-5 differential picks
+    league-wide, and the real current top-5 PL table. Any section that's
+    genuinely unavailable (e.g. no squad collected yet) is labeled as such
+    rather than silently omitted, so the model knows what it doesn't have
+    rather than guessing."""
+    lines = []
+
+    picks_data = load_current_squad_picks(entry_id, _current_gw_for_chat())
+    squad_df = build_live_squad_df(picks_data, _current_gw_for_chat()) if picks_data else pd.DataFrame()
+    if not squad_df.empty:
+        lines.append("YOUR REAL CURRENT SQUAD:")
+        for _, row in squad_df.iterrows():
+            role = "STARTING" if row["in_starting_xi"] else "BENCH"
+            cap = " (CAPTAIN)" if row.get("is_captain") else (" (VICE-CAPTAIN)" if row.get("is_vice_captain") else "")
+            lines.append(f"- {row['name']} ({row['position']}, {row['team']}, £{row['cost']:.1f}m) [{role}]{cap}")
+
+        rotation = rotation_risk_flags(tuple(squad_df["player_id"]))
+        if not rotation.empty:
+            lines.append("\nREAL ROTATION-RISK FLAGS IN YOUR SQUAD (fit but not getting real minutes):")
+            for _, row in rotation.iterrows():
+                lines.append(f"- {row['name']}: 0 minutes last 2 real gameweeks, form {row['form']:.1f}")
+
+        raw = _load_bootstrap()
+        status_by_id = {p["id"]: (p["status"], p.get("news")) for p in raw["elements"]}
+        injured = [(row["name"], status_by_id.get(row["player_id"])) for _, row in squad_df.iterrows()]
+        injured = [(name, s) for name, s in injured if s and s[0] != "a"]
+        if injured:
+            lines.append("\nREAL INJURY/SUSPENSION/DOUBT STATUS IN YOUR SQUAD:")
+            for name, (status, news) in injured:
+                label = {"i": "Injured", "s": "Suspended", "d": "Doubtful", "u": "Left club", "n": "Not in squad"}.get(status, status)
+                lines.append(f"- {name}: {label}" + (f" — {news}" if news else ""))
+
+        free_transfers = calculate_free_transfers(entry_id)
+        lines.append(f"\nReal banked free transfers going into next gameweek: {free_transfers}")
+
+        chips = chip_usage_status(entry_id)
+        chip_lines = [f"{name}: {'Used' if s['used'] else ('Not open yet' if s.get('not_yet_open') else 'Available')}" for name, s in chips.items()]
+        lines.append("Real chip availability this half: " + ", ".join(chip_lines))
+    else:
+        lines.append("No real squad collected yet this season for this manager.")
+
+    diffs = differential_finder(top_n=5)
+    if not diffs.empty:
+        lines.append("\nREAL TOP DIFFERENTIAL PICKS LEAGUE-WIDE (low-owned, real upside):")
+        for _, row in diffs.iterrows():
+            lines.append(f"- {row['name']} ({row['position']}, {row['team']}, £{row['cost']:.1f}m): owned {row['selected_by_percent']:.1f}%, ep_next {row['ep_next']:.1f}")
+
+    table = premier_league_table()
+    if not table.empty and table["played"].sum() > 0:
+        lines.append("\nREAL CURRENT PREMIER LEAGUE TABLE (top 5):")
+        for _, row in table.head(5).iterrows():
+            lines.append(f"- {row['team']}: {row['points']} pts (P{row['played']} W{row['won']} D{row['drawn']} L{row['lost']}, GD {row['gd']:+d})")
+
+    return "\n".join(lines)
+
+
+def _current_gw_for_chat() -> int:
+    """Real current gameweek (bootstrap's own is_current), used by
+    assemble_chat_context() to fetch the manager's real latest squad --
+    kept as its own tiny helper rather than inlined so the context
+    assembly above stays readable."""
+    try:
+        raw = _load_bootstrap()
+        return next((e["id"] for e in raw["events"] if e.get("is_current")), 1)
+    except FileNotFoundError:
+        return 1
+
+
+def chat_with_assistant(context: str, conversation_history: list) -> tuple:
+    """One real turn of the sidebar chat assistant. `context` is
+    assemble_chat_context()'s real, live data string, resent as part of
+    the system prompt on every turn (not just once) so the model always
+    has current data even mid-conversation. `conversation_history` is the
+    real prior turns of THIS conversation (a list of {"role": "user" |
+    "assistant", "content": ...} dicts, in order) -- the model sees the
+    real conversation so far, not just the latest message in isolation.
+
+    The system prompt explicitly instructs the model to answer ONLY from
+    the real data it's given and to say so plainly when a question needs
+    information it doesn't have, rather than guessing -- same "never
+    invent a stat" principle as explain_transfer_suggestion().
+
+    Returns (reply, error) -- same real error-reporting contract as
+    explain_transfer_suggestion_debug(). A real HTTP 429 (rate limit) is
+    tagged with openrouter.RATE_LIMIT_PREFIX so the caller can show it
+    differently from a genuine failure, same as the Transfers tab does."""
+    system_prompt = (
+        "You are a helpful Fantasy Premier League assistant discussing one manager's real "
+        "squad and transfer decisions. Below is REAL, LIVE data about their squad and the "
+        "current season -- use ONLY this data to answer. Never invent a player, stat, injury, "
+        "or fixture not present below. If a question needs information not given here, say so "
+        "plainly rather than guessing. Keep answers conversational and concise (a few sentences "
+        "unless genuinely more detail is needed).\n\n" + context
+    )
+    messages = [{"role": "system", "content": system_prompt}] + conversation_history
+    return openrouter.chat_conversation(messages)
+
+
 def calculate_free_transfers(entry_id: int) -> int:
     """This manager's REAL banked free transfers going into the NEXT
     gameweek, computed from their actual transfer history -- not a manual
@@ -2789,7 +2904,55 @@ def render_sidebar() -> None:
             st.markdown(rows_html, unsafe_allow_html=True)
 
         st.divider()
+        _render_chat_assistant(MANAGER_ENTRY_ID)
+
+        st.divider()
         st.markdown(
             "[GitHub repo](https://github.com/lucifer0096/FPL-Analytics) · "
             "[Manager history page](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)"
         )
+
+
+def _render_chat_assistant(entry_id: int) -> None:
+    """Sidebar chat assistant UI -- ask about your real squad, transfers,
+    or the wider real season state (differentials, PL table). Grounded in
+    assemble_chat_context()'s real, live data on every turn; runs on
+    OpenRouter's free tier only (see src/llm/openrouter.py's FREE_MODEL
+    guarantee), so it costs nothing to run and degrades gracefully (a
+    plain caption, not a crash) if no API key is configured or the free
+    tier is genuinely rate-limited right now.
+
+    Conversation history lives in st.session_state so it survives Streamlit
+    reruns within the same browser session, same pattern as
+    "built_squad" elsewhere in this app -- it does NOT persist across a
+    real page reload or a new session, which is fine for a chat aid."""
+    st.caption("💬 Ask about your squad or transfers")
+
+    if not openrouter.is_configured():
+        st.caption("Chat assistant unavailable — no OPENROUTER_API_KEY configured in this environment.")
+        return
+
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    for msg in st.session_state["chat_history"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    user_msg = st.chat_input("e.g. Should I captain my forward this week?")
+    if user_msg:
+        st.session_state["chat_history"].append({"role": "user", "content": user_msg})
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+
+        context = assemble_chat_context(entry_id)
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                reply, error = chat_with_assistant(context, st.session_state["chat_history"])
+            if reply:
+                st.markdown(reply)
+                st.session_state["chat_history"].append({"role": "assistant", "content": reply})
+            elif error and error.startswith(openrouter.RATE_LIMIT_PREFIX):
+                st.caption("The free model is rate-limited right now — try again in a moment.")
+            else:
+                st.caption(f"Couldn't get a reply: {error}")

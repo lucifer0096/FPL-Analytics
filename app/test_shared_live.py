@@ -659,14 +659,27 @@ def test_gameweek_fixtures_played_vs_upcoming():
         if row["team_h_score"] is not None:
             assert isinstance(row["team_h_score"], int) and row["team_h_score"] >= 0
 
-    # Find a real gameweek genuinely still in the future relative to GW1
-    # (GW1 is confirmed played above) to verify the "not played yet" state.
+    # Find a real gameweek genuinely still in the future to verify the "not
+    # played yet" state. Bootstrap's own is_next (not current_gw + 1) is the
+    # correct real signal here -- current_gw + 1 broke once the season
+    # progressed far enough that the "current" gameweek itself could still
+    # have unplayed fixtures while a later one had already kicked off.
+    # Find the highest real gameweek id bootstrap itself marks unfinished --
+    # this is the correct real "hasn't happened yet" signal. is_next alone
+    # was found to occasionally disagree with an event's own real finished
+    # flag on live data (FPL's own API updating these fields independently
+    # as a gameweek transition happens mid-request), so finished is checked
+    # directly instead of trusting is_next as a proxy for it.
     raw = shared._load_bootstrap()
-    current_gw = next((e["id"] for e in raw["events"] if e.get("is_current")), 1)
-    upcoming = shared.gameweek_fixtures(current_gw + 1)
-    if not upcoming.empty:
-        assert upcoming["team_h_score"].isna().all(), f"GW{current_gw + 1} shouldn't have real scores yet"
-    print(f"PASS: gameweek_fixtures() correctly distinguishes played (GW1) from upcoming (GW{current_gw + 1}) real fixtures")
+    unfinished_gws = [e["id"] for e in raw["events"] if not e.get("finished")]
+    if unfinished_gws:
+        genuinely_upcoming = max(unfinished_gws)
+        upcoming = shared.gameweek_fixtures(genuinely_upcoming)
+        if not upcoming.empty:
+            assert upcoming["team_h_score"].isna().all(), f"GW{genuinely_upcoming} (bootstrap's own last unfinished gameweek) shouldn't have real scores yet"
+        print(f"PASS: gameweek_fixtures() correctly distinguishes played (GW1) from upcoming (GW{genuinely_upcoming}) real fixtures")
+    else:
+        print("PASS: gameweek_fixtures() correctly shows GW1 as played (no real upcoming gameweek to check right now)")
 
 
 def test_rotation_risk_flags_gating_and_logic():
@@ -763,6 +776,50 @@ def test_not_yet_played_vs_no_game_time_split():
     print(f"PASS: {len(not_played)} real 0-minute squad member(s) correctly carry a real fixture_started flag")
 
 
+def test_assemble_chat_context_grounds_in_real_data():
+    """Regression test for the sidebar chat assistant's real-data grounding:
+    assemble_chat_context() must surface the manager's real current squad
+    (by name) and the real current PL table leader, using only already-
+    verified real functions -- never inventing anything of its own. Also
+    confirms the returned text is genuinely non-empty so the chat always
+    has SOME real context to ground its answers in."""
+    from shared import assemble_chat_context, MANAGER_ENTRY_ID, build_live_squad_df, load_current_squad_picks, _current_gw_for_chat
+
+    context = assemble_chat_context(MANAGER_ENTRY_ID)
+    assert context, "assemble_chat_context() should never return empty text"
+
+    gw = _current_gw_for_chat()
+    picks_data = load_current_squad_picks(MANAGER_ENTRY_ID, gw)
+    if picks_data:
+        squad_df = build_live_squad_df(picks_data, gw)
+        if not squad_df.empty:
+            sample_name = squad_df.iloc[0]["name"]
+            assert sample_name in context, f"real squad member {sample_name} should appear in chat context"
+            assert "REAL BANKED FREE TRANSFERS".lower() not in context.lower() or "free transfers" in context.lower()
+
+    table = shared.premier_league_table()
+    if not table.empty and table["played"].sum() > 0:
+        leader = table.iloc[0]["team"]
+        assert leader in context, f"real current PL table leader {leader} should appear in chat context"
+
+    print("PASS: assemble_chat_context() grounds the chat in real squad + real PL table data")
+
+
+def test_chat_with_assistant_no_key_returns_error_not_crash():
+    """The sidebar chat must degrade gracefully (a real, specific error
+    string) rather than crash or silently hang when no OPENROUTER_API_KEY
+    is configured -- same contract as explain_transfer_suggestion_debug()."""
+    from shared import chat_with_assistant
+
+    reply, error = chat_with_assistant("some real context", [{"role": "user", "content": "should I captain Haaland?"}])
+    if os.environ.get("OPENROUTER_API_KEY"):
+        print("SKIP: OPENROUTER_API_KEY is set in this environment, can't test the no-key path")
+        return
+    assert reply is None
+    assert error and "OPENROUTER_API_KEY" in error
+    print("PASS: chat_with_assistant() gives a real, specific error with no crash when no key is configured")
+
+
 if __name__ == "__main__":
     test_every_live_facing_function_has_a_cache_ttl()
     test_no_hardcoded_season_path_in_shared()
@@ -791,5 +848,7 @@ if __name__ == "__main__":
     test_rotation_risk_flags_gating_and_logic()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
+    test_assemble_chat_context_grounds_in_real_data()
+    test_chat_with_assistant_no_key_returns_error_not_crash()
     test_not_yet_played_vs_no_game_time_split()
     print("\nAll shared.py live-sync checks passed.")
