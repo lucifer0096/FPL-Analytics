@@ -256,122 +256,38 @@ def test_premier_league_table_movement():
         print(f"PASS: premier_league_table_with_movement() real movement values OK for GW{current_gw}")
 
 
-def test_explain_transfer_suggestion_no_key_returns_none():
+def test_explain_transfer_suggestion_no_ollama_returns_none():
     """explain_transfer_suggestion() must return None cleanly (never raise,
-    never return a placeholder string) when OPENROUTER_API_KEY isn't set --
-    an LLM narration is a nice-to-have on top of real data, never something
-    the Transfers tab depends on. This test intentionally does NOT check
-    the with-a-real-key path (that would require a real OpenRouter API key
-    and make a real network call to a free-tier model, not appropriate for
-    a test that runs automatically)."""
-    original_key = os.environ.pop("OPENROUTER_API_KEY", None)
+    never return a placeholder string) when no local Ollama server is
+    reachable -- an LLM narration is a nice-to-have on top of real data,
+    never something the Transfers tab depends on. Simulated via a
+    monkeypatched ollama_client.is_available() rather than actually
+    stopping the real local Ollama server, since this test needs to work
+    the same whether or not Ollama happens to be running right now."""
+    original_is_available = shared.ollama_client.is_available
+    shared.ollama_client.is_available = lambda: False
     try:
-        assert not shared.openrouter.is_configured()
         result = shared.explain_transfer_suggestion(["Test Player Out"], ["Test Player In"], 0, 2.5)
-        assert result is None, "must return None (not raise, not a placeholder) with no API key configured"
+        assert result is None, "must return None (not raise, not a placeholder) with no Ollama server reachable"
     finally:
-        if original_key is not None:
-            os.environ["OPENROUTER_API_KEY"] = original_key
-    print("PASS: explain_transfer_suggestion() returns None cleanly with no OPENROUTER_API_KEY set")
+        shared.ollama_client.is_available = original_is_available
+    print("PASS: explain_transfer_suggestion() returns None cleanly with no local Ollama server reachable")
 
 
 def test_explain_transfer_suggestion_debug_gives_real_reasons():
-    """Regression test for a real debugging gap found live: with no key,
-    the debug variant must give a specific, honest reason (not just None)
-    -- and with an invalid key, it must surface OpenRouter's own real HTTP
-    error (never the key value itself) rather than swallowing it into an
-    undebuggable None, which is what happened when narration silently
-    didn't appear even after a real key was set on Streamlit Cloud."""
-    original_key = os.environ.pop("OPENROUTER_API_KEY", None)
+    """Regression test for a real debugging gap found live: with no local
+    Ollama server reachable, the debug variant must give a specific,
+    honest reason (not just None) rather than swallowing it into an
+    undebuggable silent failure."""
+    original_is_available = shared.ollama_client.is_available
+    shared.ollama_client.is_available = lambda: False
     try:
         content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
         assert content is None
-        assert error and "OPENROUTER_API_KEY is not set" in error
-
-        os.environ["OPENROUTER_API_KEY"] = "sk-invalid-test-key-not-real"
-        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
-        assert content is None
-        assert error is not None, "an invalid key must produce a real error message, not a silent None"
-        assert "sk-invalid-test-key-not-real" not in error, "the error message must never echo back the key value"
-        print(f"PASS: explain_transfer_suggestion_debug() gives real, specific reasons (no key: clear message; invalid key: {error!r})")
+        assert error and "Ollama" in error
+        print(f"PASS: explain_transfer_suggestion_debug() gives a real, specific reason with no Ollama server reachable ({error!r})")
     finally:
-        os.environ.pop("OPENROUTER_API_KEY", None)
-        if original_key is not None:
-            os.environ["OPENROUTER_API_KEY"] = original_key
-
-
-def test_rate_limit_errors_are_tagged_for_silent_handling():
-    """Regression test for a real UX issue found live: a genuine HTTP 429
-    (free-tier rate limit -- an expected, normal condition under load, not
-    a real problem) was showing the same alarming error caption as a
-    genuine failure (bad key, retired model). Verifies the real 429 path
-    is tagged with RATE_LIMIT_PREFIX so app.py can suppress it specifically
-    while still surfacing every other real error -- via a monkeypatched
-    urlopen that raises a real-shaped HTTPError(429), not a live network
-    call (a genuine rate limit isn't reliably reproducible on demand)."""
-    import io
-    import json as json_module
-    import urllib.error
-    import urllib.request
-
-    original_urlopen = urllib.request.urlopen
-    original_key = os.environ.get("OPENROUTER_API_KEY")
-
-    class _Fake429(urllib.error.HTTPError):
-        def __init__(self):
-            body = json_module.dumps({"error": {"message": "Provider returned error"}}).encode()
-            super().__init__("url", 429, "Too Many Requests", {}, io.BytesIO(body))
-
-        def read(self):
-            return json_module.dumps({"error": {"message": "Provider returned error"}}).encode()
-
-    def _raise_429(*args, **kwargs):
-        raise _Fake429()
-
-    urllib.request.urlopen = _raise_429
-    os.environ["OPENROUTER_API_KEY"] = "sk-fake-for-test"
-    try:
-        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
-        assert content is None
-        assert error is not None
-        assert error.startswith(shared.RATE_LIMIT_PREFIX), f"a real 429 must be tagged with RATE_LIMIT_PREFIX, got: {error!r}"
-        assert "429" in error, "the underlying real HTTP code should still be visible in the tagged message"
-        print(f"PASS: a real HTTP 429 is correctly tagged for silent handling ({error!r})")
-    finally:
-        urllib.request.urlopen = original_urlopen
-        os.environ.pop("OPENROUTER_API_KEY", None)
-        if original_key is not None:
-            os.environ["OPENROUTER_API_KEY"] = original_key
-
-
-def test_openrouter_hardcoded_to_free_model():
-    """Regression guard: every candidate in openrouter.py's
-    PREFERRED_FREE_MODELS must end in ':free' (OpenRouter's own naming
-    convention for models that don't consume paid credits) -- this
-    project must never silently start incurring API costs, no matter
-    which candidate _pick_available_free_model() ends up selecting.
-    Checked directly against the actual list, not assumed."""
-    candidates = shared.openrouter.PREFERRED_FREE_MODELS
-    assert candidates, "PREFERRED_FREE_MODELS must not be empty"
-    for model_id in candidates:
-        assert model_id.endswith(":free"), (
-            f"PREFERRED_FREE_MODELS contains {model_id!r}, which doesn't end in ':free' -- "
-            "this project must only ever use free OpenRouter models"
-        )
-    print(f"PASS: openrouter.py is hardcoded to free models only ({candidates})")
-
-
-def test_pick_available_free_model_always_returns_free():
-    """_pick_available_free_model() must always return something from
-    PREFERRED_FREE_MODELS (and therefore always ':free'), whether or not
-    the real live /models fetch succeeds -- verified against the actual
-    live OpenRouter catalog, not a mock, since this genuinely needs to
-    work against real network conditions."""
-    from openrouter import _pick_available_free_model, PREFERRED_FREE_MODELS
-    chosen = _pick_available_free_model()
-    assert chosen in PREFERRED_FREE_MODELS, f"{chosen!r} should be one of the real preferred candidates"
-    assert chosen.endswith(":free")
-    print(f"PASS: _pick_available_free_model() selected a real free candidate ({chosen})")
+        shared.ollama_client.is_available = original_is_available
 
 
 def test_chip_usage_status_shape_and_parsing():
@@ -822,19 +738,63 @@ def test_assemble_chat_context_grounds_in_real_data():
     print("PASS: assemble_chat_context() grounds the chat in real squad + real PL table data")
 
 
-def test_chat_with_assistant_no_key_returns_error_not_crash():
-    """The sidebar chat must degrade gracefully (a real, specific error
-    string) rather than crash or silently hang when no OPENROUTER_API_KEY
-    is configured -- same contract as explain_transfer_suggestion_debug()."""
+def test_chat_with_assistant_no_ollama_returns_error_not_crash():
+    """The chat popup must degrade gracefully (a real, specific error
+    string) rather than crash or silently hang when no local Ollama
+    server is reachable -- same contract as
+    explain_transfer_suggestion_debug(). Simulated via a monkeypatched
+    ollama_client.is_available() rather than actually stopping the real
+    local Ollama server, since this needs to pass the same way whether or
+    not Ollama happens to be running on this machine right now (see
+    test_ollama_client_used_when_available() below for the real,
+    live-Ollama-reachable path)."""
+    import shared as shared_module
     from shared import chat_with_assistant
 
-    reply, error = chat_with_assistant("some real context", [{"role": "user", "content": "should I captain Haaland?"}])
-    if os.environ.get("OPENROUTER_API_KEY"):
-        print("SKIP: OPENROUTER_API_KEY is set in this environment, can't test the no-key path")
+    original_is_available = shared_module.ollama_client.is_available
+    shared_module.ollama_client.is_available = lambda: False
+    try:
+        reply, error = chat_with_assistant("some real context", [{"role": "user", "content": "should I captain Haaland?"}])
+        assert reply is None
+        assert error and "Ollama" in error
+        print("PASS: chat_with_assistant() gives a real, specific error with no crash when no local Ollama server is reachable")
+    finally:
+        shared_module.ollama_client.is_available = original_is_available
+
+
+def test_ollama_client_used_when_available():
+    """Regression test for the Ollama-only chat backend, per explicit
+    request ("i do have a few ollama models locally installed can we work
+    with that instead" then "remove open router entirely and just keep
+    local ollama"): when a real local Ollama server is reachable,
+    chat_with_assistant() must actually produce a real reply. Skipped
+    (not failed) when no local Ollama server is running on this machine --
+    this is real, live infrastructure behavior, not something to mock."""
+    import shared as shared_module
+    from shared import chat_with_assistant
+
+    if not shared_module.ollama_client.is_available():
+        print("SKIP: no local Ollama server reachable on this machine right now")
         return
-    assert reply is None
-    assert error and "OPENROUTER_API_KEY" in error
-    print("PASS: chat_with_assistant() gives a real, specific error with no crash when no key is configured")
+
+    reply, error = chat_with_assistant("Real squad context placeholder.", [{"role": "user", "content": "Reply with exactly one word: OK"}])
+    assert reply, f"expected a real reply from local Ollama, got error: {error!r}"
+    print(f"PASS: chat_with_assistant() used the real local Ollama server ({shared_module.ollama_client.MODEL}), got a real reply")
+
+
+def test_ollama_client_reports_unreachable_gracefully():
+    """ollama_client.is_available() must never raise -- pointed at a real
+    closed port (nothing should be listening on 11435) to verify the real
+    connection-refused path is handled cleanly, not just the happy path."""
+    import ollama_client as ollama_module
+
+    original_base_url = ollama_module.BASE_URL
+    ollama_module.BASE_URL = "http://localhost:11435"
+    try:
+        assert ollama_module.is_available() is False
+        print("PASS: ollama_client.is_available() correctly reports False against a real unreachable port")
+    finally:
+        ollama_module.BASE_URL = original_base_url
 
 
 if __name__ == "__main__":
@@ -847,11 +807,8 @@ if __name__ == "__main__":
     test_team_insights_consistency()
     test_ownership_swing_and_overall_most_owned()
     test_premier_league_table_movement()
-    test_explain_transfer_suggestion_no_key_returns_none()
+    test_explain_transfer_suggestion_no_ollama_returns_none()
     test_explain_transfer_suggestion_debug_gives_real_reasons()
-    test_rate_limit_errors_are_tagged_for_silent_handling()
-    test_openrouter_hardcoded_to_free_model()
-    test_pick_available_free_model_always_returns_free()
     test_chip_usage_status_shape_and_parsing()
     test_free_transfers_slider_allows_zero()
     test_ai_explanation_output_is_html_escaped()
@@ -867,6 +824,8 @@ if __name__ == "__main__":
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
     test_assemble_chat_context_grounds_in_real_data()
-    test_chat_with_assistant_no_key_returns_error_not_crash()
+    test_chat_with_assistant_no_ollama_returns_error_not_crash()
+    test_ollama_client_used_when_available()
+    test_ollama_client_reports_unreachable_gracefully()
     test_not_yet_played_vs_no_game_time_split()
     print("\nAll shared.py live-sync checks passed.")

@@ -29,8 +29,7 @@ from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
 import fpl_api
-import openrouter
-from openrouter import RATE_LIMIT_PREFIX
+import ollama_client
 
 FEATURES_PATH = os.path.join(PROJECT_DIR, "data", "processed", "features.parquet")
 HISTORICAL_PATH = os.path.join(PROJECT_DIR, "data", "processed", "historical_gw.parquet")
@@ -549,8 +548,8 @@ def explain_transfer_suggestion(
     out_reasons: dict = None, in_notes: dict = None,
 ) -> str | None:
     """Turns an ALREADY-COMPUTED real transfer suggestion into a short,
-    readable paragraph, using OpenRouter's free-tier LLM (see
-    src/llm/openrouter.py) purely as a NARRATOR -- every number in the
+    readable paragraph, using a LOCAL Ollama model (see
+    src/llm/ollama_client.py) purely as a NARRATOR -- every number in the
     prompt (hit_cost, net_points_gain, real injury/status reasons from
     out_reasons, real fixture/ownership notes from in_notes) is already
     real, verified data computed by optimize_transfers()/the rest of this
@@ -558,12 +557,14 @@ def explain_transfer_suggestion(
     instructed to only use the facts it's given, never invent a stat --
     this is presentation, not a second source of truth.
 
-    Returns None (not an empty string or a placeholder) if OpenRouter
-    isn't configured (no OPENROUTER_API_KEY) or the call fails for any
-    reason -- callers should show the existing plain OUT/IN display either
-    way and treat this as a nice-to-have addition on top, never something
-    the page depends on. See openrouter.py's own docstring for why this
-    is hardcoded to a free model with no paid fallback.
+    Returns None (not an empty string or a placeholder) if no local
+    Ollama server is reachable or the call fails for any reason --
+    callers should show the existing plain OUT/IN display either way and
+    treat this as a nice-to-have addition on top, never something the
+    page depends on. Ollama-only by explicit request -- this narration
+    (like the chat assistant) is genuinely unavailable when this app is
+    deployed on Streamlit Cloud, where Ollama is never installed; it only
+    works when this app is run locally alongside a running Ollama server.
 
     out_reasons/in_notes are optional {name: real_fact_string} dicts (e.g.
     {"Pedro Porro": "Injured, expected back 29 Aug"}) -- when given, these
@@ -581,14 +582,13 @@ def explain_transfer_suggestion_debug(
     out_reasons: dict = None, in_notes: dict = None,
 ) -> tuple:
     """Same real call as explain_transfer_suggestion(), but also returns a
-    real, human-readable reason when narration is unavailable -- NEVER the
-    API key itself. Lets the Transfers tab show an honest diagnostic (e.g.
-    "OPENROUTER_API_KEY is not set" vs. "OpenRouter returned HTTP 401" vs.
-    "rate-limited") instead of the plain function's silent None, which is
-    the right default for a normal user but was genuinely undebuggable
-    when narration went missing after the key was set on Streamlit Cloud."""
-    if not openrouter.is_configured():
-        return None, "OPENROUTER_API_KEY is not set in this environment."
+    real, human-readable reason when narration is unavailable. Lets the
+    Transfers tab show an honest diagnostic (e.g. "no local Ollama server
+    reachable" vs. a real Ollama error) instead of the plain function's
+    silent None, which is the right default for a normal user but was
+    genuinely undebuggable when narration silently went missing."""
+    if not ollama_client.is_available():
+        return None, "No local Ollama server reachable -- this narration only works when this app is run locally alongside Ollama."
 
     facts = [f"Suggested transfer: OUT {', '.join(out_names)} / IN {', '.join(in_names)}."]
     facts.append(f"Hit cost: {hit_cost} points." if hit_cost else "No hit cost (within free transfers).")
@@ -608,7 +608,11 @@ def explain_transfer_suggestion_debug(
         "transfer naturally, as if briefing a friend."
     )
     user_prompt = "\n".join(facts)
-    return openrouter._chat_completion_with_error(system_prompt, user_prompt)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    return ollama_client.chat_conversation(messages)
 
 
 @st.cache_data(ttl=60)
@@ -711,9 +715,14 @@ def chat_with_assistant(context: str, conversation_history: list) -> tuple:
     invent a stat" principle as explain_transfer_suggestion().
 
     Returns (reply, error) -- same real error-reporting contract as
-    explain_transfer_suggestion_debug(). A real HTTP 429 (rate limit) is
-    tagged with openrouter.RATE_LIMIT_PREFIX so the caller can show it
-    differently from a genuine failure, same as the Transfers tab does."""
+    explain_transfer_suggestion_debug().
+
+    Ollama-only by explicit request: this uses ONLY a LOCAL Ollama server
+    (see ollama_client.py) -- no rate limits, no cost, no external API
+    key needed. This means the chat assistant genuinely only works when
+    this app is run locally alongside a running Ollama server; it's
+    unavailable (a plain, honest message, not a crash) when this app is
+    deployed on Streamlit Cloud, where Ollama is never installed."""
     system_prompt = (
         "You are a helpful Fantasy Premier League assistant discussing one manager's real "
         "squad and transfer decisions. Below is REAL, LIVE data about their squad and the "
@@ -723,7 +732,11 @@ def chat_with_assistant(context: str, conversation_history: list) -> tuple:
         "unless genuinely more detail is needed).\n\n" + context
     )
     messages = [{"role": "system", "content": system_prompt}] + conversation_history
-    return openrouter.chat_conversation(messages)
+
+    if not ollama_client.is_available():
+        return None, "No local Ollama server reachable -- this chat assistant only works when this app is run locally alongside Ollama."
+
+    return ollama_client.chat_conversation(messages)
 
 
 def calculate_free_transfers(entry_id: int) -> int:
@@ -2914,10 +2927,13 @@ def render_chat_assistant(entry_id: int = MANAGER_ENTRY_ID) -> None:
     """Floating bottom-right chat popup -- ask about your real squad,
     transfers, or the wider real season state (differentials, PL table).
     Grounded in assemble_chat_context()'s real, live data on every turn;
-    runs on OpenRouter's free tier only (see src/llm/openrouter.py's
-    FREE_MODEL guarantee), so it costs nothing to run and degrades
-    gracefully (a plain caption, not a crash) if no API key is configured
-    or the free tier is genuinely rate-limited right now.
+    runs ONLY on a LOCAL Ollama server (see src/llm/ollama_client.py),
+    per explicit request to drop OpenRouter entirely -- no rate limits,
+    no cost, no external API key. This means the chat assistant only
+    works when this app is run locally alongside a running Ollama
+    server; it degrades gracefully (a plain caption, not a crash) when
+    Ollama isn't reachable -- e.g. this app deployed on Streamlit Cloud,
+    where Ollama is never installed.
 
     Moved out of the sidebar into a real st.popover() per explicit
     request ("place it at bottom right or as a popup") -- st.popover()
@@ -2946,8 +2962,8 @@ def render_chat_assistant(entry_id: int = MANAGER_ENTRY_ID) -> None:
     with st.popover("💬 Chat", use_container_width=False):
         st.caption("Ask about your squad or transfers")
 
-        if not openrouter.is_configured():
-            st.caption("Chat assistant unavailable — no OPENROUTER_API_KEY configured in this environment.")
+        if not ollama_client.is_available():
+            st.caption("Chat assistant unavailable — this feature only works when the app is run locally alongside Ollama.")
             return
 
         if "chat_history" not in st.session_state:
@@ -2970,7 +2986,5 @@ def render_chat_assistant(entry_id: int = MANAGER_ENTRY_ID) -> None:
                 if reply:
                     st.markdown(reply)
                     st.session_state["chat_history"].append({"role": "assistant", "content": reply})
-                elif error and error.startswith(openrouter.RATE_LIMIT_PREFIX):
-                    st.caption("The free model is rate-limited right now — try again in a moment.")
                 else:
                     st.caption(f"Couldn't get a reply: {error}")

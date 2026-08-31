@@ -26,7 +26,7 @@ from shared import (
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
-    ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug, RATE_LIMIT_PREFIX,
+    ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug,
     _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
     render_pitch, inject_shared_css, render_sidebar, render_chat_assistant,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
@@ -582,11 +582,11 @@ def _render_transfers_tab():
                         # every fact handed to it (out_reasons/in_notes) is
                         # already real data computed above (real injury
                         # status, real ep_next) -- the model only narrates,
-                        # it never invents a number. Silently absent (no
-                        # error shown) if OPENROUTER_API_KEY isn't set or
-                        # the free-tier call fails for any reason -- this
-                        # is a nice-to-have on top of the real OUT/IN
-                        # display above, never something the page needs.
+                        # it never invents a number. Ollama-only: shows a
+                        # plain diagnostic (not an error) if no local
+                        # Ollama server is reachable -- this is a nice-to-
+                        # have on top of the real OUT/IN display above,
+                        # never something the page needs.
                         out_reasons = {
                             row["name"]: f"{STATUS_LABELS.get(row['status'], row['status'])}"
                             + (f" — {row['news']}" if row["news"] else "")
@@ -621,15 +621,11 @@ def _render_transfers_tab():
                                 '</div>',
                                 unsafe_allow_html=True,
                             )
-                        elif explanation_error and not explanation_error.startswith(RATE_LIMIT_PREFIX):
-                            # A real, honest diagnostic (never the API key itself) for why
-                            # narration didn't appear -- e.g. "OPENROUTER_API_KEY is not set"
-                            # vs. "OpenRouter returned HTTP 401" vs. a retired model. A real
-                            # HTTP 429 (rate limit) is deliberately EXCLUDED from this --
-                            # it's a normal, expected condition for a free-tier model under
-                            # load, not something worth showing as an error every time the
-                            # button is clicked (unlike the genuine failures above, which
-                            # were previously undebuggable with a silent None).
+                        elif explanation_error:
+                            # A real, honest diagnostic for why narration didn't appear --
+                            # e.g. "no local Ollama server reachable" (this feature is
+                            # Ollama-only and simply unavailable when this app is deployed
+                            # on Streamlit Cloud, where Ollama is never installed).
                             st.caption(f"💬 Explanation unavailable: {explanation_error}")
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
