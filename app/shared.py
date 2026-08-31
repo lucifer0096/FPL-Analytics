@@ -2981,7 +2981,7 @@ def render_chat_assistant(entry_id: int = MANAGER_ENTRY_ID) -> None:
 
             context = assemble_chat_context(entry_id)
             with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
+                with st.spinner("Thinking... (local CPU inference can take up to a couple of minutes)"):
                     reply, error = chat_with_assistant(context, st.session_state["chat_history"])
                 if reply:
                     st.markdown(reply)
