@@ -93,8 +93,10 @@ def load_training_data(path: str = None) -> pd.DataFrame:
 
 def chronological_split(df: pd.DataFrame) -> tuple:
     """Everything before VALIDATION_SEASON trains the model; VALIDATION_SEASON
-    itself is held out entirely for evaluation."""
-    train = df[df["season"] != VALIDATION_SEASON].copy()
+    itself is held out entirely for evaluation. Any later season is excluded
+    from training as well, so newly appended live-season rows cannot contaminate
+    the historical validation result."""
+    train = df[df["season"] < VALIDATION_SEASON].copy()
     val = df[df["season"] == VALIDATION_SEASON].copy()
     return train, val
 

@@ -13,6 +13,7 @@ import glob
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 import lightgbm as lgb
 import pandas as pd
@@ -23,7 +24,7 @@ PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "collector"))
 
-from optimizer import optimize_squad, optimize_transfers, load_latest_prices, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
+from optimizer import optimize_squad, optimize_transfers, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
 from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
@@ -39,6 +40,19 @@ MANAGER_ENTRY_ID = 1132016
 # to a small local file lets it survive a refresh; re-picking on a genuinely
 # different machine/session is still expected.
 MANUAL_SQUAD_SAVE_PATH = os.path.join(PROJECT_DIR, "data", "manual_squad.json")
+_DATA_SOURCE_STATUS = {}
+
+
+def _record_data_source(name: str, source: str) -> None:
+    _DATA_SOURCE_STATUS[name] = {
+        "source": source,
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+
+def data_source_status() -> dict:
+    """Return the latest live/fallback source status for dashboard observability."""
+    return {name: dict(status) for name, status in _DATA_SOURCE_STATUS.items()}
 
 
 def _load_saved_manual_squad_ids() -> list:
@@ -307,14 +321,20 @@ def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") ->
         .set_index("player_code")["total_points_avg_last_5"]
     )
 
-    # load_latest_prices() returns FPL's raw numeric `id` as player_id -- that
-    # resets every season (see load_historical.py's caveat on `element`), so it
-    # can't be used to look up prior_season data directly. Map it to the stable
-    # `code` field via the same bootstrap snapshot, same pattern used throughout
-    # this project wherever cross-season identity matters.
-    live = load_latest_prices()
-
     raw = _load_bootstrap()
+    team_by_id = {team["id"]: team["name"] for team in raw["teams"]}
+    live = pd.DataFrame([
+        {
+            "player_id": player["id"],
+            "name": f"{player['first_name']} {player['second_name']}",
+            "position": _POSITION_MAP_APP[player["element_type"]],
+            "team": team_by_id.get(player["team"]),
+            "cost": player["now_cost"] / 10.0,
+        }
+        for player in raw["elements"]
+    ])
+    # FPL's raw numeric player id resets every season, so map it to the stable
+    # code field before joining prior-season form.
     code_by_id = {p["id"]: p["code"] for p in raw["elements"]}
     live["player_code"] = live["player_id"].map(code_by_id)
 
@@ -892,6 +912,7 @@ def build_live_squad_df(picks_data: dict, gw: int) -> pd.DataFrame:
             "position": _POSITION_MAP_APP[player["element_type"]],
             "team": team_name,
             "cost": player["now_cost"] / 10.0,
+            "sell_price": pick.get("selling_price", player["now_cost"]) / 10.0,
             "predicted_points": live_points.get(eid, 0) * pick["multiplier"],
             "did_not_play": minutes == 0,
             "fixture_started": fixture_started,
@@ -1110,8 +1131,11 @@ def _load_bootstrap() -> dict:
     during matches, so re-fetching more often than that buys nothing real
     and just adds load for no benefit."""
     try:
-        return fpl_api.get_bootstrap_static()
+        data = fpl_api.get_bootstrap_static()
+        _record_data_source("bootstrap", "Live FPL API")
+        return data
     except Exception:
+        _record_data_source("bootstrap", "Committed fallback")
         with open(_latest_bootstrap_path(), encoding="utf-8") as f:
             return json.load(f)
 
@@ -1280,8 +1304,11 @@ def _load_fixtures_df() -> pd.DataFrame:
     nor any fallback file is available -- callers already treat that as
     "nothing collected yet.\""""
     try:
-        return pd.DataFrame(fpl_api.get_fixtures())
+        fixtures = pd.DataFrame(fpl_api.get_fixtures())
+        _record_data_source("fixtures", "Live FPL API")
+        return fixtures
     except Exception:
+        _record_data_source("fixtures", "Local/committed fallback")
         pass
     path = _fixtures_path()
     if path is None:
@@ -2238,7 +2265,8 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
             f'(difficulty {f["difficulty"]}/5)" style="display: inline-block; width: 16px; '
             f'height: 16px; line-height: 16px; border-radius: 3px; '
             f'background: {DIFFICULTY_COLORS.get(f["difficulty"], "#999")}; color: white; '
-            f'font-size: 9px; font-weight: 700; margin: 0 1px;">{f["difficulty"]}</span>'
+            f'font-size: 8px; font-weight: 700; margin: 0 1px; padding-top: 1px;">'
+            f'<span style="display: block;">GW{f["gw"]}</span><span style="display: block;">{f["difficulty"]}</span></span>'
             for f in row["next_fixtures"]
         )
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
@@ -2717,7 +2745,7 @@ def render_sidebar() -> None:
                 rows_html += (
                     '<div style="display: flex; align-items: center; justify-content: space-between; '
                     'padding: 4px 0; font-size: 12px;">'
-                    f'<span>{f["team"]} {vs_at} {f["opponent"]}</span>'
+                    f'<span>{f["team"]} {vs_at} {f["opponent"]} · GW{f["gw"]}</span>'
                     f'<span style="display: inline-block; width: 16px; height: 16px; line-height: 16px; '
                     f'border-radius: 3px; background: {color}; color: white; font-size: 9px; '
                     f'font-weight: 700; text-align: center; flex-shrink: 0; margin-left: 6px;">'
@@ -2725,6 +2753,16 @@ def render_sidebar() -> None:
                     '</div>'
                 )
             st.markdown(rows_html, unsafe_allow_html=True)
+
+        source_status = data_source_status()
+        if source_status:
+            labels = []
+            for name in ("bootstrap", "fixtures"):
+                status = source_status.get(name)
+                if status:
+                    labels.append(f"{name.title()}: {status['source']}")
+            if labels:
+                st.caption(" · ".join(labels))
 
         st.divider()
         st.markdown(

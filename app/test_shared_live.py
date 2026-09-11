@@ -494,6 +494,7 @@ def test_squad_card_hover_stats():
     squad_df = shared.build_live_squad_df(picks_data, 1)
     for col in ["minutes_played", "goals_scored", "assists", "bonus", "gw_total_points"]:
         assert col in squad_df.columns, f"build_live_squad_df missing {col}"
+    assert "sell_price" in squad_df.columns, "build_live_squad_df must preserve FPL selling_price"
     html = shared._player_card_html(squad_df.iloc[0])
     assert "\n" not in html, "card HTML must stay single-line (Markdown-then-HTML rendering bug)"
     assert "fpl-has-tooltip" in html, "card must carry the CSS-tooltip trigger class"

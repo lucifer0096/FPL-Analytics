@@ -18,6 +18,8 @@ A Fantasy Premier League expected-points model, squad optimizer, and dashboard, 
 
 Planned next: retrain the xP model once enough live 2026-27 gameweeks exist to be worth incorporating (currently trained on 2016-17 through 2025-26 only); build a real multi-gameweek Chip Advisor projection for the live squad once there's a genuine upcoming-fixtures window to project against.
 
+The live-season training boundary is now future-safe: feature engineering accepts newly collected `YYYY-YY` seasons, while validation training uses only seasons before the configured validation season. Later live seasons remain available for a deliberately separate forward-training decision rather than silently contaminating the historical validation result.
+
 ## Project Structure
 
 ```text
@@ -68,6 +70,12 @@ export FPL_ENTRY_ID=1132016   # or set FPL_ENTRY_ID on Windows
 python src/collector/snapshot.py
 ```
 
+For reproducible CI or deployment setup, install the checked top-level versions from `requirements.lock` instead:
+
+```bash
+python -m pip install -r requirements.lock
+```
+
 This writes to `data/raw/{season}/`:
 - `bootstrap/bootstrap_{timestamp}.json` — full player/team snapshot
 - `fixtures.csv` — season fixture list with difficulty ratings
@@ -100,6 +108,10 @@ python src/collector/snapshot.py --force       # always snapshot, ignoring saved
 **A second, more fundamental live-sync bug found 2026-08-24, AFTER the fragment fix**: several functions built on TOP of the live-first loaders — `live_price_changes()`, `likely_price_movers()`, `differential_finder()`, `league_wide_status_flags()`, `premier_league_table()`, `team_insights()`, `season_leaderboards()`, `team_upcoming_fixtures()` — were themselves decorated with a bare `@st.cache_data`, with **no TTL of their own**. Even though `_load_bootstrap()`/`_load_fixtures_df()` underneath them correctly refresh every 60s, and even though the fragment correctly reruns the whole tab every 60s, Streamlit had already cached these functions' own RETURN VALUES forever — so a real stat change (e.g. a player's assist total updating mid-match) never reached the UI, because the outer function simply never recomputed at all, regardless of what changed underneath it or how often the page re-rendered. Fixed by adding `ttl=60` to all eight. `app/test_shared_live.py` now includes a permanent regression guard (`test_every_live_facing_function_has_a_cache_ttl`) that reads `shared.py`'s own source and fails if any live-facing function loses its explicit ttl again.
 
 `app/test_shared_live.py` (`python app/test_shared_live.py`) exercises every one of these live-first loaders against REAL live data, both the happy path and the API-down fallback path (via a monkeypatch that simulates an outage) — not a fixed-expected-value unit test suite (same house style as `src/model/test_optimizer.py`/`test_chips.py`), since real scores/standings/injuries change every gameweek; it asserts on properties that must hold for any real season state instead.
+
+The repository also has a deterministic CI workflow (`.github/workflows/ci.yml`) for pushes and pull requests. It compiles `app/` and `src/`, then runs the model season-boundary and collector-state tests without requiring live FPL API access. The live integration checks remain an explicit local/scheduled check because changing scores and API availability should not block an unrelated pull request.
+
+Transfer recommendations use the live bootstrap player pool and preserve each owned player's real FPL `selling_price` from the manager picks endpoint, so current prices and the 50% sell-on-rise rule are reflected instead of relying only on the last collector snapshot. The sidebar also reports whether bootstrap and fixture data came from the live API or a fallback file; player-card fixture chips show their GW number directly.
 
 **Fixture data specifically** (`data/dashboard_fixtures.csv`): `data/raw/2026-27/fixtures.csv` is what `premier_league_table()`, `team_upcoming_fixtures()`, and every feature built on top of them (PL Table tab, fixture-difficulty strips on squad cards, Transfers' fixture-based adjustment) actually read — but that path lives under the gitignored `data/raw/`, so a fresh Streamlit Cloud deploy had none of it at all until this fallback was added (`shared.py`'s `_fixtures_path()` checks the live path first, then falls back to this committed copy, same pattern as `_latest_bootstrap_path()`). Before this fix, those features weren't "waiting for end of week" — they were silently reading a file that would never exist on the deployed app, regardless of how much real gameweek data existed. Verified directly by hiding the local `data/raw/2026-27/fixtures.csv` and confirming both functions correctly fall back and still return real GW1 results.
 

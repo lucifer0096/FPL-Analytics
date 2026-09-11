@@ -13,6 +13,7 @@ into its own feature row.
 """
 
 import os
+import re
 import pandas as pd
 
 VAASTAV_ROOT = os.environ.get("VAASTAV_DATA_ROOT", r"E:\Fantasy-Premier-League\data")
@@ -26,9 +27,23 @@ SEASON_ORDER = [
 ]
 
 
+def _season_rank_map(seasons) -> dict:
+    """Return chronological ranks for known historical and future seasons."""
+    known = {season: index for index, season in enumerate(SEASON_ORDER)}
+    unknown = sorted(set(seasons) - set(known), key=_season_start_year)
+    return {season: index for index, season in enumerate(SEASON_ORDER + unknown)}
+
+
+def _season_start_year(season: str) -> int:
+    match = re.fullmatch(r"(\d{4})-\d{2}", str(season))
+    if match is None:
+        raise ValueError(f"Invalid season label: {season!r}; expected YYYY-YY")
+    return int(match.group(1))
+
+
 def _season_sort_key(df: pd.DataFrame) -> pd.DataFrame:
-    season_rank = {s: i for i, s in enumerate(SEASON_ORDER)}
     df = df.copy()
+    season_rank = _season_rank_map(df["season"].dropna().unique())
     df["_season_rank"] = df["season"].map(season_rank)
     if df["_season_rank"].isna().any():
         unknown = df.loc[df["_season_rank"].isna(), "season"].unique()
@@ -181,7 +196,7 @@ def add_team_form_features(df: pd.DataFrame) -> pd.DataFrame:
     df = _season_sort_key(df)
     team_matches = _build_team_match_table(df)
 
-    team_season_rank = {s: i for i, s in enumerate(SEASON_ORDER)}
+    team_season_rank = _season_rank_map(team_matches["season"].dropna().unique())
     team_matches = team_matches.copy()
     team_matches["_season_rank"] = team_matches["season"].map(team_season_rank)
     team_matches = team_matches.sort_values(["team", "_season_rank", "GW"]).reset_index(drop=True)

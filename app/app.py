@@ -542,12 +542,19 @@ def _render_transfers_tab():
                     st.caption(f"Note: {dropped} squad player(s) not present in this pool, excluded from this check.")
 
                 if len(squad_ids) == sum(POSITION_REQUIREMENTS.values()):
+                    next_pool = next_pool.copy()
+                    sell_prices = current_squad.set_index("player_id")["sell_price"]
+                    next_pool["sell_price"] = next_pool["cost"]
+                    next_pool.loc[next_pool["player_id"].isin(sell_prices.index), "sell_price"] = (
+                        next_pool.loc[next_pool["player_id"].isin(sell_prices.index), "player_id"].map(sell_prices)
+                    )
                     with st.spinner("Solving..."):
                         result = optimize_transfers(
                             current_squad_ids=squad_ids,
                             players=next_pool,
                             free_transfers=1 if unlimited else free_transfers,
                             unlimited_transfers=unlimited,
+                            sell_price_col="sell_price",
                             # Doubled from the default 2.0 -- this pool's
                             # predicted_points is last season's closing form,
                             # not this project's trained model, so it's a

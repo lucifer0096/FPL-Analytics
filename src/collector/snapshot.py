@@ -247,7 +247,10 @@ def main():
     latest_live_gw = _latest_live_gw(bootstrap)
 
     state = _load_state()
+    if state.get("season") not in (None, season):
+        state = {"last_snapshotted_gw": 0}
     last_snapshotted_gw = state.get("last_snapshotted_gw", 0)
+    last_entry_snapshot_gw = state.get("last_entry_snapshot_gw", 0)
 
     # These are two DIFFERENT questions: whether the expensive league-wide
     # gameweek-stats fetch (587+ players' histories, for training data) is
@@ -261,7 +264,15 @@ def main():
     # meant a manager's own live squad was invisible for days after it was
     # actually fetchable.
     needs_full_snapshot = args.force or latest_checked_gw > last_snapshotted_gw
-    needs_entry_snapshot = args.force or (ENTRY_ID and latest_live_gw > 0)
+    current_event = next((event for event in bootstrap["events"] if event.get("is_current")), None)
+    current_event_live = bool(current_event and not current_event.get("finished"))
+    needs_entry_snapshot = bool(
+        ENTRY_ID and (
+            args.force
+            or latest_live_gw > last_entry_snapshot_gw
+            or current_event_live
+        )
+    )
     print(f"Season: {season} | latest data-checked GW: {latest_checked_gw} | "
           f"latest live GW: {latest_live_gw} | last snapshotted GW: {last_snapshotted_gw} | "
           f"needs full snapshot: {needs_full_snapshot} | needs entry snapshot: {needs_entry_snapshot}")
@@ -294,9 +305,15 @@ def main():
     else:
         print("FPL_ENTRY_ID not set — skipping manager entry snapshot.")
 
-    if needs_full_snapshot:
-        _save_state({"last_snapshotted_gw": latest_checked_gw, "season": season})
-        print(f"Updated collector state: last_snapshotted_gw={latest_checked_gw}")
+    if needs_full_snapshot or needs_entry_snapshot:
+        state.update({"last_snapshotted_gw": latest_checked_gw, "season": season})
+        if needs_entry_snapshot:
+            state["last_entry_snapshot_gw"] = latest_live_gw
+        _save_state(state)
+        print(
+            f"Updated collector state: last_snapshotted_gw={state['last_snapshotted_gw']} "
+            f"last_entry_snapshot_gw={state.get('last_entry_snapshot_gw', 0)}"
+        )
 
 
 if __name__ == "__main__":
