@@ -547,8 +547,9 @@ def test_sidebar_summary_shape_and_deadline():
         assert isinstance(summary["next_gw"], int) and 1 <= summary["next_gw"] <= 38
     assert isinstance(summary["squad_next_fixtures"], list)
     for f in summary["squad_next_fixtures"]:
-        assert set(("team", "opponent", "is_home", "difficulty")).issubset(f.keys())
+        assert set(("team", "opponent", "is_home", "difficulty", "gw")).issubset(f.keys())
         assert 1 <= f["difficulty"] <= 5
+        assert 1 <= f["gw"] <= 38
         assert f["team"] != f["opponent"], "a real fixture can't have a team playing itself"
     print(f"PASS: sidebar_summary() real data OK (points={summary['total_points']}, next_gw={summary['next_gw']}, {len(summary['squad_next_fixtures'])} squad fixture(s))")
 

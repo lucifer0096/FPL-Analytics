@@ -1255,6 +1255,7 @@ def sidebar_summary(entry_id: int) -> dict:
                             squad_next_fixtures.append({
                                 "team": team, "opponent": f["opponent"],
                                 "is_home": f["is_home"], "difficulty": f["difficulty"],
+                                "gw": f["gw"],
                             })
         except Exception:
             pass  # sidebar fixtures are a nice-to-have -- never break the rest of the summary over this
