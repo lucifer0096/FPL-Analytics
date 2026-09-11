@@ -250,7 +250,7 @@ Verified against real historical data (2025-26, squad built at GW10, projected a
 
 ## Dashboard
 
-**Current implementation note:** The dashboard uses deterministic FPL data, the validated expected-points model, and the squad/transfer/chip optimizers. My Squad prefers the newest live gameweek with available picks and falls back to the latest local snapshot when the API is unavailable. The former Ollama chat assistant and AI transfer narration have been removed; no Ollama service or model is required to run this project. Paths are anchored to this repository, so the app can be launched from any working directory.
+**Current implementation note:** The dashboard uses deterministic FPL data, the validated expected-points model, and the squad/transfer/chip optimizers. My Squad prefers the newest live gameweek with available picks and falls back to the latest local snapshot when the API is unavailable. Fixtures & Results defaults to FPL's upcoming gameweek, even while FPL still marks the finished gameweek as current. The former Ollama chat assistant and AI transfer narration have been removed; no Ollama service or model is required to run this project. Paths are anchored to this repository, so the app can be launched from any working directory.
 
 ```bash
 streamlit run app/app.py

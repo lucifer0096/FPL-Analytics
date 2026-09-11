@@ -1155,8 +1155,9 @@ def _render_fixtures_tab():
     try:
         raw_bootstrap = _load_bootstrap()
         events = raw_bootstrap.get("events", [])
+        next_gw = next((e["id"] for e in events if e.get("is_next")), None)
         current_gw = next((e["id"] for e in events if e.get("is_current")), None)
-        default_gw = current_gw or 1
+        default_gw = next_gw or current_gw or 1
         max_gw = max((e["id"] for e in events), default=38) if events else 38
     except Exception:
         default_gw = 1
