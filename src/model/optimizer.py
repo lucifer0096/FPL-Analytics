@@ -24,8 +24,9 @@ import pulp
 
 _POSITION_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
+PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-_DASHBOARD_BOOTSTRAP_FALLBACK = os.path.join("data", "dashboard_bootstrap.json")
+_DASHBOARD_BOOTSTRAP_FALLBACK = os.path.join(PROJECT_DIR, "data", "dashboard_bootstrap.json")
 
 
 def load_latest_prices(raw_data_dir: str = None) -> pd.DataFrame:
@@ -52,7 +53,7 @@ def load_latest_prices(raw_data_dir: str = None) -> pd.DataFrame:
     Returns (player_id, name, position, team, cost) -- cost is current price
     only, not each squad member's individual sell price after the 50% profit
     fee (see optimize_transfers' sell_price_col parameter for that)."""
-    raw_data_dir = raw_data_dir or os.path.join("data", "raw")
+    raw_data_dir = raw_data_dir or os.path.join(PROJECT_DIR, "data", "raw")
     pattern = os.path.join(raw_data_dir, "*", "bootstrap", "bootstrap_*.json")
     paths = sorted(glob.glob(pattern))
 

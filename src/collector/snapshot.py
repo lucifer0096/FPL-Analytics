@@ -226,11 +226,23 @@ def main():
         "--force", action="store_true",
         help="Always run a full snapshot, ignoring the last-run state."
     )
+    parser.add_argument(
+        "--bootstrap-only", action="store_true",
+        help="Refresh the current bootstrap and fixtures only, without player histories or manager picks."
+    )
     args = parser.parse_args()
 
     print("Fetching bootstrap-static (cheap check)...")
     bootstrap = fpl_api.get_bootstrap_static()
     season = _season_label(bootstrap)
+
+    if args.bootstrap_only:
+        bootstrap_path = snapshot_bootstrap(bootstrap, season)
+        print(f"Saved bootstrap snapshot: {bootstrap_path}")
+        fixtures_path = snapshot_fixtures(fpl_api.get_fixtures(), season)
+        print(f"Saved fixtures: {fixtures_path}")
+        return
+
     latest_checked_gw = _latest_data_checked_gw(bootstrap)
     latest_live_gw = _latest_live_gw(bootstrap)
 

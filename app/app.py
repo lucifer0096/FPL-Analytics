@@ -53,8 +53,22 @@ transfer and chip advice for your actual team, not just an optimizer demo. See t
 
 def _collected_gws() -> list:
     """Which gameweeks this manager's real picks have actually been
-    collected for -- checks disk directly rather than re-deriving "current
-    gameweek" from a live bootstrap call on every page load."""
+    collected for. Prefer the newest started/current gameweek available from
+    the live API, then fall back to local snapshots when the API is offline
+    or the current gameweek's picks are not available yet."""
+    try:
+        bootstrap = _load_bootstrap()
+        live_gws = sorted(
+            (event["id"] for event in bootstrap["events"]
+             if event.get("finished") or event.get("is_current")),
+            reverse=True,
+        )
+        for gw in live_gws:
+            if load_current_squad_picks(MANAGER_ENTRY_ID, gw) is not None:
+                return [gw]
+    except Exception:
+        pass
+
     picks_dir = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(MANAGER_ENTRY_ID), "picks")
     if os.path.isdir(picks_dir):
         local = sorted(
@@ -62,12 +76,8 @@ def _collected_gws() -> list:
         )
         if local:
             return local
-    # No local data/raw/ (deploy environment) -- fall back to whatever
-    # load_current_squad_picks can find via its own committed-fallback logic,
-    # by checking gameweeks 1 upward until one comes back empty. The
-    # fallback bundle only ever holds ONE gameweek (the latest collected --
-    # see refresh_dashboard_fallbacks.py), so this converges in at most a
-    # couple of tries in practice, not an unbounded scan.
+    # No usable live or local snapshot -- check the committed fallback for
+    # each gameweek. The fallback bundle contains one pinned latest snapshot.
     found = []
     for gw in range(1, 39):
         if load_current_squad_picks(MANAGER_ENTRY_ID, gw) is not None:

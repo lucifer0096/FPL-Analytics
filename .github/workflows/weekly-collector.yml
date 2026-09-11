@@ -3,11 +3,14 @@ name: FPL Data Collection
 on:
   workflow_dispatch:
   schedule:
-    # Daily at 06:00 UTC. The collector itself checks the FPL API's gameweek
-    # finished/data_checked flags and only does a full snapshot when a new
-    # gameweek is actually ready — a fixed weekly cron would miss rearranged
-    # fixtures, midweek gameweeks, and blank/double gameweeks.
-    - cron: "0 6 * * *"
+    # GitHub cron is best effort and FPL deadlines move with rearranged
+    # fixtures. Poll every 30 minutes so the committed bootstrap/fixture
+    # fallback is refreshed before the next deadline window.
+    - cron: "*/30 * * * *"
+
+concurrency:
+  group: fpl-data-collection-main
+  cancel-in-progress: false
 
 jobs:
   collect:
@@ -40,6 +43,9 @@ jobs:
           key: fpl-collector-state-${{ github.run_id }}
           restore-keys: |
             fpl-collector-state-
+
+      - name: Refresh current bootstrap and fixtures
+        run: python src/collector/snapshot.py --bootstrap-only
 
       - name: Check whether a new gameweek is ready
         id: check
@@ -85,7 +91,6 @@ jobs:
       # published on this project's own public manager-history GitHub Pages
       # page, linked throughout the dashboard.
       - name: Refresh dashboard fallback files
-        if: steps.check.outputs.needed == 'true'
         id: refresh
         env:
           FPL_ENTRY_ID: ${{ secrets.FPL_ENTRY_ID }}
@@ -97,7 +102,7 @@ jobs:
           fi
 
       - name: Commit refreshed dashboard fallback files
-        if: steps.check.outputs.needed == 'true' && steps.refresh.outputs.changed == 'true'
+        if: steps.refresh.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
