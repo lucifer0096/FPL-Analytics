@@ -27,7 +27,7 @@ from shared import (
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     ep_next_player_pool, _current_season_label,
     _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
-    render_pitch, inject_shared_css, render_sidebar,
+    render_pitch, inject_shared_css, render_sidebar, render_data_status,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
 
@@ -49,6 +49,36 @@ transfer and chip advice for your actual team, not just an optimizer demo. See t
 <b>Historical &amp; Model</b> page (sidebar) for past-season proof and methodology.</p>
 </div>
 """, unsafe_allow_html=True)
+
+render_data_status()
+
+
+def _render_next_gameweek_anchor() -> None:
+    """Keep the imminent FPL decision context visible above the tab workflow."""
+    try:
+        events = _load_bootstrap().get("events", [])
+        event = next((item for item in events if item.get("is_next")), None)
+        if event is None:
+            event = next((item for item in events if item.get("is_current") and not item.get("finished")), None)
+        if event is None:
+            return
+        deadline = pd.to_datetime(event.get("deadline_time"), utc=True, errors="coerce")
+        if pd.isna(deadline):
+            return
+        remaining = deadline.to_pydatetime() - pd.Timestamp.now(tz="UTC").to_pydatetime()
+        if remaining.total_seconds() > 0:
+            days, seconds = remaining.days, remaining.seconds
+            countdown = f"{days}d {seconds // 3600}h remaining" if days else f"{seconds // 3600}h {(seconds % 3600) // 60}m remaining"
+        else:
+            countdown = "Deadline passed · squad locked"
+        st.caption(
+            f":material/calendar_today: **GW{event['id']}** · Deadline {deadline.strftime('%a %d %b, %H:%M UTC')} · {countdown}"
+        )
+    except Exception:
+        pass
+
+
+_render_next_gameweek_anchor()
 
 
 def _collected_gws() -> list:
@@ -291,18 +321,13 @@ def _render_transfers_tab():
         try:
             next_pool = preseason_pool(df)
             pool_label = "the live current player pool (re-fetched, in case prices moved)"
-            st.info(
-                "⚠️ predicted_points here comes from last season's **closing 2025-26 form** "
-                "(`preseason_pool()`), not real 2026-27 in-season data or the trained model's "
-                "real fixture-difficulty/current-form features (see the Historical & Model "
-                "page's Model Performance tab for how that model works on already-finished "
-                "gameweeks). Treat suggested transfers as a rough signal, not a confident "
-                "recommendation. **This is a standing limitation, not a temporary one** — "
-                "wiring live 2026-27 gameweeks into the trained model's own feature pipeline "
-                "(fixture_difficulty, rolling form, etc.) is a real data-engineering step that "
-                "hasn't been built yet, so this pool won't silently improve just because more "
-                "gameweeks pass; it needs that pipeline work first."
-            )
+            st.badge("Experimental confidence", icon=":material/warning:", color="orange")
+            st.caption("Transfer rankings use last season's closing form, adjusted for the next three real fixtures. Treat them as a decision aid, not a precise forecast.")
+            with st.expander("Why is transfer confidence experimental?"):
+                st.write(
+                    "The live 2026-27 feature pipeline (current form, minutes and fixture difficulty) is not yet wired into the trained model. "
+                    "The optimizer therefore starts from 2025-26 closing form and applies a modest real-fixture adjustment."
+                )
         except FileNotFoundError as e:
             st.error(str(e))
             next_pool = None
@@ -337,6 +362,15 @@ def _render_transfers_tab():
                     "(real injury/suspension/doubt) are excluded from being suggested as a "
                     "transfer-IN target, regardless of their last-season closing form."
                 )
+                with st.expander("Unavailable players excluded from recommendations"):
+                    muted = pool_flagged[["name", "position", "team", "cost", "status", "news", "chance_of_playing_next_round"]].copy()
+                    muted["status"] = muted["status"].map(STATUS_LABELS).fillna(muted["status"])
+                    muted["cost"] = muted["cost"].map(lambda value: f"£{value:.1f}m")
+                    muted = muted.rename(columns={
+                        "name": "Player", "position": "Pos", "team": "Team", "cost": "Price",
+                        "status": "Availability", "news": "Latest update", "chance_of_playing_next_round": "Chance next GW (%)",
+                    })
+                    st.dataframe(muted, hide_index=True)
 
             # Real, current injury/suspension/doubt status -- FPL's own
             # status/news/chance_of_playing_next_round fields (verified live
@@ -548,11 +582,14 @@ def _render_transfers_tab():
                     next_pool.loc[next_pool["player_id"].isin(sell_prices.index), "sell_price"] = (
                         next_pool.loc[next_pool["player_id"].isin(sell_prices.index), "player_id"].map(sell_prices)
                     )
+                    progress = load_current_season_progress(MANAGER_ENTRY_ID)
+                    bank = float(progress.iloc[-1]["bank"]) if not progress.empty else 0.0
                     with st.spinner("Solving..."):
                         result = optimize_transfers(
                             current_squad_ids=squad_ids,
                             players=next_pool,
                             free_transfers=1 if unlimited else free_transfers,
+                            bank=bank,
                             unlimited_transfers=unlimited,
                             sell_price_col="sell_price",
                             # Doubled from the default 2.0 -- this pool's
@@ -572,10 +609,24 @@ def _render_transfers_tab():
                     if result["transfers_in"]:
                         out_names = next_pool[next_pool["player_id"].isin(result["transfers_out"])]["name"].tolist()
                         in_names = next_pool[next_pool["player_id"].isin(result["transfers_in"])]["name"].tolist()
-                        col1, col2, col3 = st.columns(3)
+                        col1, col2, col3, col4 = st.columns(4)
                         col1.metric("Transfers suggested", len(result["transfers_in"]))
-                        col2.metric("Hit cost", f"-{result['hit_cost']} pts")
-                        col3.metric("Net points gain", f"{result['net_points_gain']:+.1f}")
+                        col2.metric("Expected gain", f"{result['net_points_gain'] + result['hit_cost']:+.1f}")
+                        col3.metric("Hit cost", f"-{result['hit_cost']} pts")
+                        col4.metric("Net points gain", f"{result['net_points_gain']:+.1f}")
+
+                        out_rows = next_pool[next_pool["player_id"].isin(result["transfers_out"])][["player_id", "name", "cost", "sell_price"]].rename(
+                            columns={"name": "Player out", "cost": "Current price", "sell_price": "Selling price"}
+                        )
+                        in_rows = next_pool[next_pool["player_id"].isin(result["transfers_in"])][["player_id", "name", "cost"]].rename(
+                            columns={"name": "Player in", "cost": "Buy price"}
+                        )
+                        economics = out_rows.merge(in_rows, on="player_id", how="outer").drop(columns=["player_id"])
+                        economics["Current price"] = economics["Current price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
+                        economics["Selling price"] = economics["Selling price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
+                        economics["Buy price"] = economics["Buy price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
+                        st.caption(f"Bank before moves: £{bank:.1f}m · Remaining bank: £{bank + out_rows['sell_price'].sum() - in_rows['Buy price'].sum():.1f}m")
+                        st.dataframe(economics, hide_index=True)
 
                         out_col, in_col = st.columns(2)
                         with out_col:

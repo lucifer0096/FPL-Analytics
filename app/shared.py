@@ -41,18 +41,69 @@ MANAGER_ENTRY_ID = 1132016
 # different machine/session is still expected.
 MANUAL_SQUAD_SAVE_PATH = os.path.join(PROJECT_DIR, "data", "manual_squad.json")
 _DATA_SOURCE_STATUS = {}
+_DATA_SOURCE_HISTORY = []
 
 
 def _record_data_source(name: str, source: str) -> None:
-    _DATA_SOURCE_STATUS[name] = {
+    status = {
         "source": source,
         "updated_at": datetime.now(timezone.utc),
     }
+    if _DATA_SOURCE_STATUS.get(name, {}).get("source") != source:
+        _DATA_SOURCE_HISTORY.append({"name": name, **status})
+        del _DATA_SOURCE_HISTORY[:-12]
+    _DATA_SOURCE_STATUS[name] = status
 
 
 def data_source_status() -> dict:
     """Return the latest live/fallback source status for dashboard observability."""
     return {name: dict(status) for name, status in _DATA_SOURCE_STATUS.items()}
+
+
+def refresh_live_data() -> None:
+    """Discard the live API caches without touching session or model state."""
+    _load_bootstrap.clear()
+    _load_fixtures_df.clear()
+    _DATA_SOURCE_STATUS.clear()
+    _DATA_SOURCE_HISTORY.clear()
+
+
+def render_data_status() -> None:
+    """Render a compact, actionable freshness summary for primary live data."""
+    statuses = data_source_status()
+    tracked = (("bootstrap", "Players & prices"), ("fixtures", "Fixtures"), ("squad", "Squad"), ("standings", "Standings"))
+    entries = [(label, statuses[name]) for name, label in tracked if name in statuses]
+    if not entries:
+        return
+
+    fallback_active = any("fallback" in status["source"].lower() for _, status in entries)
+    now = datetime.now(timezone.utc)
+    with st.container(border=True):
+        with st.container(horizontal=True, horizontal_alignment="distribute"):
+            with st.container(horizontal=True):
+                for label, status in entries:
+                    age_seconds = max(0, int((now - status["updated_at"]).total_seconds()))
+                    age_label = f"{age_seconds}s ago" if age_seconds < 60 else f"{age_seconds // 60}m ago"
+                    is_fallback = "fallback" in status["source"].lower()
+                    st.badge(
+                        f"{label}: {'Fallback' if is_fallback else 'Live'} · {age_label}",
+                        icon=":material/warning:" if is_fallback else ":material/check_circle:",
+                        color="orange" if is_fallback else "green",
+                    )
+            if fallback_active and st.button("Refresh data", icon=":material/refresh:", key="refresh_live_data"):
+                refresh_live_data()
+                st.rerun()
+        if fallback_active:
+            st.caption("FPL API unavailable for one or more sources. Showing the latest local fallback where available.")
+        with st.expander("Data refresh history"):
+            for label, status in entries:
+                timestamp = status["updated_at"].strftime("%d %b, %H:%M:%S UTC")
+                st.caption(f"{label}: {status['source']} · last checked {timestamp}")
+            if _DATA_SOURCE_HISTORY:
+                st.caption("Recent source changes")
+                for event in reversed(_DATA_SOURCE_HISTORY):
+                    timestamp = event["updated_at"].strftime("%d %b, %H:%M:%S UTC")
+                    st.caption(f"{event['name'].title()}: {event['source']} · {timestamp}")
 
 
 def _load_saved_manual_squad_ids() -> list:
@@ -703,14 +754,17 @@ def load_current_squad_picks(entry_id: int, gw: int) -> dict:
     try:
         live_picks = fpl_api.get_entry_picks(entry_id, gw)
         if live_picks is not None:
+            _record_data_source("squad", "Live FPL API")
             return live_picks
     except Exception:
         pass
     path = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(entry_id), "picks", f"gw{gw}.json")
     if os.path.exists(path):
+        _record_data_source("squad", "Local fallback")
         with open(path, encoding="utf-8") as f:
             return json.load(f)
     if os.path.exists(_DASHBOARD_CURRENT_SQUAD_FALLBACK):
+        _record_data_source("squad", "Committed fallback")
         with open(_DASHBOARD_CURRENT_SQUAD_FALLBACK, encoding="utf-8") as f:
             bundle = json.load(f)
         return bundle.get("picks") if bundle.get("gw") == gw else None
@@ -1008,7 +1062,9 @@ def load_joined_leagues(entry_id: int) -> list:
         entry_info = fpl_api.get_entry(entry_id)
         classic_leagues = entry_info.get("leagues", {}).get("classic", [])
         private_leagues = [l for l in classic_leagues if l.get("league_type") == "x"]
-        return [fpl_api.get_league_standings(l["id"]) for l in private_leagues]
+        standings = [fpl_api.get_league_standings(l["id"]) for l in private_leagues]
+        _record_data_source("standings", "Live FPL API")
+        return standings
     except Exception:
         pass
     leagues_dir = os.path.join(PROJECT_DIR, "data", "raw", _current_season_label(), "entry", str(entry_id), "leagues")
@@ -1020,8 +1076,10 @@ def load_joined_leagues(entry_id: int) -> list:
             with open(os.path.join(leagues_dir, fname), encoding="utf-8") as f:
                 leagues.append(json.load(f))
         if leagues:
+            _record_data_source("standings", "Local fallback")
             return leagues
     if os.path.exists(_DASHBOARD_LEAGUES_FALLBACK):
+        _record_data_source("standings", "Committed fallback")
         with open(_DASHBOARD_LEAGUES_FALLBACK, encoding="utf-8") as f:
             return json.load(f)
     return []
@@ -1254,8 +1312,9 @@ def sidebar_summary(entry_id: int) -> dict:
                             f = team_fixtures[0]
                             squad_next_fixtures.append({
                                 "team": team, "opponent": f["opponent"],
+                                "opponent_short": f.get("opponent_short", f["opponent"]),
                                 "is_home": f["is_home"], "difficulty": f["difficulty"],
-                                "gw": f["gw"],
+                                "gw": f["gw"], "kickoff_time": f.get("kickoff_time"),
                             })
         except Exception:
             pass  # sidebar fixtures are a nice-to-have -- never break the rest of the summary over this
@@ -2008,8 +2067,9 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
 
     raw = _load_bootstrap()
     team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
+    team_id_to_short = {t["id"]: t.get("short_name", t["name"]) for t in raw["teams"]}
     kickoff_times = pd.to_datetime(fx["kickoff_time"], utc=True, errors="coerce")
-    upcoming = fx[kickoff_times > pd.Timestamp.now(tz="UTC")].sort_values("event")
+    upcoming = fx[kickoff_times > pd.Timestamp.now(tz="UTC")].sort_values("kickoff_time")
     if upcoming.empty:
         current_event = next((e for e in raw["events"] if e.get("is_current")), None)
         next_event = next((e for e in raw["events"] if e.get("is_next")), None)
@@ -2021,7 +2081,7 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
             first_upcoming_gw = current_event["id"] + 1
         else:
             first_upcoming_gw = 1
-        upcoming = fx[fx["event"] >= first_upcoming_gw].sort_values("event")
+        upcoming = fx[fx["event"] >= first_upcoming_gw].sort_values("kickoff_time")
     upcoming = upcoming.head(n_gws * 10)
 
     result = {name: [] for name in team_id_to_name.values()}
@@ -2031,14 +2091,16 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
             if home_name:
                 result[home_name].append({
                     "gw": int(row["event"]), "opponent": team_id_to_name.get(row["team_a"]),
-                    "is_home": True, "difficulty": int(row["team_h_difficulty"]),
+                    "opponent_short": team_id_to_short.get(row["team_a"]), "is_home": True,
+                    "difficulty": int(row["team_h_difficulty"]), "kickoff_time": row.get("kickoff_time"),
                 })
         if len(result.get(team_id_to_name.get(row["team_a"]), [])) < n_gws:
             away_name = team_id_to_name.get(row["team_a"])
             if away_name:
                 result[away_name].append({
                     "gw": int(row["event"]), "opponent": team_id_to_name.get(row["team_h"]),
-                    "is_home": False, "difficulty": int(row["team_a_difficulty"]),
+                    "opponent_short": team_id_to_short.get(row["team_h"]), "is_home": False,
+                    "difficulty": int(row["team_a_difficulty"]), "kickoff_time": row.get("kickoff_time"),
                 })
     return result
 
@@ -2261,14 +2323,22 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
     fixtures_html = ""
     if "next_fixtures" in row.index and row["next_fixtures"]:
+        def _fixture_title(f):
+            kickoff = pd.to_datetime(f.get("kickoff_time"), utc=True, errors="coerce")
+            kickoff_label = kickoff.strftime("%a %d %b, %H:%M UTC") if pd.notna(kickoff) else "Kickoff TBC"
+            return (f'GW{f["gw"]} · {"vs" if f["is_home"] else "@"} {f["opponent"]} · '
+                    f'Difficulty {f["difficulty"]} · {kickoff_label}')
+
         chips = "".join(
-            f'<span title="GW{f["gw"]}: {"vs" if f["is_home"] else "@"} {f["opponent"]} '
-            f'(difficulty {f["difficulty"]}/5)" style="display: inline-block; width: 16px; '
-            f'height: 16px; line-height: 16px; border-radius: 3px; '
+            f'<span title="{_fixture_title(f)}" style="display: inline-block; width: 24px; '
+            f'height: 27px; line-height: 9px; border-radius: 3px; '
             f'background: {DIFFICULTY_COLORS.get(f["difficulty"], "#999")}; color: white; '
-            f'font-size: 8px; font-weight: 700; margin: 0 1px; padding-top: 1px;">'
-            f'<span style="display: block;">GW{f["gw"]}</span><span style="display: block;">{f["difficulty"]}</span></span>'
-            for f in row["next_fixtures"]
+            f'font-size: 7px; font-weight: 700; margin: 0 1px; padding-top: 2px; '
+            f'{"box-shadow: 0 0 0 2px #1a1a1a;" if index == 0 else ""}">'
+            f'<span style="display: block;">GW{f["gw"]}</span>'
+            f'<span style="display: block;">{f.get("opponent_short", f["opponent"][:3]).upper()}</span>'
+            f'<span style="display: block;">{f["difficulty"]}</span></span>'
+            for index, f in enumerate(row["next_fixtures"])
         )
         fixtures_html = f'<div style="margin-top: 3px;">{chips}</div>'
     # Real per-gameweek stat breakdown (this specific gameweek, only present
@@ -2391,7 +2461,7 @@ def render_pitch(squad: pd.DataFrame, top_player_badge: str = None) -> None:
         "linear-gradient(rgba(255,255,255,0.3), rgba(255,255,255,0.3)) 30% 100% / 40% 40px no-repeat"
     )
     pitch_html = (
-        f'<div style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
+        f'<div class="fpl-pitch" style="background: linear-gradient(180deg, #1f7a3f 0%, #2a9650 50%, '
         f'#1f7a3f 100%), {pitch_markings}; background-blend-mode: normal; '
         f'border-radius: 12px; padding: 20px 12px; margin-top: 8px; '
         f'border: 2px solid rgba(255,255,255,0.3); position: relative;">'
@@ -2401,7 +2471,7 @@ def render_pitch(squad: pd.DataFrame, top_player_badge: str = None) -> None:
         f'⚽ FORMATION {formation}</div>'
         f'<div style="position: relative; z-index: 1;">{rows_html}</div>'
         '</div>'
-        '<div style="background: linear-gradient(160deg, rgba(26,26,26,0.96), rgba(42,21,64,0.9)); '
+        '<div class="fpl-bench" style="background: linear-gradient(160deg, rgba(26,26,26,0.96), rgba(42,21,64,0.9)); '
         'border-radius: 10px; padding: 14px 12px; margin-top: 10px; '
         'border: 1px solid rgba(90,60,180,0.25);">'
         '<div style="text-align: center; color: #ccc; font-size: 11px; margin-bottom: 8px; '
@@ -2511,6 +2581,17 @@ def inject_shared_css() -> None:
         margin: 0;
         font-size: 0.98rem;
         max-width: 640px;
+    }
+
+    /* The pitch stays readable on narrow screens; the bench scrolls instead
+       of compressing player names and fixture context into illegible cards. */
+    @media (max-width: 640px) {
+        .app-hero { padding: 20px; }
+        .app-hero h1 { font-size: 1.55rem; }
+        .fpl-pitch { padding: 12px 4px !important; }
+        .fpl-player-card { min-width: 74px !important; max-width: 82px !important; padding: 5px !important; }
+        .fpl-player-card img { height: 54px !important; }
+        .fpl-bench > div:last-child { justify-content: flex-start !important; flex-wrap: nowrap !important; overflow-x: auto; padding: 3px 2px 8px; }
     }
 
     /* ---- Section cards / expanders ---- */
@@ -2743,10 +2824,13 @@ def render_sidebar() -> None:
             for f in summary["squad_next_fixtures"]:
                 vs_at = "vs" if f["is_home"] else "@"
                 color = DIFFICULTY_COLORS.get(f["difficulty"], "#999")
+                kickoff = pd.to_datetime(f.get("kickoff_time"), utc=True, errors="coerce")
+                kickoff_label = kickoff.strftime("%a %d %b, %H:%M UTC") if pd.notna(kickoff) else "TBC"
                 rows_html += (
                     '<div style="display: flex; align-items: center; justify-content: space-between; '
                     'padding: 4px 0; font-size: 12px;">'
-                    f'<span>{f["team"]} {vs_at} {f["opponent"]} · GW{f["gw"]}</span>'
+                    f'<span>{f["team"]} {vs_at} {f["opponent_short"]} · GW{f["gw"]}<br>'
+                    f'<small style="opacity: 0.7;">{kickoff_label}</small></span>'
                     f'<span style="display: inline-block; width: 16px; height: 16px; line-height: 16px; '
                     f'border-radius: 3px; background: {color}; color: white; font-size: 9px; '
                     f'font-weight: 700; text-align: center; flex-shrink: 0; margin-left: 6px;">'
