@@ -36,7 +36,6 @@ FPL-Analytics/
 │       ├── test_optimizer.py  # Squad/transfer optimizer checks against real data
 │       └── test_chips.py      # Chip advisor checks against real historical data
 │   └── llm/
-│       └── ollama_client.py   # Local-only Ollama client -- narrates real transfer suggestions + powers the chat assistant, never generates numbers
 ├── data/
 │   ├── raw/                # Gitignored — raw API snapshots, regenerate anytime
 │   └── processed/          # Gitignored — historical_gw.parquet, features.parquet
@@ -249,6 +248,8 @@ Ranks candidate gameweeks for each chip, given per-gameweek player projections t
 Verified against real historical data (2025-26, squad built at GW10, projected across GW10–14): real, plausible players surface as Triple Captain candidates (Haaland 9.6 pts, Gabriel dos Santos Magalhães 11.0 pts), Bench Boost values differ meaningfully by gameweek, and Free Hit correctly identifies GW14 as the week the squad had drifted furthest from optimal (34.0-point gap).
 
 ## Dashboard
+
+**Current implementation note:** The dashboard uses deterministic FPL data, the validated expected-points model, and the squad/transfer/chip optimizers. The former Ollama chat assistant and AI transfer narration have been removed; no Ollama service or model is required to run this project.
 
 ```bash
 streamlit run app/app.py

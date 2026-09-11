@@ -256,40 +256,6 @@ def test_premier_league_table_movement():
         print(f"PASS: premier_league_table_with_movement() real movement values OK for GW{current_gw}")
 
 
-def test_explain_transfer_suggestion_no_ollama_returns_none():
-    """explain_transfer_suggestion() must return None cleanly (never raise,
-    never return a placeholder string) when no local Ollama server is
-    reachable -- an LLM narration is a nice-to-have on top of real data,
-    never something the Transfers tab depends on. Simulated via a
-    monkeypatched ollama_client.is_available() rather than actually
-    stopping the real local Ollama server, since this test needs to work
-    the same whether or not Ollama happens to be running right now."""
-    original_is_available = shared.ollama_client.is_available
-    shared.ollama_client.is_available = lambda: False
-    try:
-        result = shared.explain_transfer_suggestion(["Test Player Out"], ["Test Player In"], 0, 2.5)
-        assert result is None, "must return None (not raise, not a placeholder) with no Ollama server reachable"
-    finally:
-        shared.ollama_client.is_available = original_is_available
-    print("PASS: explain_transfer_suggestion() returns None cleanly with no local Ollama server reachable")
-
-
-def test_explain_transfer_suggestion_debug_gives_real_reasons():
-    """Regression test for a real debugging gap found live: with no local
-    Ollama server reachable, the debug variant must give a specific,
-    honest reason (not just None) rather than swallowing it into an
-    undebuggable silent failure."""
-    original_is_available = shared.ollama_client.is_available
-    shared.ollama_client.is_available = lambda: False
-    try:
-        content, error = shared.explain_transfer_suggestion_debug(["Out"], ["In"], 0, 1.0)
-        assert content is None
-        assert error and "Ollama" in error
-        print(f"PASS: explain_transfer_suggestion_debug() gives a real, specific reason with no Ollama server reachable ({error!r})")
-    finally:
-        shared.ollama_client.is_available = original_is_available
-
-
 def test_chip_usage_status_shape_and_parsing():
     """Verifies chip_usage_status() against real live data AND against
     simulated real chip_plays/chip-window payloads to confirm the per-half
@@ -370,26 +336,6 @@ def test_free_transfers_slider_allows_zero():
         "optimize_transfers() genuinely supports free_transfers=0"
     )
     print("PASS: free-transfers slider allows a real minimum of 0")
-
-
-def test_ai_explanation_output_is_html_escaped():
-    """Security check: the styled "Why this transfer" card renders the
-    LLM's real output inside an unsafe_allow_html=True st.markdown block
-    (needed for the gradient-card styling) -- the raw model response MUST
-    be passed through html.escape() first, since an unescaped LLM output
-    embedded in raw HTML is a real injection risk (the model's response is
-    external, untrusted text, even though it's grounded in real facts).
-    Checks the actual app.py source for the escape call rather than
-    driving a full browser render."""
-    app_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
-    with open(app_path, encoding="utf-8") as f:
-        app_source = f.read()
-    assert "html.escape(explanation)" in app_source, (
-        "the LLM's real output must be html.escape()'d before being embedded in an "
-        "unsafe_allow_html=True block -- otherwise a model response containing HTML-like "
-        "text could inject arbitrary markup into the page"
-    )
-    print("PASS: AI explanation output is html.escape()'d before rendering in unsafe_allow_html")
 
 
 def test_ep_next_player_pool_shape_and_optimizable():
@@ -709,94 +655,6 @@ def test_not_yet_played_vs_no_game_time_split():
     print(f"PASS: {len(not_played)} real 0-minute squad member(s) correctly carry a real fixture_started flag")
 
 
-def test_assemble_chat_context_grounds_in_real_data():
-    """Regression test for the sidebar chat assistant's real-data grounding:
-    assemble_chat_context() must surface the manager's real current squad
-    (by name) and the real current PL table leader, using only already-
-    verified real functions -- never inventing anything of its own. Also
-    confirms the returned text is genuinely non-empty so the chat always
-    has SOME real context to ground its answers in."""
-    from shared import assemble_chat_context, MANAGER_ENTRY_ID, build_live_squad_df, load_current_squad_picks, _current_gw_for_chat
-
-    context = assemble_chat_context(MANAGER_ENTRY_ID)
-    assert context, "assemble_chat_context() should never return empty text"
-
-    gw = _current_gw_for_chat()
-    picks_data = load_current_squad_picks(MANAGER_ENTRY_ID, gw)
-    if picks_data:
-        squad_df = build_live_squad_df(picks_data, gw)
-        if not squad_df.empty:
-            sample_name = squad_df.iloc[0]["name"]
-            assert sample_name in context, f"real squad member {sample_name} should appear in chat context"
-            assert "REAL BANKED FREE TRANSFERS".lower() not in context.lower() or "free transfers" in context.lower()
-
-    table = shared.premier_league_table()
-    if not table.empty and table["played"].sum() > 0:
-        leader = table.iloc[0]["team"]
-        assert leader in context, f"real current PL table leader {leader} should appear in chat context"
-
-    print("PASS: assemble_chat_context() grounds the chat in real squad + real PL table data")
-
-
-def test_chat_with_assistant_no_ollama_returns_error_not_crash():
-    """The chat popup must degrade gracefully (a real, specific error
-    string) rather than crash or silently hang when no local Ollama
-    server is reachable -- same contract as
-    explain_transfer_suggestion_debug(). Simulated via a monkeypatched
-    ollama_client.is_available() rather than actually stopping the real
-    local Ollama server, since this needs to pass the same way whether or
-    not Ollama happens to be running on this machine right now (see
-    test_ollama_client_used_when_available() below for the real,
-    live-Ollama-reachable path)."""
-    import shared as shared_module
-    from shared import chat_with_assistant
-
-    original_is_available = shared_module.ollama_client.is_available
-    shared_module.ollama_client.is_available = lambda: False
-    try:
-        reply, error = chat_with_assistant("some real context", [{"role": "user", "content": "should I captain Haaland?"}])
-        assert reply is None
-        assert error and "Ollama" in error
-        print("PASS: chat_with_assistant() gives a real, specific error with no crash when no local Ollama server is reachable")
-    finally:
-        shared_module.ollama_client.is_available = original_is_available
-
-
-def test_ollama_client_used_when_available():
-    """Regression test for the Ollama-only chat backend, per explicit
-    request ("i do have a few ollama models locally installed can we work
-    with that instead" then "remove open router entirely and just keep
-    local ollama"): when a real local Ollama server is reachable,
-    chat_with_assistant() must actually produce a real reply. Skipped
-    (not failed) when no local Ollama server is running on this machine --
-    this is real, live infrastructure behavior, not something to mock."""
-    import shared as shared_module
-    from shared import chat_with_assistant
-
-    if not shared_module.ollama_client.is_available():
-        print("SKIP: no local Ollama server reachable on this machine right now")
-        return
-
-    reply, error = chat_with_assistant("Real squad context placeholder.", [{"role": "user", "content": "Reply with exactly one word: OK"}])
-    assert reply, f"expected a real reply from local Ollama, got error: {error!r}"
-    print(f"PASS: chat_with_assistant() used the real local Ollama server ({shared_module.ollama_client.MODEL}), got a real reply")
-
-
-def test_ollama_client_reports_unreachable_gracefully():
-    """ollama_client.is_available() must never raise -- pointed at a real
-    closed port (nothing should be listening on 11435) to verify the real
-    connection-refused path is handled cleanly, not just the happy path."""
-    import ollama_client as ollama_module
-
-    original_base_url = ollama_module.BASE_URL
-    ollama_module.BASE_URL = "http://localhost:11435"
-    try:
-        assert ollama_module.is_available() is False
-        print("PASS: ollama_client.is_available() correctly reports False against a real unreachable port")
-    finally:
-        ollama_module.BASE_URL = original_base_url
-
-
 if __name__ == "__main__":
     test_every_live_facing_function_has_a_cache_ttl()
     test_no_hardcoded_season_path_in_shared()
@@ -807,11 +665,8 @@ if __name__ == "__main__":
     test_team_insights_consistency()
     test_ownership_swing_and_overall_most_owned()
     test_premier_league_table_movement()
-    test_explain_transfer_suggestion_no_ollama_returns_none()
-    test_explain_transfer_suggestion_debug_gives_real_reasons()
     test_chip_usage_status_shape_and_parsing()
     test_free_transfers_slider_allows_zero()
-    test_ai_explanation_output_is_html_escaped()
     test_ep_next_player_pool_shape_and_optimizable()
     test_preseason_pool_blends_this_season_and_excludes_unavailable()
     test_transfers_never_recommends_a_currently_unavailable_player()
@@ -823,9 +678,5 @@ if __name__ == "__main__":
     test_rotation_risk_flags_gating_and_logic()
     test_player_season_stats_and_optimizer_card_hover()
     test_fixture_started_and_gameweek_live()
-    test_assemble_chat_context_grounds_in_real_data()
-    test_chat_with_assistant_no_ollama_returns_error_not_crash()
-    test_ollama_client_used_when_available()
-    test_ollama_client_reports_unreachable_gracefully()
     test_not_yet_played_vs_no_game_time_split()
     print("\nAll shared.py live-sync checks passed.")

@@ -8,7 +8,6 @@ page so it stays about "what should I do this gameweek," not a crowded
 seven-tab methodology tour.
 """
 
-import html
 import os
 
 import pandas as pd
@@ -26,9 +25,9 @@ from shared import (
     differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
     season_leaderboards, team_insights, player_season_stats,
     team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
-    ep_next_player_pool, _current_season_label, explain_transfer_suggestion_debug,
+    ep_next_player_pool, _current_season_label,
     _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
-    render_pitch, inject_shared_css, render_sidebar, render_chat_assistant,
+    render_pitch, inject_shared_css, render_sidebar,
     optimize_transfers, optimize_squad, POSITION_REQUIREMENTS,
 )
 
@@ -40,7 +39,6 @@ st.set_page_config(
 )
 inject_shared_css()
 render_sidebar()
-render_chat_assistant()
 
 manager_name = load_manager_name(MANAGER_ENTRY_ID)
 st.markdown(f"""
@@ -578,55 +576,6 @@ def _render_transfers_tab():
                                 unsafe_allow_html=True,
                             )
 
-                        # Optional LLM narration of the transfer ABOVE --
-                        # every fact handed to it (out_reasons/in_notes) is
-                        # already real data computed above (real injury
-                        # status, real ep_next) -- the model only narrates,
-                        # it never invents a number. Ollama-only: shows a
-                        # plain diagnostic (not an error) if no local
-                        # Ollama server is reachable -- this is a nice-to-
-                        # have on top of the real OUT/IN display above,
-                        # never something the page needs.
-                        out_reasons = {
-                            row["name"]: f"{STATUS_LABELS.get(row['status'], row['status'])}"
-                            + (f" — {row['news']}" if row["news"] else "")
-                            for _, row in flagged.iterrows()
-                        } if not flagged.empty else {}
-                        in_notes = {
-                            row["name"]: f"Real expected points next gameweek (ep_next): {row['ep_next']:.1f}"
-                            for _, row in next_pool[next_pool["player_id"].isin(result["transfers_in"])].iterrows()
-                            if "ep_next" in row.index and pd.notna(row.get("ep_next"))
-                        }
-                        explanation, explanation_error = explain_transfer_suggestion_debug(
-                            out_names, in_names, result["hit_cost"], result["net_points_gain"],
-                            out_reasons=out_reasons, in_notes=in_notes,
-                        )
-                        if explanation:
-                            # explanation is real LLM output -- escaped via
-                            # html.escape() before being embedded in this
-                            # unsafe_allow_html block, since a raw model
-                            # response could otherwise inject arbitrary HTML
-                            # (the plain st.markdown(f"> ...") version this
-                            # replaced was safe by default since it never
-                            # passed unsafe_allow_html=True; this styled
-                            # version does, so the escape is required, not
-                            # optional, to keep the same safety guarantee).
-                            st.markdown(
-                                '<div style="background: linear-gradient(135deg, rgba(42,150,80,0.14), '
-                                'rgba(90,60,180,0.12)); border: 1px solid rgba(90,60,180,0.35); '
-                                'border-radius: 12px; padding: 12px 16px; margin-top: 8px;">'
-                                '<div style="font-size: 11px; font-weight: 700; text-transform: uppercase; '
-                                'letter-spacing: 0.04em; opacity: 0.75; margin-bottom: 4px;">💬 Why this transfer</div>'
-                                f'<div style="font-size: 14px; line-height: 1.5;">{html.escape(explanation)}</div>'
-                                '</div>',
-                                unsafe_allow_html=True,
-                            )
-                        elif explanation_error:
-                            # A real, honest diagnostic for why narration didn't appear --
-                            # e.g. "no local Ollama server reachable" (this feature is
-                            # Ollama-only and simply unavailable when this app is deployed
-                            # on Streamlit Cloud, where Ollama is never installed).
-                            st.caption(f"💬 Explanation unavailable: {explanation_error}")
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
                 else:
