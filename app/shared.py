@@ -247,7 +247,7 @@ def season_insights(df: pd.DataFrame, season: str) -> dict:
         "biggest_price_risers": biggest_risers,
     }
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def preseason_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
     """Build a 2026-27 player pool: each player's LIVE current price (this
     season's actual cost, pulled from the latest collector snapshot) paired
@@ -460,7 +460,7 @@ def load_manager_name(entry_id: int) -> str:
     return str(entry_id)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_manager_history(entry_id: int) -> pd.DataFrame:
     """Real season-by-season totals for one manager -- NOT a hardcoded
     table. Reads via _load_entry_history() (live API first, file fallback).
@@ -1006,7 +1006,7 @@ def load_joined_leagues(entry_id: int) -> list:
     return []
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def scout_picks_pool(_features_df: pd.DataFrame, prior_season: str = "2025-26") -> pd.DataFrame:
     """This project's own 'Scout Picks' -- a pre-season recommended squad in
     the spirit of FPL's official editorial Scout Picks article, but built from
@@ -1966,13 +1966,11 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
     fixtures.csv), for the season actually in progress. Returns
     {team_name: [{"gw": int, "opponent": str, "is_home": bool, "difficulty": int}, ...]}.
 
-    "Upcoming" is determined from the live bootstrap's own is_current/is_next
-    gameweek flags, NOT the fixtures.csv `finished` column alone -- checked
-    directly: GW1's own fixtures.csv rows show finished=False even for
-    matches that have already kicked off and finished_provisional=True,
-    since `finished` only flips once bonus points are fully locked in. Using
-    the bootstrap's real current-gameweek number avoids treating an
-    already-played (but not yet "finished") match as still upcoming.
+    "Upcoming" is determined from each fixture's real future kickoff time,
+    rather than trusting the live bootstrap's sometimes-lagging current/next
+    flags. This excludes a finished or already-started gameweek from player
+    cards even while FPL still marks it current. If kickoff timestamps are
+    unavailable, the bootstrap's current/next flags remain as a fallback.
 
     Returns an empty dict if no 2026-27 fixtures.csv has been collected yet
     in this environment (expected before the collector's first run)."""
@@ -1982,10 +1980,21 @@ def team_upcoming_fixtures(n_gws: int = 3) -> dict:
 
     raw = _load_bootstrap()
     team_id_to_name = {t["id"]: t["name"] for t in raw["teams"]}
-    current_events = [e["id"] for e in raw["events"] if e.get("is_current")]
-    current_gw = current_events[0] if current_events else 1
-
-    upcoming = fx[fx["event"] >= current_gw].sort_values("event").head(n_gws * 10)
+    kickoff_times = pd.to_datetime(fx["kickoff_time"], utc=True, errors="coerce")
+    upcoming = fx[kickoff_times > pd.Timestamp.now(tz="UTC")].sort_values("event")
+    if upcoming.empty:
+        current_event = next((e for e in raw["events"] if e.get("is_current")), None)
+        next_event = next((e for e in raw["events"] if e.get("is_next")), None)
+        if current_event is not None and not current_event.get("finished"):
+            first_upcoming_gw = current_event["id"]
+        elif next_event is not None:
+            first_upcoming_gw = next_event["id"]
+        elif current_event is not None:
+            first_upcoming_gw = current_event["id"] + 1
+        else:
+            first_upcoming_gw = 1
+        upcoming = fx[fx["event"] >= first_upcoming_gw].sort_values("event")
+    upcoming = upcoming.head(n_gws * 10)
 
     result = {name: [] for name in team_id_to_name.values()}
     for _, row in upcoming.iterrows():
@@ -2020,7 +2029,7 @@ def average_fixture_difficulty(team: str, fixtures_by_team: dict) -> float:
     return sum(f["difficulty"] for f in fixtures) / len(fixtures)
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def _team_name_to_badge_code() -> dict:
     """Team name (e.g. "Arsenal", the string every pool already carries as
     `team`) -> FPL's team `code` (e.g. 3), the id FPL's own real badge CDN

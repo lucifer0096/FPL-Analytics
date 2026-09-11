@@ -86,7 +86,8 @@ def test_every_live_facing_function_has_a_cache_ttl():
         "load_live_gw_stats", "load_joined_leagues", "load_manager_name",
         "load_current_season_progress", "_team_fixture_started", "player_season_stats",
         "_current_season_label", "ep_next_player_pool", "chip_usage_status", "sidebar_summary",
-        "gameweek_fixtures", "rotation_risk_flags",
+        "gameweek_fixtures", "rotation_risk_flags", "preseason_pool", "load_manager_history",
+        "scout_picks_pool", "_team_name_to_badge_code",
     ]
     missing_ttl = []
     for name in live_facing_functions:
@@ -458,6 +459,31 @@ def test_fixture_started_and_gameweek_live():
     if started:
         assert all(isinstance(v, bool) for v in started.values()), "fixture_started values must be real booleans"
     print(f"PASS: _team_fixture_started/is_gameweek_live real data OK (is_gameweek_live={is_live})")
+
+
+def test_upcoming_fixtures_skip_finished_current_gameweek():
+    raw = shared._load_bootstrap.__wrapped__()
+    current_event = next((event for event in raw["events"] if event.get("is_current")), None)
+    next_event = next((event for event in raw["events"] if event.get("is_next")), None)
+    fixtures_df = shared._load_fixtures_df.__wrapped__()
+    fixtures = shared.team_upcoming_fixtures.__wrapped__(1)
+
+    if not fixtures or current_event is None:
+        print("SKIP: upcoming-fixture selection (no current fixture data)")
+        return
+
+    kickoff_times = pd.to_datetime(fixtures_df["kickoff_time"], utc=True, errors="coerce")
+    future_fixtures = fixtures_df[kickoff_times > pd.Timestamp.now(tz="UTC")]
+    expected_gw = int(future_fixtures["event"].min()) if not future_fixtures.empty else (
+        current_event["id"]
+        if not current_event.get("finished")
+        else next_event["id"] if next_event is not None else current_event["id"] + 1
+    )
+    first_gws = [items[0]["gw"] for items in fixtures.values() if items]
+    assert first_gws and all(gw == expected_gw for gw in first_gws), (
+        f"upcoming fixtures must start at GW{expected_gw}, got {sorted(set(first_gws))}"
+    )
+    print(f"PASS: upcoming fixtures start at GW{expected_gw}, not a finished current gameweek")
 
 
 def test_squad_card_hover_stats():
