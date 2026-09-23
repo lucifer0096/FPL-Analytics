@@ -94,7 +94,9 @@ def test_home_page_renders_offline():
     # unconditionally (a gameweek where none of your teams play legitimately
     # shows no pills). Uses the committed data/dashboard_fixtures.csv
     # fallback, so this holds under the same offline/CI conditions as _run.
-    squad = at.session_state.get("built_squad")
+    squad = (
+        at.session_state["built_squad"] if "built_squad" in at.session_state else None
+    )
     assert squad is not None and "team" in squad.columns, "squad missing for fixtures pills"
     events = shared._load_bootstrap().get("events", [])
     default_gw = next((e["id"] for e in events if e.get("is_next")), None) or next(
