@@ -17,7 +17,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          # 3.12+ is required: requirements.lock pins numpy==2.5.3, which
+          # declares requires_python>=3.12 and ships no cp311 wheel. 3.14
+          # matches the Streamlit Cloud runtime the app actually deploys on.
+          python-version: "3.14"
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.lock
