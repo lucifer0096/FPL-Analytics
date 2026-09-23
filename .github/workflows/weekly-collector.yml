@@ -29,10 +29,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          # 3.14 to match ci.yml and the Streamlit Cloud runtime (this
-          # workflow installs requirements.txt, so it was never hard-failed
-          # by the numpy>=3.12 pin in requirements.lock -- kept in sync
-          # deliberately rather than by accident).
+          # 3.14 to match ci.yml and the Streamlit Cloud runtime: this
+          # workflow installs requirements.txt (the pinned file both this
+          # workflow and the deploy share), so it stays in sync with CI
+          # deliberately rather than by accident.
           python-version: "3.14"
 
       - name: Install dependencies

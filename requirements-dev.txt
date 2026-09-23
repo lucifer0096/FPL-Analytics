@@ -1,0 +1,5 @@
+# Dev-only tooling: installed by CI's lint step and locally with
+# `pip install -r requirements-dev.txt` (on top of requirements.txt).
+# Deliberately separate from requirements.txt so the Streamlit Cloud deploy
+# -- which installs that file verbatim -- doesn't carry linters it never runs.
+ruff==0.16.8

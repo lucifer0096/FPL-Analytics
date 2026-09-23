@@ -1,0 +1,21 @@
+# Keeps the pinned requirements.txt (Python packages) and the actions/* pins
+# in the workflows from rotting silently -- Dependabot opens a small PR when
+# something pinned here has a newer release, instead of the versions aging
+# until a CI or deploy failure points it out.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Pin churn is the whole point here; group the small ones so the PR list
+    # stays readable.
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
