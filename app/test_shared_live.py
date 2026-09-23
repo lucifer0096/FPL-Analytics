@@ -21,11 +21,18 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shared
 
 MANAGER_ENTRY_ID = shared.MANAGER_ENTRY_ID
+
+# This file is discovered by a bare `pytest` (see pytest.ini's testpaths) but
+# EXCLUDED by its default `-m "not live"` filter: everything below talks to
+# FPL's real API, so it runs on demand with `pytest -m live`, never as a
+# required CI step.
+pytestmark = pytest.mark.live
 
 
 def _simulate_api_outage():

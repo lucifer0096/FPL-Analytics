@@ -3,6 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+    # The collector commits refreshed fallback data to main every 30 minutes
+    # when a gameweek is ready; re-running the suite on those pushes exercises
+    # no code (only data/dashboard_* and models/* content changed), so skip
+    # when EVERY changed file is data or a retrained model. A push touching
+    # anything else still runs CI -- paths-ignore only suppresses runs when no
+    # other path is part of the same push.
+    paths-ignore:
+      - "data/**"
+      - "models/**"
   pull_request:
 
 permissions:
@@ -17,14 +26,25 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          # 3.12+ is required: requirements.lock pins numpy==2.5.3, which
+          # 3.12+ is required: requirements.txt pins numpy==2.5.3, which
           # declares requires_python>=3.12 and ships no cp311 wheel. 3.14
           # matches the Streamlit Cloud runtime the app actually deploys on.
           python-version: "3.14"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.lock
+        # requirements.txt holds the exact tested pins (Streamlit Cloud
+        # installs the same file); requirements-dev.txt adds the linter only,
+        # so the deployed app never carries dev tools.
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Lint
+        # ruff.toml pins the rule set, so this resolves the same rules a
+        # local `ruff check app src` does.
+        run: ruff check app src
       - name: Compile Python
         run: python -m compileall -q app src
-      - name: Run deterministic tests
-        run: python -m pytest -q src/model/test_boundaries.py src/collector/test_snapshot.py
+      - name: Run tests
+        # pytest.ini's testpaths + its `-m "not live"` default make this the
+        # deterministic suite (unit tests + the offline dashboard/AppTest
+        # render tests). The live FPL-API checks in app/test_shared_live.py
+        # are marked `live` and run on demand with `pytest -m live`.
+        run: python -m pytest -q

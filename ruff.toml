@@ -1,0 +1,15 @@
+# Pinned in-repo so a local `ruff check` and CI resolve the SAME rules --
+# without this file, whatever defaults the installed ruff version happens to
+# ship (or a config found further up the filesystem) decide what "clean"
+# means, and the two disagree.
+#
+# Deliberately ruff's stable core -- syntax errors, undefined names,
+# unused imports/variables, f-strings without placeholders -- rather than
+# style/formatting churn: those rules catch real bugs and don't fight the
+# existing code's formatting.
+[lint]
+select = ["E4", "E7", "E9", "F"]
+# E402 (import not at top of file) is deliberately out: these scripts bootstrap
+# sys.path before importing sibling modules (see the sys.path.insert in each
+# test entrypoint), which HAS to come before those imports resolve.
+ignore = ["E402"]
