@@ -1,0 +1,15 @@
+# One line-ending convention for every text file: LF, both in the repo and
+# in the working tree. This checkout lives on a Windows mount where editors
+# default to CRLF, which otherwise shows every tracked file as modified and
+# turns any commit into a whole-file diff (git stored the CRLF bytes
+# verbatim, since nothing normalized them on the way in).
+# `text=auto` only applies to files git detects as text; binaries are
+# additionally declared below so they are never touched.
+* text=auto eol=lf
+
+# Explicit binary types -- never normalize these, even if a heuristic ever
+# misdetects them as text.
+*.parquet binary
+*.png binary
+*.jpg binary
+*.ico binary
