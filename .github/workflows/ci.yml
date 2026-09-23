@@ -24,7 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           # 3.12+ is required: requirements.txt pins numpy==2.5.3, which
           # declares requires_python>=3.12 and ships no cp311 wheel. 3.14
