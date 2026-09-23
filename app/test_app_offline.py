@@ -89,6 +89,30 @@ def test_home_page_renders_offline():
     at = _run(HOME_PAGE)
     assert len(at.tabs) == 8, "expected all 8 Home tabs to render"
 
+    # The fixtures tab's "n of yours" pills only exist for matches involving
+    # the built squad, so assert exactly that condition rather than the pill
+    # unconditionally (a gameweek where none of your teams play legitimately
+    # shows no pills). Uses the committed data/dashboard_fixtures.csv
+    # fallback, so this holds under the same offline/CI conditions as _run.
+    squad = at.session_state.get("built_squad")
+    assert squad is not None and "team" in squad.columns, "squad missing for fixtures pills"
+    events = shared._load_bootstrap().get("events", [])
+    default_gw = next((e["id"] for e in events if e.get("is_next")), None) or next(
+        (e["id"] for e in events if e.get("is_current")), 1
+    )
+    fx = shared.gameweek_fixtures(default_gw)
+    squad_teams = set(squad["team"])
+    involved = not fx.empty and bool(
+        (squad_teams & set(fx["team_h"])) | (squad_teams & set(fx["team_a"]))
+    )
+    if involved:
+        markdowns = [m.value for m in at.markdown]
+        # Real element markup, not the bare class name (the CSS block would
+        # otherwise satisfy a substring check on its own).
+        assert any('<span class="fpl-mine-pill">' in md for md in markdowns), (
+            "fixtures tab rendered a squad team's match without an 'n of yours' pill"
+        )
+
 
 def test_transfers_tab_produces_a_result_offline():
     """Regression for the KeyError: 'sell_price' that reached production:
@@ -121,6 +145,17 @@ def test_transfers_tab_produces_a_result_offline():
             # a real formatted bank figure.
             bank_caption = next(c for c in captions if c.startswith("Bank before moves"))
             assert "£" in bank_caption and "Remaining bank" in bank_caption
+            # The OUT -> delta -> IN proposal cards must actually render as
+            # markup, not just the metrics row above them (a crash in the
+            # card builder would already fail on at.exception above; this
+            # catches the card silently not being emitted at all).
+            markdowns = [m.value for m in at.markdown]
+            # Match the real element markup, not the class name: the injected
+            # <style> block mentions every class as a CSS selector and would
+            # make a bare substring check pass even if no card rendered.
+            assert any('<div class="fpl-transfer-card">' in md for md in markdowns), (
+                "transfer proposal cards (OUT -> delta -> IN) did not render"
+            )
 
         # Wildcard/Free Hit path (unlimited transfers) must not crash either.
         at.checkbox(key="unlimited_transfers_checkbox_home").set_value(True)

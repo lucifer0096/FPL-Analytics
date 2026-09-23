@@ -53,7 +53,13 @@ render_data_status()
 
 
 def _render_next_gameweek_anchor() -> None:
-    """Keep the imminent FPL decision context visible above the tab workflow."""
+    """Keep the imminent FPL decision context visible above the tab workflow,
+    as a styled decision bar (GW pill + real deadline + countdown) rather than
+    a bare caption -- the deadline is the single most time-critical number in
+    FPL, so it gets the same pill/gradient treatment as the rest of the app.
+    While a gameweek is genuinely live (FPL's own is_current AND NOT finished)
+    the pill switches to a pulsing red LIVE indicator plus the auto-refresh
+    note, matching what My Squad actually does underneath it."""
     try:
         events = _load_bootstrap().get("events", [])
         event = next((item for item in events if item.get("is_next")), None)
@@ -70,8 +76,18 @@ def _render_next_gameweek_anchor() -> None:
             countdown = f"{days}d {seconds // 3600}h remaining" if days else f"{seconds // 3600}h {(seconds % 3600) // 60}m remaining"
         else:
             countdown = "Deadline passed · squad locked"
-        st.caption(
-            f":material/calendar_today: **GW{event['id']}** · Deadline {deadline.strftime('%a %d %b, %H:%M UTC')} · {countdown}"
+        if is_gameweek_live():
+            pill = f'<span class="fpl-pill fpl-pill-live"><span class="fpl-live-dot"></span>GW{event["id"]} · LIVE</span>'
+            hint = '<span class="fpl-deadline-hint">My Squad auto-refreshes every 60s while the gameweek is live</span>'
+        else:
+            pill = f'<span class="fpl-pill fpl-pill-gw">GW{event["id"]}</span>'
+            hint = ""
+        st.markdown(
+            f'<div class="fpl-deadline-bar">{pill}'
+            f"<span>🗓 Deadline {deadline.strftime('%a %d %b, %H:%M UTC')}</span>"
+            f'<span class="fpl-deadline-count">⏱ {countdown}</span>{hint}'
+            "</div>",
+            unsafe_allow_html=True,
         )
     except Exception:
         pass
@@ -133,6 +149,14 @@ def _arrow_price_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
     return df
 
 
+# FPL's own published 1-5 fixture-difficulty rating as colors -- the SAME
+# green-to-red scheme FPL's own site uses. Shared by the Fixtures & Results
+# match rows and the Transfers proposal cards' fixture strips so the two
+# views can never drift apart (it used to live inside the fixtures renderer
+# only, where the transfer cards couldn't reach it).
+DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
+
+
 tab_squad, tab_transfers, tab_chips, tab_leagues, tab_prices, tab_table, tab_insights, tab_fixtures = st.tabs(
     ["🧠 My Squad", "🔁 Transfers", "🃏 Chip Advisor", "🏅 League Tracker", "💰 Price Changes", "📊 PL Table", "🔥 Season Insights", "📅 Fixtures & Results"]
 )
@@ -184,7 +208,26 @@ def _render_my_squad_tab():
         live_gw_points = (latest_gw, gw_points)
 
         pcol1, pcol2, pcol3, pcol4 = st.columns(4)
-        pcol1.metric(f"GW{latest_gw} points", gw_points)
+        # Real per-gameweek context: this score vs FPL's OWN real
+        # all-managers average for the same gameweek (average_entry_score,
+        # straight from bootstrap-static's events) -- a bare GW score means
+        # little on its own; "+12 vs average" reads instantly, which is the
+        # comparison FPL itself puts front and centre every week.
+        gw_average = None
+        try:
+            for evt in _load_bootstrap().get("events", []):
+                if evt.get("id") == latest_gw and evt.get("average_entry_score") is not None:
+                    gw_average = evt["average_entry_score"]
+                    break
+        except Exception:
+            gw_average = None
+        pcol1.metric(
+            f"GW{latest_gw} points", gw_points,
+            delta=(gw_points - gw_average) if gw_average is not None else None,
+            help=(f"Green/red = points vs FPL's real average across ALL managers "
+                  f"this gameweek ({gw_average})." if gw_average is not None
+                  else "FPL's real all-managers average for this gameweek isn't available yet."),
+        )
         pcol2.metric("Total points", entry_hist["total_points"] + (gw_points - entry_hist["points"]))
         pcol3.metric("Overall rank", f"{entry_hist['overall_rank']:,}")
         pcol4.metric("Points on bench", entry_hist["points_on_bench"])
@@ -270,9 +313,22 @@ def _render_my_squad_tab():
             ))
         latest = current_progress.iloc[-1]
         total_bench_points = current_progress["points_on_bench"].sum()
+        # Real rank movement vs the previous collected gameweek (positive =
+        # places gained) -- derived from FPL's own overall_rank on each row,
+        # the same number FPL's own rank-change arrows are drawn from. Only
+        # shown once a second real gameweek exists to compare against.
+        rank_delta = None
+        if len(current_progress) >= 2:
+            prev_rank = current_progress["overall_rank"].iloc[-2]
+            if pd.notna(prev_rank) and pd.notna(latest["overall_rank"]):
+                rank_delta = int(prev_rank - latest["overall_rank"])
         mcol1, mcol2, mcol3, mcol4, mcol5 = st.columns(5)
         mcol1.metric("Total points", f"{latest['total_points']:.0f}")
-        mcol2.metric("Overall rank", f"{latest['overall_rank']:,.0f}")
+        mcol2.metric(
+            "Overall rank", f"{latest['overall_rank']:,.0f}",
+            delta=rank_delta,
+            help="Places gained/lost vs last gameweek's overall rank (green = climbed, red = dropped).",
+        )
         if pd.notna(latest["overall_rank_percentage"]):
             mcol3.metric(
                 "Top %", f"{latest['overall_rank_percentage']:.0f}%",
@@ -606,8 +662,6 @@ def _render_transfers_tab():
                         )
 
                     if result["transfers_in"]:
-                        out_names = next_pool[next_pool["player_id"].isin(result["transfers_out"])]["name"].tolist()
-                        in_names = next_pool[next_pool["player_id"].isin(result["transfers_in"])]["name"].tolist()
                         col1, col2, col3, col4 = st.columns(4)
                         col1.metric("Transfers suggested", len(result["transfers_in"]))
                         col2.metric("Expected gain", f"{result['net_points_gain'] + result['hit_cost']:+.1f}")
@@ -620,6 +674,89 @@ def _render_transfers_tab():
                         in_rows = next_pool[next_pool["player_id"].isin(result["transfers_in"])][["player_id", "name", "cost"]].rename(
                             columns={"name": "Player in", "cost": "Buy price"}
                         )
+
+                        # What this move COSTS you, as an FPL-style chip row:
+                        # a free transfer, a real -4pt hit, or an active
+                        # Wildcard/Free Hit (free by chip definition), plus
+                        # the net xP verdict alongside it -- the three
+                        # numbers a manager weighs before confirming.
+                        n_moves = len(result["transfers_in"])
+                        if unlimited:
+                            state_chip = '<span class="fpl-state-chip is-unlimited">⚡ Unlimited — Wildcard / Free Hit active</span>'
+                        elif result["hit_cost"]:
+                            state_chip = f'<span class="fpl-state-chip is-hit">💥 Hit: −{result["hit_cost"]} pts</span>'
+                        else:
+                            plural = "s" if n_moves != 1 else ""
+                            state_chip = f'<span class="fpl-state-chip is-free">✓ {n_moves} free transfer{plural} used</span>'
+                        net_class = "is-up" if result["net_points_gain"] >= 0 else "is-down"
+                        st.markdown(
+                            f'<div class="fpl-chip-row">{state_chip}'
+                            f'<span class="fpl-state-chip {net_class}">'
+                            f"Net {result['net_points_gain']:+.1f} xP</span></div>",
+                            unsafe_allow_html=True,
+                        )
+
+                        # One proposal card per swap: OUT side (red tint) ->
+                        # xP delta -> IN side (green tint), each with the
+                        # player's real position/team/price and their team's
+                        # next 3 real fixtures in FPL's own difficulty colors
+                        # -- the fixture swing is usually the actual REASON
+                        # a transfer is worth making, so it's on the card
+                        # itself rather than a tab away. Delta uses the same
+                        # fixture-adjusted pool xP both sides were scored
+                        # with, so it adds up to the net gain metric above.
+                        pool_by_id = next_pool.set_index("player_id")
+
+                        def _fixture_strip(team):
+                            chips = ""
+                            for fx in (fixtures_by_team.get(team) or [])[:3]:
+                                color = DIFFICULTY_COLORS.get(fx.get("difficulty"), "#999")
+                                venue = "H" if fx.get("is_home") else "A"
+                                opponent = fx.get("opponent_short") or fx.get("opponent") or "?"
+                                chips += (
+                                    f'<span class="fpl-fixture-chip" style="background: {color};">'
+                                    f"{venue} {opponent}</span>"
+                                )
+                            return f'<div class="fpl-tr-fixtures">{chips}</div>' if chips else ""
+
+                        def _side_html(row, tag, side_cls, price_label):
+                            if row is None:
+                                return (
+                                    f'<div class="fpl-tr-side {side_cls}">'
+                                    f'<span class="fpl-tr-tag">{tag}</span>'
+                                    '<div class="fpl-tr-name">—</div>'
+                                    '<div class="fpl-tr-meta">not in the current pool</div></div>'
+                                )
+                            return (
+                                f'<div class="fpl-tr-side {side_cls}">'
+                                f'<span class="fpl-tr-tag">{tag}</span>'
+                                f'<div class="fpl-tr-name">{row["name"]}</div>'
+                                f'<div class="fpl-tr-meta">{row["position"]} · {row["team"]} · {price_label(row)}</div>'
+                                f'<div class="fpl-tr-xp">xP {row["predicted_points"]:.1f}</div>'
+                                f"{_fixture_strip(row['team'])}</div>"
+                            )
+
+                        out_ids = list(result["transfers_out"])
+                        cards_html = ""
+                        for idx, in_id in enumerate(result["transfers_in"]):
+                            in_row = pool_by_id.loc[in_id] if in_id in pool_by_id.index else None
+                            out_id = out_ids[idx] if idx < len(out_ids) else None
+                            out_row = pool_by_id.loc[out_id] if out_id in pool_by_id.index else None
+                            delta = (float(in_row["predicted_points"]) if in_row is not None else 0.0) - (
+                                float(out_row["predicted_points"]) if out_row is not None else 0.0
+                            )
+                            delta_class = "is-up" if delta > 0 else ("is-down" if delta < 0 else "is-flat")
+                            cards_html += (
+                                '<div class="fpl-transfer-card">'
+                                + _side_html(out_row, "OUT", "fpl-tr-out", lambda r: f'sell £{r["sell_price"]:.1f}m')
+                                + '<div class="fpl-tr-mid"><span class="fpl-tr-arrow">→</span>'
+                                + f'<span class="fpl-tr-delta {delta_class}">{delta:+.1f} xP</span></div>'
+                                + _side_html(in_row, "IN", "fpl-tr-in", lambda r: f'£{r["cost"]:.1f}m')
+                                + "</div>"
+                            )
+                        if cards_html:
+                            st.markdown(cards_html, unsafe_allow_html=True)
+
                         economics = out_rows.merge(in_rows, on="player_id", how="outer").drop(columns=["player_id"])
                         economics["Current price"] = economics["Current price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
                         economics["Selling price"] = economics["Selling price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
@@ -629,22 +766,6 @@ def _render_transfers_tab():
                             f"£{bank + out_rows['Selling price'].sum() - in_rows['Buy price'].sum():.1f}m"
                         )
                         st.dataframe(economics, hide_index=True)
-
-                        out_col, in_col = st.columns(2)
-                        with out_col:
-                            st.markdown(
-                                '<div style="background: rgba(200,50,50,0.12); border-left: 4px solid #c83232; '
-                                'border-radius: 6px; padding: 10px 14px;"><b style="color:#e05555;">OUT</b><br>'
-                                + "<br>".join(out_names) + "</div>",
-                                unsafe_allow_html=True,
-                            )
-                        with in_col:
-                            st.markdown(
-                                '<div style="background: rgba(42,150,80,0.12); border-left: 4px solid #2a9650; '
-                                'border-radius: 6px; padding: 10px 14px;"><b style="color:#3fb96a;">IN</b><br>'
-                                + "<br>".join(in_names) + "</div>",
-                                unsafe_allow_html=True,
-                            )
 
                     else:
                         st.info("No transfer improves on the current squad enough to be worth it — holding is optimal here.")
@@ -678,6 +799,10 @@ def _render_chip_advisor_tab():
         "just Wildcard, so a chip used earlier this season can show available again once its next "
         "real window opens."
     )
+    # One glassy status card per chip (same card language as the rest of the
+    # app: shared classes, hover-lift, gradient glow when available, dimmed
+    # when spent or not open yet) instead of three ad-hoc inline-styled
+    # boxes that each restated their own padding/opacity by hand.
     CHIP_ICONS = {"Wildcard": "🃏", "Free Hit": "🎯", "Bench Boost": "🪑", "Triple Captain": "👑"}
     chip_cols = st.columns(4)
     for col, (chip_name, status) in zip(chip_cols, chip_status.items()):
@@ -685,33 +810,18 @@ def _render_chip_advisor_tab():
             icon = CHIP_ICONS.get(chip_name, "🎫")
             if status["used"]:
                 gws = ", ".join(f"GW{g}" for g in status["gameweeks"])
-                st.markdown(
-                    f'<div style="text-align: center; opacity: 0.45; padding: 8px 4px;">'
-                    f'<div style="font-size: 28px;">{icon}</div>'
-                    f'<div style="font-size: 12px; font-weight: 600;">{chip_name}</div>'
-                    f'<div style="font-size: 11px;">Used — {gws}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                card_class, state_text = "is-used", f"Used — {gws}"
             elif status.get("not_yet_open"):
-                st.markdown(
-                    f'<div style="text-align: center; opacity: 0.6; padding: 8px 4px;">'
-                    f'<div style="font-size: 28px;">{icon}</div>'
-                    f'<div style="font-size: 12px; font-weight: 600;">{chip_name}</div>'
-                    f'<div style="font-size: 11px;">Not open yet</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                card_class, state_text = "is-closed", "Not open yet"
             else:
-                st.markdown(
-                    f'<div style="text-align: center; padding: 8px 4px; background: rgba(42,150,80,0.12); '
-                    f'border-radius: 8px;">'
-                    f'<div style="font-size: 28px;">{icon}</div>'
-                    f'<div style="font-size: 12px; font-weight: 700; color: #2a9650;">{chip_name}</div>'
-                    f'<div style="font-size: 11px; color: #2a9650;">Available</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                card_class, state_text = "is-available", "Available"
+            st.markdown(
+                f'<div class="fpl-chip-card {card_class}">'
+                f'<div class="fpl-chip-icon">{icon}</div>'
+                f'<div class="fpl-chip-name">{chip_name}</div>'
+                f'<div class="fpl-chip-state">{state_text}</div></div>',
+                unsafe_allow_html=True,
+            )
 
     if "built_squad" not in st.session_state or st.session_state.get("built_squad_season_gw") != "live_squad":
         st.warning("Build your real squad in the **My Squad** tab first (requires at least one collected gameweek).")
@@ -813,6 +923,11 @@ def _render_league_tracker_tab():
         standings_df = pd.DataFrame([
             {
                 "rank": r["rank"],
+                # FPL's own `last_rank` field (the same number its league UI
+                # draws its movement arrows from): positive = places gained
+                # since the last gameweek, 0 = none. Rows without the field
+                # simply show no movement rather than erroring.
+                "move": 0 if r.get("last_rank") is None else r["last_rank"] - r["rank"],
                 "manager": r["player_name"],
                 "team": r["entry_name"],
                 "gw_points": r["event_total"],
@@ -825,13 +940,35 @@ def _render_league_tracker_tab():
         my_row = standings_df[standings_df["is_you"]]
         if not my_row.empty:
             lcol1, lcol2, lcol3 = st.columns(3)
-            lcol1.metric("Your rank", f"{int(my_row.iloc[0]['rank'])} / {len(standings_df)}")
+            # Rank alone is a position; the movement since last gameweek is
+            # the actual story (climbed 4 places this week vs stagnating).
+            lcol1.metric(
+                "Your rank", f"{int(my_row.iloc[0]['rank'])} / {len(standings_df)}",
+                delta=int(my_row.iloc[0]["move"]),
+                help="Places gained/lost in this league since the last gameweek "
+                     "(green = climbed, red = dropped) — FPL's own last_rank field.",
+            )
             lcol2.metric("Your total points", int(my_row.iloc[0]["total_points"]))
             lcol3.metric("Your GW points", int(my_row.iloc[0]["gw_points"]))
 
-        display_df = standings_df.drop(columns=["is_you"]).rename(columns={
+        display_df = standings_df.drop(columns=["is_you"]).copy()
+
+        def _format_move(value):
+            if value > 0:
+                return f"🟢▲ {value}"
+            if value < 0:
+                return f"🔴▼ {abs(value)}"
+            return "—"
+
+        MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
+        display_df["move"] = display_df["move"].map(_format_move)
+        display_df["rank"] = display_df["rank"].map(
+            lambda value: f"{MEDALS.get(int(value), '')} {int(value)}".strip()
+        )
+        display_df = display_df.rename(columns={
             "rank": "Rank", "manager": "Manager", "team": "Team Name",
             "gw_points": "GW Points", "total_points": "Total Points",
+            "move": "Move since last GW",
         })
         # Highlight this manager's own row so it's easy to find in a longer
         # league table -- st.dataframe doesn't support row-conditional
@@ -851,7 +988,8 @@ def _render_league_tracker_tab():
         st.caption(
             f"League: **{league['league']['name']}** · {len(standings_df)} managers · "
             f"read live from FPL's own `leagues-classic/{league['league']['id']}/standings` "
-            f"endpoint via the collector, not hardcoded."
+            f"endpoint via the collector, not hardcoded. Move column = change vs the "
+            f"previous gameweek, straight from FPL's own `last_rank` field."
         )
 
 
@@ -1047,6 +1185,22 @@ def _render_season_insights_tab():
     )
     boards = season_leaderboards()
 
+    def _styled_board(board, unit):
+        """Medal the top three and draw proportional value bars on the unit
+        column. pandas' Styler.bar is pure CSS -- no matplotlib dependency
+        like background_gradient would have -- and flows through the same
+        Styler path the League Tracker's own-row highlight already renders,
+        so this is bars-in-the-cells, not a separate charting library."""
+        display = board.copy()
+        display["name"] = [
+            f"{['🥇', '🥈', '🥉'][idx]} {name}" if idx < 3 else name
+            for idx, name in enumerate(display["name"])
+        ]
+        display = display.rename(columns={
+            "name": "Player", "position": "Pos", "team": "Team", "value": unit,
+        })
+        return display.style.bar(subset=[unit], color="rgba(90,60,180,0.45)")
+
     def _show_board(title, key, unit, icon, col):
         with col:
             st.subheader(f"{icon} {title}")
@@ -1054,12 +1208,7 @@ def _render_season_insights_tab():
             if board.empty:
                 st.caption("Nothing recorded yet.")
             else:
-                st.dataframe(
-                    board.rename(columns={
-                        "name": "Player", "position": "Pos", "team": "Team", "value": unit,
-                    }),
-                    width="stretch", hide_index=True,
-                )
+                st.dataframe(_styled_board(board, unit), width="stretch", hide_index=True)
 
     icol1, icol2 = st.columns(2)
     _show_board("Golden Boot (goals)", "golden_boot", "Goals", "⚽", icol1)
@@ -1082,10 +1231,7 @@ def _render_season_insights_tab():
         if board.empty:
             st.caption("Nothing recorded yet.")
         else:
-            st.dataframe(
-                board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "DefCon"}),
-                width="stretch", hide_index=True,
-            )
+            st.dataframe(_styled_board(board, "DefCon"), width="stretch", hide_index=True)
     with icol6:
         st.subheader("👑 MVP so far")
         st.caption(
@@ -1099,10 +1245,7 @@ def _render_season_insights_tab():
         if board.empty:
             st.caption("Nothing recorded yet.")
         else:
-            st.dataframe(
-                board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Points"}),
-                width="stretch", hide_index=True,
-            )
+            st.dataframe(_styled_board(board, "Points"), width="stretch", hide_index=True)
 
     st.divider()
     st.subheader("🔥 In-form right now")
@@ -1118,10 +1261,7 @@ def _render_season_insights_tab():
     if form_board.empty:
         st.caption("Nothing recorded yet.")
     else:
-        st.dataframe(
-            form_board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Form"}),
-            width="stretch", hide_index=True,
-        )
+        st.dataframe(_styled_board(form_board, "Form"), width="stretch", hide_index=True)
 
     st.divider()
     st.subheader("🏟️ Team-level insights")
@@ -1208,7 +1348,9 @@ def _render_fixtures_tab():
         "kickoff time and FPL's own 1-5 fixture-difficulty rating (same color scheme used "
         "throughout this app) beforehand. Keys off a real score being recorded rather than the "
         "'finished' flag (verified directly: 'finished' stays False for hours after a match "
-        "ends, until bonus points lock in), so a just-finished result shows up here immediately."
+        "ends, until bonus points lock in), so a just-finished result shows up here immediately. "
+        "Once My Squad is built, a green '✓ n of yours' pill on each side marks how many of your "
+        "real players that match involves."
     )
 
     try:
@@ -1228,7 +1370,6 @@ def _render_fixtures_tab():
     if fixtures.empty:
         st.info(f"No real fixtures found for GW{selected_gw}.")
     else:
-        DIFFICULTY_COLORS = {1: "#2a9650", 2: "#6cbf5a", 3: "#e8c547", 4: "#e0793a", 5: "#c83232"}
 
         def _difficulty_chip(diff):
             if diff is None:
@@ -1239,6 +1380,21 @@ def _render_fixtures_tab():
                 f'border-radius: 4px; background: {color}; color: white; font-size: 10px; '
                 f'font-weight: 700; text-align: center;">{diff}</span>'
             )
+
+        # How many of THIS manager's real players are involved in each match
+        # -- the first thing an FPL manager scans for in a fixture list
+        # (blank gameweeks, doubled-up assets, who to target). Uses the live
+        # squad My Squad already built; all tabs render on every script run,
+        # so session state is populated by the time this renders. Matches
+        # with none of your players simply get no pill.
+        squad_counts = {}
+        live_squad = st.session_state.get("built_squad")
+        if st.session_state.get("built_squad_season_gw") == "live_squad" and isinstance(live_squad, pd.DataFrame) and "team" in live_squad.columns:
+            squad_counts = live_squad["team"].value_counts().to_dict()
+
+        def _mine_pill(team):
+            count = int(squad_counts.get(team, 0))
+            return f'<span class="fpl-mine-pill">✓ {count} of yours</span>' if count else ""
 
         rows_html = '<div style="display: flex; flex-direction: column; gap: 8px;">'
         for _, row in fixtures.iterrows():
@@ -1260,10 +1416,10 @@ def _render_fixtures_tab():
                 'background: rgba(127,127,127,0.06); border: 1px solid rgba(127,127,127,0.15); '
                 'border-radius: 10px; padding: 10px 14px;">'
                 f'<div style="flex: 1; text-align: right; font-weight: 600; font-size: 14px;">{row["team_h"]}'
-                f' {_difficulty_chip(row["difficulty_h"])}</div>'
+                f' {_difficulty_chip(row["difficulty_h"])}{_mine_pill(row["team_h"])}</div>'
                 f'<div style="margin: 0 16px;">{score_html}</div>'
                 f'<div style="flex: 1; text-align: left; font-weight: 600; font-size: 14px;">'
-                f'{_difficulty_chip(row["difficulty_a"])} {row["team_a"]}</div>'
+                f'{_difficulty_chip(row["difficulty_a"])}{_mine_pill(row["team_a"])} {row["team_a"]}</div>'
                 '</div>'
             )
         rows_html += "</div>"

@@ -2763,10 +2763,158 @@ def inject_shared_css() -> None:
         padding: 10px 12px 8px 12px;
     }
 
+    /* ---- Decision bar: GW pill + real deadline countdown (app.py's
+           _render_next_gameweek_anchor) ---- */
+    .fpl-deadline-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 18px;
+        background: rgba(127,127,127,0.06);
+        border: 1px solid rgba(127,127,127,0.18);
+        border-radius: 14px;
+        padding: 10px 16px;
+        margin: 4px 0 16px 0;
+        font-size: 0.92rem;
+        font-weight: 600;
+    }
+    .fpl-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border-radius: 999px;
+        padding: 4px 14px;
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        color: white;
+    }
+    .fpl-pill-gw { background: linear-gradient(120deg, #2a9650, #5a3cb4); }
+    .fpl-pill-live { background: rgba(200,50,50,0.92); }
+    .fpl-deadline-count { font-family: "Sora", sans-serif; font-weight: 700; }
+    .fpl-deadline-hint { opacity: 0.7; font-weight: 500; font-size: 0.85rem; }
+    @keyframes fpl-live-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.3; transform: scale(0.7); }
+    }
+    .fpl-live-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: white;
+        animation: fpl-live-pulse 1.1s ease-in-out infinite;
+    }
+
+    /* ---- Transfer proposal state chips (Free / Hit / Unlimited + net) ----
+           Solid-color badges on white text: fixed colors read correctly on
+           BOTH Streamlit themes, same approach as the difficulty chips. */
+    .fpl-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px 0; }
+    .fpl-state-chip {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        color: white;
+    }
+    .fpl-state-chip.is-free { background: #2a9650; }
+    .fpl-state-chip.is-hit { background: #c83232; }
+    .fpl-state-chip.is-unlimited { background: linear-gradient(120deg, #5a3cb4, #7d3cb4); }
+    .fpl-state-chip.is-up { background: rgba(42,150,80,0.92); }
+    .fpl-state-chip.is-down { background: rgba(200,50,50,0.92); }
+
+    /* ---- Transfer proposal cards: OUT side -> delta -> IN side ---- */
+    .fpl-transfer-card {
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+        background: rgba(127,127,127,0.05);
+        border: 1px solid rgba(127,127,127,0.16);
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        animation: fpl-card-in 0.35s ease both;
+    }
+    .fpl-transfer-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(90,60,180,0.35);
+        box-shadow: 0 8px 20px rgba(90,60,180,0.18);
+    }
+    .fpl-tr-side { flex: 1; border-radius: 10px; padding: 10px 12px; min-width: 0; }
+    .fpl-tr-side.fpl-tr-out { background: rgba(200,50,50,0.10); }
+    .fpl-tr-side.fpl-tr-in { background: rgba(42,150,80,0.10); }
+    .fpl-tr-tag {
+        display: inline-block; border-radius: 6px; padding: 1px 8px;
+        font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; color: white;
+    }
+    .fpl-tr-out .fpl-tr-tag { background: #c83232; }
+    .fpl-tr-in .fpl-tr-tag { background: #2a9650; }
+    .fpl-tr-name { font-family: "Sora", sans-serif; font-weight: 700; font-size: 1.02rem; margin-top: 6px; }
+    .fpl-tr-meta { font-size: 0.8rem; opacity: 0.75; margin-top: 1px; }
+    .fpl-tr-xp { font-size: 0.85rem; font-weight: 700; margin-top: 4px; }
+    .fpl-tr-fixtures { margin-top: 7px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .fpl-fixture-chip {
+        display: inline-block; height: 18px; line-height: 18px;
+        border-radius: 4px; color: white; font-size: 10px; font-weight: 700;
+        text-align: center; padding: 0 5px;
+    }
+    .fpl-tr-mid {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-width: 88px; gap: 6px;
+    }
+    .fpl-tr-arrow { font-size: 1.5rem; font-weight: 800; opacity: 0.75; line-height: 1; }
+    .fpl-tr-delta {
+        border-radius: 999px; padding: 3px 10px; font-size: 0.8rem;
+        font-weight: 800; color: white; white-space: nowrap;
+    }
+    .fpl-tr-delta.is-up { background: #2a9650; }
+    .fpl-tr-delta.is-down { background: #c83232; }
+    .fpl-tr-delta.is-flat { background: rgba(127,127,127,0.6); }
+    @media (max-width: 640px) {
+        .fpl-transfer-card { flex-direction: column; }
+        .fpl-tr-mid { flex-direction: row; min-width: 0; }
+    }
+
+    /* ---- Chip availability cards (Chip Advisor) ---- */
+    .fpl-chip-card {
+        text-align: center;
+        border-radius: 14px;
+        border: 1px solid rgba(127,127,127,0.18);
+        background: rgba(127,127,127,0.05);
+        padding: 14px 8px 12px 8px;
+        height: 100%;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .fpl-chip-card:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,0.14); }
+    .fpl-chip-card.is-available {
+        background: linear-gradient(160deg, rgba(42,150,80,0.18), rgba(90,60,180,0.12));
+        border-color: rgba(42,150,80,0.5);
+    }
+    .fpl-chip-card.is-used { opacity: 0.45; }
+    .fpl-chip-card.is-closed { opacity: 0.6; }
+    .fpl-chip-icon { font-size: 30px; line-height: 1.1; }
+    .fpl-chip-name { font-size: 0.8rem; font-weight: 700; margin-top: 5px; }
+    .fpl-chip-state { font-size: 0.72rem; margin-top: 3px; font-weight: 600; }
+    .fpl-chip-card.is-available .fpl-chip-name,
+    .fpl-chip-card.is-available .fpl-chip-state { color: #2a9650; }
+
+    /* ---- Fixtures: how many of THIS manager's players a match involves ---- */
+    .fpl-mine-pill {
+        display: inline-block;
+        border-radius: 999px;
+        background: rgba(42,150,80,0.18);
+        border: 1px solid rgba(42,150,80,0.5);
+        color: #2a9650;
+        font-size: 10.5px; font-weight: 800;
+        padding: 1px 8px; margin-left: 6px;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
     /* Respect users who've asked for reduced motion */
     @media (prefers-reduced-motion: reduce) {
         .fpl-player-card, .app-hero::after, section[data-testid="stMain"],
-        .stTabs [aria-selected="true"], div[data-testid="stMetric"] {
+        .stTabs [aria-selected="true"], div[data-testid="stMetric"],
+        .fpl-live-dot, .fpl-transfer-card {
             animation: none !important;
         }
     }
