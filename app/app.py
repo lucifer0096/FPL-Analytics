@@ -625,7 +625,10 @@ def _render_transfers_tab():
                         economics["Current price"] = economics["Current price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
                         economics["Selling price"] = economics["Selling price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
                         economics["Buy price"] = economics["Buy price"].map(lambda value: f"£{value:.1f}m" if pd.notna(value) else "—")
-                        st.caption(f"Bank before moves: £{bank:.1f}m · Remaining bank: £{bank + out_rows['sell_price'].sum() - in_rows['Buy price'].sum():.1f}m")
+                        st.caption(
+                            f"Bank before moves: £{bank:.1f}m · Remaining bank: "
+                            f"£{bank + out_rows['Selling price'].sum() - in_rows['Buy price'].sum():.1f}m"
+                        )
                         st.dataframe(economics, hide_index=True)
 
                         out_col, in_col = st.columns(2)
