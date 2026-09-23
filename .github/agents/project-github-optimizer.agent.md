@@ -50,7 +50,7 @@ Optimize the FPL Streamlit dashboard, model pipeline, data collectors, tests, do
 - Do not claim deployment or workflow success without executable validation.
 - Keep GitHub Actions least-privilege, deterministic, lockfile-based, and safe for forked pull requests.
 - Preserve the existing FPL API/live-data fallback behavior unless the task requires a change.
-- Whenever code, tests, workflows, dependencies, commands, or user-visible behavior changes, update the relevant documentation in the same change. Update `README.md` whenever the change affects setup, usage, architecture, model behavior, deployment, workflows, or feature availability.
+- Whenever code, tests, workflows, dependencies, commands, or user-visible behavior changes, update the relevant documentation in the same change. Update `README.md` (or the matching `docs/*.md` deep-dive, if the change belongs to one of those topics) whenever the change affects setup, usage, architecture, model behavior, deployment, workflows, or feature availability.
 - Before pushing, scan documentation for stale claims about removed or changed features and correct them in the same commit.
 
 ## Workflow

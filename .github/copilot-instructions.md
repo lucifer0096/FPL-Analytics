@@ -2,7 +2,7 @@
 
 ## Documentation
 
-- When a change affects setup, usage, architecture, model behavior, deployment, workflows, or user-visible features, update `README.md` in the same change when the existing documentation needs correction or addition.
+- When a change affects setup, usage, architecture, model behavior, deployment, workflows, or user-visible features, update `README.md` (or, for the deep-dive topics split out in 2026-09, the matching file under `docs/` — COLLECTOR/MODELING/DASHBOARD/KNOWN-ISSUES) in the same change when the existing documentation needs correction or addition.
 - Do not add README churn for internal refactors that do not change documented behavior.
 
 ## Validation
