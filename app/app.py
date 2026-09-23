@@ -22,9 +22,8 @@ from shared import (
     load_manager_name, load_current_season_progress, calculate_free_transfers, chip_usage_status,
     load_current_squad_picks, build_live_squad_df, load_joined_leagues, live_price_changes, likely_price_movers,
     tonight_price_projections,
-    differential_finder, league_wide_status_flags, premier_league_table, premier_league_table_with_movement,
-    season_leaderboards, team_insights, player_season_stats,
-    team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
+    differential_finder, league_wide_status_flags, premier_league_table_with_movement,
+    season_leaderboards, team_insights, team_upcoming_fixtures, average_fixture_difficulty, suggest_captain, is_gameweek_live,
     ep_next_player_pool, _current_season_label,
     _load_bootstrap, gameweek_fixtures, rotation_risk_flags,
     render_pitch, inject_shared_css, render_sidebar, render_data_status,
@@ -294,7 +293,7 @@ def _render_my_squad_tab():
                 "points_on_bench": "Bench points", "overall_rank_percentage": "Top %",
                 "average_entry_score": "Avg. (all managers)",
             }).drop(columns=["event_transfers", "event_transfers_cost"]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -543,7 +542,7 @@ def _render_transfers_tab():
                                 "selected_by_percent": "Owned (%)", "ep_next": "Expected pts (next GW)",
                                 "is_penalty_taker": "Penalty taker",
                             }),
-                            use_container_width=True, hide_index=True,
+                            width="stretch", hide_index=True,
                         )
                 with st.expander("🚑 League-wide injury/suspension feed (scout transfer-ins too)"):
                     st.caption(
@@ -564,7 +563,7 @@ def _render_transfers_tab():
                                 "selected_by_percent": "Owned (%)", "status": "Status", "news": "News",
                                 "chance_of_playing_next_round": "Chance of playing (%)",
                             }),
-                            use_container_width=True, hide_index=True,
+                            width="stretch", hide_index=True,
                         )
 
             if st.button("Find best transfer(s)", key="find_transfers_btn_home"):
@@ -719,7 +718,6 @@ def _render_chip_advisor_tab():
     else:
         squad_df = st.session_state["built_squad"]
         bench = squad_df[~squad_df["in_starting_xi"]]
-        starters = squad_df[squad_df["in_starting_xi"]]
 
         st.subheader("🪑 Bench Boost — next gameweek only")
         bench_total = bench["ep_next"].sum()
@@ -807,9 +805,9 @@ def _render_league_tracker_tab():
             "Run `python src/collector/snapshot.py` to populate this tab."
         )
     else:
-        league_names = [l["league"]["name"] for l in leagues]
+        league_names = [lg["league"]["name"] for lg in leagues]
         selected_name = st.selectbox("League", league_names, key="league_select")
-        league = next(l for l in leagues if l["league"]["name"] == selected_name)
+        league = next(lg for lg in leagues if lg["league"]["name"] == selected_name)
 
         results = league["standings"]["results"]
         standings_df = pd.DataFrame([
@@ -847,7 +845,7 @@ def _render_league_tracker_tab():
 
         st.dataframe(
             display_df.style.apply(_highlight_own_row, axis=1),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(
@@ -900,7 +898,7 @@ def _render_price_changes_tab():
                         "name": "Player", "position": "Pos", "team": "Team",
                         "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
                     }),
-                    use_container_width=True, hide_index=True,
+                    width="stretch", hide_index=True,
                 )
         with rcol2:
             st.subheader(f"📉 Fallers ({len(fallers)})")
@@ -915,7 +913,7 @@ def _render_price_changes_tab():
                         "name": "Player", "position": "Pos", "team": "Team",
                         "start_cost": "Start (£m)", "cost": "Now (£m)", "price_change": "Change (£m)",
                     }),
-                    use_container_width=True, hide_index=True,
+                    width="stretch", hide_index=True,
                 )
 
     st.divider()
@@ -938,7 +936,7 @@ def _render_price_changes_tab():
                 _arrow_price_column(
                     likely_risers[["name", "position", "team", "cost", "net_transfers"]], "net_transfers",
                 ).rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers in"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
         with mcol2:
             st.caption("Likely fallers (heavy net transfers OUT)")
@@ -946,7 +944,7 @@ def _render_price_changes_tab():
                 _arrow_price_column(
                     likely_fallers[["name", "position", "team", "cost", "net_transfers"]], "net_transfers",
                 ).rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)", "net_transfers": "Net transfers out"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     st.divider()
@@ -976,7 +974,7 @@ def _render_price_changes_tab():
                     "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
                     "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
                 }),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
         with jcol2:
             st.caption("Projected to fall tonight")
@@ -987,7 +985,7 @@ def _render_price_changes_tab():
                     "name": "Player", "position": "Pos", "team": "Team", "cost": "Now (£m)",
                     "projected_percent": "Projected %", "likelihood": "Likelihood (-5..+5)",
                 }),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
 
@@ -1021,7 +1019,7 @@ def _render_pl_table_tab():
                 "team": "Team", "played": "P", "won": "W", "drawn": "D", "lost": "L",
                 "gf": "GF", "ga": "GA", "gd": "GD", "points": "Pts", "movement": "Since last GW",
             }),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
         st.caption(
             "**Since last GW** — real table-position movement vs. one gameweek ago, computed "
@@ -1060,7 +1058,7 @@ def _render_season_insights_tab():
                     board.rename(columns={
                         "name": "Player", "position": "Pos", "team": "Team", "value": unit,
                     }),
-                    use_container_width=True, hide_index=True,
+                    width="stretch", hide_index=True,
                 )
 
     icol1, icol2 = st.columns(2)
@@ -1086,7 +1084,7 @@ def _render_season_insights_tab():
         else:
             st.dataframe(
                 board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "DefCon"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
     with icol6:
         st.subheader("👑 MVP so far")
@@ -1103,7 +1101,7 @@ def _render_season_insights_tab():
         else:
             st.dataframe(
                 board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Points"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     st.divider()
@@ -1122,7 +1120,7 @@ def _render_season_insights_tab():
     else:
         st.dataframe(
             form_board.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "value": "Form"}),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
     st.divider()
@@ -1144,7 +1142,7 @@ def _render_season_insights_tab():
         else:
             st.dataframe(
                 board.rename(columns={"team": "Team", "played": "P", "gf": "Goals"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
     with tcol2:
         st.caption("🧱 Best defense (goals conceded)")
@@ -1154,7 +1152,7 @@ def _render_season_insights_tab():
         else:
             st.dataframe(
                 board.rename(columns={"team": "Team", "played": "P", "ga": "Conceded"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     st.caption(
@@ -1174,7 +1172,7 @@ def _render_season_insights_tab():
                 "team": "Team", "name": "Player", "position": "Pos", "selected_by_percent": "Owned (%)",
                 "ownership_swing_pct": "This GW's swing (pts)",
             }),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
     st.divider()
@@ -1192,7 +1190,7 @@ def _render_season_insights_tab():
                 "team": "Team", "name": "Player", "position": "Pos", "selected_by_percent": "Owned (%)",
                 "ownership_swing_pct": "This GW's swing (pts)",
             }),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
 

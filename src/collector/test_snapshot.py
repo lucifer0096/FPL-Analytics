@@ -1,6 +1,5 @@
 """Deterministic tests for collector state decisions."""
 
-import os
 import sys
 from pathlib import Path
 

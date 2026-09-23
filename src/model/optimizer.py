@@ -476,7 +476,6 @@ def _optimize_transfers_gated(
     # to earn its own place, on top of whatever came before it, using whichever
     # bar applies to it (free-transfer bar while k <= free_transfers, the
     # stricter hit safety-margin bar once k goes beyond that).
-    best_k = 0
     best_result = {"new_squad_ids": list(current_set), "total_points": old_points}
     prev_points = old_points
     for k in range(1, max_k + 1):
@@ -496,7 +495,6 @@ def _optimize_transfers_gated(
             if marginal_gain < min_gain_per_free_transfer:
                 break  # this specific free transfer doesn't clear the bar on its own -- stop here
 
-        best_k = k
         best_result = candidate
         prev_points = candidate["total_points"]
 

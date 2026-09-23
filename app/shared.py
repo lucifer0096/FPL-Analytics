@@ -24,8 +24,14 @@ PROJECT_DIR = os.path.dirname(APP_DIR)
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "model"))
 sys.path.insert(0, os.path.join(PROJECT_DIR, "src", "collector"))
 
-from optimizer import optimize_squad, optimize_transfers, select_starting_xi, POSITION_REQUIREMENTS, DEFAULT_BUDGET, MAX_FREE_TRANSFERS_BANKED
-from chips import suggest_bench_boost, suggest_triple_captain, suggest_free_hit_or_wildcard
+from optimizer import MAX_FREE_TRANSFERS_BANKED
+# optimize_squad/optimize_transfers/POSITION_REQUIREMENTS are RE-EXPORTED on
+# purpose: app/app.py and app/pages/1_Historical_and_Model.py import the
+# optimizer's entry points through shared.py (which owns the src/ path
+# bootstrap). They look unused from in here -- deleting them as F401 breaks
+# both pages with an ImportError at startup. Guarded by
+# app/test_app_offline.py's shared-reexport contract test.
+from optimizer import POSITION_REQUIREMENTS, optimize_squad, optimize_transfers  # noqa: F401
 from predict import load_model, predict_points
 from train import FEATURE_COLUMNS
 import fpl_api
@@ -1061,8 +1067,8 @@ def load_joined_leagues(entry_id: int) -> list:
     try:
         entry_info = fpl_api.get_entry(entry_id)
         classic_leagues = entry_info.get("leagues", {}).get("classic", [])
-        private_leagues = [l for l in classic_leagues if l.get("league_type") == "x"]
-        standings = [fpl_api.get_league_standings(l["id"]) for l in private_leagues]
+        private_leagues = [lg for lg in classic_leagues if lg.get("league_type") == "x"]
+        standings = [fpl_api.get_league_standings(lg["id"]) for lg in private_leagues]
         _record_data_source("standings", "Live FPL API")
         return standings
     except Exception:
@@ -2179,10 +2185,10 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # absent (not False) for historical seasons, so nothing is shown rather
     # than a wrong "not selected" implication for data that doesn't exist.
     dreamteam_html = (
-        f'<div title="FPL official Team of the Week pick" style="position: absolute; top: -8px; left: -6px; '
-        f'background: #2a9650; color: white; border-radius: 50%; width: 20px; height: 20px; '
-        f'font-size: 11px; display: flex; align-items: center; justify-content: center; '
-        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">✓</div>'
+        '<div title="FPL official Team of the Week pick" style="position: absolute; top: -8px; left: -6px; '
+        'background: #2a9650; color: white; border-radius: 50%; width: 20px; height: 20px; '
+        'font-size: 11px; display: flex; align-items: center; justify-content: center; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">✓</div>'
         if "in_dreamteam" in row.index and pd.notna(row["in_dreamteam"]) and row["in_dreamteam"] else ""
     )
     # points_per_game only exists on Team of the Season pool rows (see
@@ -2233,10 +2239,10 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # since the two never co-occur (scout_reasons only exists on the
     # now-removed Scout Picks pool; is_penalty_taker only on live squads).
     penalty_taker_html = (
-        f'<div title="Club\'s #1 penalty taker" style="position: absolute; bottom: -6px; right: -6px; '
-        f'background: #1a1a1a; color: #ffb300; border-radius: 50%; width: 16px; height: 16px; '
-        f'font-size: 10px; display: flex; align-items: center; justify-content: center; '
-        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">P</div>'
+        '<div title="Club\'s #1 penalty taker" style="position: absolute; bottom: -6px; right: -6px; '
+        'background: #1a1a1a; color: #ffb300; border-radius: 50%; width: 16px; height: 16px; '
+        'font-size: 10px; display: flex; align-items: center; justify-content: center; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">P</div>'
         if "is_penalty_taker" in row.index and row["is_penalty_taker"] else ""
     )
     # Real captain/vice-captain marker for a manager's own live squad (see
@@ -2244,15 +2250,15 @@ def _player_card_html(row: pd.Series, badge_label: str = None) -> str:
     # single highest-SCORING player, not necessarily who was actually made
     # captain (a captain can score 0 and still be captain).
     captain_html = (
-        f'<div title="Captain (points doubled)" style="position: absolute; bottom: -6px; left: -6px; '
-        f'background: #ffb300; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
-        f'font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
-        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">C</div>'
+        '<div title="Captain (points doubled)" style="position: absolute; bottom: -6px; left: -6px; '
+        'background: #ffb300; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
+        'font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">C</div>'
         if "is_captain" in row.index and row["is_captain"] else
-        f'<div title="Vice-captain" style="position: absolute; bottom: -6px; left: -6px; '
-        f'background: #d8dde3; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
-        f'font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
-        f'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">VC</div>'
+        '<div title="Vice-captain" style="position: absolute; bottom: -6px; left: -6px; '
+        'background: #d8dde3; color: #1a1a1a; border-radius: 50%; width: 18px; height: 18px; '
+        'font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.4);">VC</div>'
         if "is_vice_captain" in row.index and row["is_vice_captain"] else ""
     )
     # Real FPL player headshot -- checked directly against the live CDN:

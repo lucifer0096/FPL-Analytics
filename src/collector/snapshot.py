@@ -206,7 +206,7 @@ def snapshot_entry(entry_id: int, season: str, current_gw: int, finished_gws: se
     leagues_dir = os.path.join(out_dir, "leagues")
     os.makedirs(leagues_dir, exist_ok=True)
     classic_leagues = entry_info.get("leagues", {}).get("classic", [])
-    private_leagues = [l for l in classic_leagues if l.get("league_type") == "x"]
+    private_leagues = [lg for lg in classic_leagues if lg.get("league_type") == "x"]
     for league in private_leagues:
         league_id = league["id"]
         standings = fpl_api.get_league_standings(league_id)

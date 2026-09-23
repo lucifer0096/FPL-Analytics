@@ -29,7 +29,6 @@ from optimizer import (
     POSITION_REQUIREMENTS,
     MAX_PER_TEAM,
     DEFAULT_BUDGET,
-    POINTS_PER_HIT,
     SQUAD_SIZE,
 )
 
@@ -147,7 +146,7 @@ if __name__ == "__main__":
         print(f"Net points gain: {result['net_points_gain']:.1f}")
         verify_squad(result["new_squad"])
 
-        print(f"\n\n### Test 4: unlimited_transfers=True path (Wildcard/Free Hit/GW1) ###\n")
+        print("\n\n### Test 4: unlimited_transfers=True path (Wildcard/Free Hit/GW1) ###\n")
         # Previously untested (an audit finding) despite being the real code
         # path a Wildcard, Free Hit, or GW1 squad build takes -- every gate
         # (free_transfers/max_paid_transfers/hit cost) is bypassed entirely
@@ -175,7 +174,7 @@ if __name__ == "__main__":
         )
         print("Unlimited-transfers path verified: no hit cost, no paid-transfer cap, at least as good as the gated result.")
 
-        print(f"\n\n### Test 5: optimize_transfers raises on a squad id missing from the pool ###\n")
+        print("\n\n### Test 5: optimize_transfers raises on a squad id missing from the pool ###\n")
         # Previously untested (an audit finding): the unlimited path's real
         # ValueError guard (a squad member no longer in the live pool --
         # e.g. already sold in a real transfer window) should raise a clear

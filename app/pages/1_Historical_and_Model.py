@@ -15,11 +15,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared import (
-    SEASON_ORDER, PROJECT_DIR, MANAGER_ENTRY_ID,
+    SEASON_ORDER, MANAGER_ENTRY_ID,
     load_features, season_pool, season_insights,
     load_model_metrics, load_manager_history,
     render_pitch, inject_shared_css, render_sidebar,
-    optimize_squad, DEFAULT_BUDGET,
+    optimize_squad,
 )
 
 st.set_page_config(
@@ -111,7 +111,7 @@ with tab_insights:
     st.dataframe(
         insights["top_scorers"][["name", "position", "team", "total_points", "cost"]]
         .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "total_points": "Points", "cost": "Cost (£m)"}),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
     )
 
     st.subheader("Best value (points per £m spent)")
@@ -120,7 +120,7 @@ with tab_insights:
         insights["best_value"][["name", "position", "team", "total_points", "cost", "pts_per_million"]]
         .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "total_points": "Points", "cost": "Cost (£m)", "pts_per_million": "Pts / £m"})
         .round({"Pts / £m": 1}),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
     )
 
     st.subheader("Top scorer by position")
@@ -146,7 +146,7 @@ with tab_insights:
             "price_rise": "Change (£m)",
         })
         .head(5),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
     )
 
 # =============================================================================
@@ -173,16 +173,16 @@ with tab_tots:
     st.caption(f"Player pool: {len(pool)} players who appeared at least once across {window_desc}. Ranked by total points scored, no budget cap.")
     with st.expander("Why this ranking, and why no budget cap?"):
         st.markdown(
-            f"This is a LOOK BACK at who actually produced the most REAL points in this "
-            f"window, not a prediction — these gameweeks are already complete, so there's "
-            f"nothing to predict.\n\n"
-            f"Ranked by **total points scored**, not a per-game rate — a great rate over a "
-            f"handful of games can't outrank someone who played most of the window and "
-            f"produced far more for a real squad. Points-per-game (FPL's own metric: total "
-            f"points ÷ appearances, shown once a player has a few games to make it "
-            f"trustworthy) is shown on each card as context, not as what drives selection.\n\n"
-            f"**No budget cap** — this is the best XI the window actually produced, not a "
-            f"squad you could have afforded on day one."
+            "This is a LOOK BACK at who actually produced the most REAL points in this "
+            "window, not a prediction — these gameweeks are already complete, so there's "
+            "nothing to predict.\n\n"
+            "Ranked by **total points scored**, not a per-game rate — a great rate over a "
+            "handful of games can't outrank someone who played most of the window and "
+            "produced far more for a real squad. Points-per-game (FPL's own metric: total "
+            "points ÷ appearances, shown once a player has a few games to make it "
+            "trustworthy) is shown on each card as context, not as what drives selection.\n\n"
+            "**No budget cap** — this is the best XI the window actually produced, not a "
+            "squad you could have afforded on day one."
         )
 
     build_label = "Build team of the season" if is_full_season else f"Build team of GW{gw_start}–{gw_end}"
@@ -213,7 +213,7 @@ with tab_tots:
                 display[["name", "position", "team", "cost", "predicted_points", "Role"]]
                 .sort_values(["Role", "position", "predicted_points"], ascending=[True, True, False])
                 .rename(columns={"name": "Player", "position": "Pos", "team": "Team", "cost": "Cost (£m)", "predicted_points": "Pred. Pts"}),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -257,7 +257,7 @@ with tab_model:
         perf = pd.DataFrame(rows)
         perf["MAE"] = perf["MAE"].round(3)
         perf["RMSE"] = perf["RMSE"].round(3)
-        st.dataframe(perf, use_container_width=True, hide_index=True)
+        st.dataframe(perf, width="stretch", hide_index=True)
         st.caption(
             "*FPL's own xP carries a caveat from the data source's maintainer: it may contain "
             "post-match information for some gameweeks (scraper runs after each gameweek ends, "
@@ -275,7 +275,7 @@ with tab_model:
                 played_rows.append({"Model": "FPL's own xP (played only)", "MAE": metrics["fpl_xp_baseline_played_only"]["mae"]})
             played_perf = pd.DataFrame(played_rows)
             played_perf["MAE"] = played_perf["MAE"].round(3)
-            st.dataframe(played_perf, use_container_width=True, hide_index=True)
+            st.dataframe(played_perf, width="stretch", hide_index=True)
             st.markdown(
                 "Restricting to rows where the player actually played, the model closes most of "
                 "the gap to FPL's xP. Most of the remaining full-dataset gap is concentrated in "
@@ -318,7 +318,7 @@ with tab_past:
 
         st.dataframe(
             manager_data.rename(columns={"season": "Season", "points": "Points", "rank": "Rank", "top_pct": "Top %"}),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(

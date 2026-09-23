@@ -12,7 +12,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from train import FEATURE_COLUMNS, CATEGORICAL_FEATURES, prepare_x
+from train import prepare_x
 
 MODEL_PATH = os.path.join("models", "xp_model_single_stage.txt")
 

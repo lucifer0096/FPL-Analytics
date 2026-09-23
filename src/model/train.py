@@ -270,4 +270,4 @@ if __name__ == "__main__":
     points_model.booster_.save_model(os.path.join("models", "xp_model_points_given_played.txt"))
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
-    print(f"\nSaved 3 model files and metrics.json to models/")
+    print("\nSaved 3 model files and metrics.json to models/")
