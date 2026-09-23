@@ -45,13 +45,20 @@ FPL-Analytics/
 │   ├── app.py              # Streamlit dashboard, Home page -- live squad, transfers, chips, league tracker
 │   ├── shared.py           # Data-loading/pool-building/pitch-rendering helpers shared by every page
 │   ├── test_shared_live.py # Live-sync checks against real FPL data (see Automated Collection)
+│   ├── test_app_offline.py # Offline dashboard render tests via AppTest — no network needed (see Known Issues)
 │   └── pages/
 │       └── 1_Historical_and_Model.py  # Second page -- demo Squad Builder modes, model metrics, past seasons
 ├── docs/
 │   └── my-fpl-history.html # Manager history page, served via GitHub Pages
 ├── notebooks/               # EDA and model development
 ├── models/                  # Gitignored — trained model artifacts
-└── requirements.txt
+├── requirements.in          # Top-level dependency ranges (source of truth for re-pinning)
+├── requirements.txt         # Exact tested pins — what CI, the collector and Streamlit Cloud install
+├── requirements-dev.txt     # Dev-only tools (ruff); never part of the deploy
+├── pytest.ini               # Test discovery; live-API tests excluded from the default run
+├── ruff.toml                # Pinned lint rules for `ruff check app src`
+├── .gitattributes           # LF line endings for every text file (no CRLF drift)
+└── .github/                 # CI + scheduled collector workflows
 ```
 
 ## Data Sources
@@ -70,11 +77,15 @@ export FPL_ENTRY_ID=1132016   # or set FPL_ENTRY_ID on Windows
 python src/collector/snapshot.py
 ```
 
-For reproducible CI or deployment setup, install the checked top-level versions from `requirements.lock` instead:
+`requirements.txt` is pinned to the exact versions CI, the scheduled collector and the Streamlit Cloud deploy were all tested against (Python 3.12+ — the pinned numpy 2.5.x has no 3.11 wheels), so a fresh install can never resolve a newer major than the one that was actually verified:
 
 ```bash
-python -m pip install -r requirements.lock
+python -m pip install -r requirements.txt          # exact pins — what CI and the deploy install
+python -m pip install -r requirements.in           # ranges only, when re-resolving
+python -m pip install -r requirements-dev.txt      # on top: dev-only tools (ruff)
 ```
+
+Change versions in `requirements.in` first, then re-resolve the pins in `requirements.txt`. A weekly Dependabot job (`.github/dependabot.yml`) opens a PR when either those pins or the workflows' `actions/*` versions have newer releases.
 
 This writes to `data/raw/{season}/`:
 - `bootstrap/bootstrap_{timestamp}.json` — full player/team snapshot
@@ -107,9 +118,9 @@ python src/collector/snapshot.py --force       # always snapshot, ignoring saved
 
 **A second, more fundamental live-sync bug found 2026-08-24, AFTER the fragment fix**: several functions built on TOP of the live-first loaders — `live_price_changes()`, `likely_price_movers()`, `differential_finder()`, `league_wide_status_flags()`, `premier_league_table()`, `team_insights()`, `season_leaderboards()`, `team_upcoming_fixtures()` — were themselves decorated with a bare `@st.cache_data`, with **no TTL of their own**. Even though `_load_bootstrap()`/`_load_fixtures_df()` underneath them correctly refresh every 60s, and even though the fragment correctly reruns the whole tab every 60s, Streamlit had already cached these functions' own RETURN VALUES forever — so a real stat change (e.g. a player's assist total updating mid-match) never reached the UI, because the outer function simply never recomputed at all, regardless of what changed underneath it or how often the page re-rendered. Fixed by adding `ttl=60` to all eight. `app/test_shared_live.py` now includes a permanent regression guard (`test_every_live_facing_function_has_a_cache_ttl`) that reads `shared.py`'s own source and fails if any live-facing function loses its explicit ttl again.
 
-`app/test_shared_live.py` (`python app/test_shared_live.py`) exercises every one of these live-first loaders against REAL live data, both the happy path and the API-down fallback path (via a monkeypatch that simulates an outage) — not a fixed-expected-value unit test suite (same house style as `src/model/test_optimizer.py`/`test_chips.py`), since real scores/standings/injuries change every gameweek; it asserts on properties that must hold for any real season state instead.
+`app/test_shared_live.py` (run with `pytest -m live`, or directly as `python app/test_shared_live.py`) exercises every one of these live-first loaders against REAL live data, both the happy path and the API-down fallback path (via a monkeypatch that simulates an outage) — not a fixed-expected-value unit test suite (same house style as `src/model/test_optimizer.py`/`test_chips.py`), since real scores/standings/injuries change every gameweek; it asserts on properties that must hold for any real season state instead. Everything that talks to the real API carries pytest's `live` marker (see `pytest.ini`), so a bare `pytest -q` skips it; `app/test_app_offline.py` is its no-network counterpart — Streamlit `AppTest` renders of the actual dashboard, against the committed `data/dashboard_*` fallbacks only — and does run in that default set.
 
-The repository also has a deterministic CI workflow (`.github/workflows/ci.yml`) for pushes and pull requests. It compiles `app/` and `src/`, then runs the model season-boundary and collector-state tests without requiring live FPL API access. The live integration checks remain an explicit local/scheduled check because changing scores and API availability should not block an unrelated pull request.
+The repository also has a deterministic CI workflow (`.github/workflows/ci.yml`) for pushes and pull requests, running on Python 3.14 to match the Streamlit Cloud runtime (the pinned numpy 2.5.x ships no cp311 wheels — the mismatch that had this workflow failing at dependency install before). It installs the pinned `requirements.txt`, runs `ruff check app src` (rule set pinned in `ruff.toml`, so a local run and CI resolve the same rules), compiles `app/` and `src/`, then runs `pytest -q`: the model season-boundary and collector-state tests plus `app/test_app_offline.py`, which renders the dashboard itself — all 8 Home tabs, the Transfers solve clicked through both the gated and unlimited paths, and the Historical page — with every live FPL call forced to fail and `data/raw/` absent, i.e. the exact fresh-checkout/deploy condition, so a render-time crash (like the Transfers `KeyError` below) fails CI before it can ship. Pushes touching only `data/**`/`models/**` are skipped, since the collector commits refreshed fallback data to `main` every 30 minutes and those runs would exercise no code. The live integration checks remain an explicit local/scheduled check because changing scores and API availability should not block an unrelated pull request.
 
 Transfer recommendations use the live bootstrap player pool and preserve each owned player's real FPL `selling_price` from the manager picks endpoint, so current prices and the 50% sell-on-rise rule are reflected instead of relying only on the last collector snapshot. The sidebar also reports whether bootstrap and fixture data came from the live API or a fallback file; player-card fixture chips show their GW number directly.
 
@@ -318,6 +329,10 @@ Everything about the manager's REAL, current team, not a demo:
 
 A running log of real bugs found (mostly via direct user reports against the live app, some via direct verification against real data) and how each was actually diagnosed and fixed — kept as one place to see the project's real failure modes, rather than scattered across commit messages. Newest first.
 
+### Transfers results KeyError (2026-09-23)
+
+- **The Transfers tab crashed with `KeyError: 'sell_price'` whenever the optimizer actually suggested a transfer** — the results dataframe's columns get renamed to display labels (`selling_price` → `"Selling price"`) just before rendering, but the bank caption underneath still read the pre-rename `out_rows['sell_price']`. The "holding is optimal" branch never touches that frame, so the crash only surfaced when transfers were genuinely returned — exactly the path no existing test drove, and only visible after clicking **Find transfers**, which is why it reached production. Fixed by reading the renamed column; `app/test_app_offline.py` now clicks that solve through Streamlit's `AppTest` on every CI run (holding path too), so the results block is rendered in tests rather than only in a browser.
+
 ### Sidebar chat assistant (2026-08-31)
 
 Added, per explicit request ("can we add a chat bot that talks to me regarding my team and transfers ... run it with the openrouter free AI models"): a conversational chat assistant grounded in real live data.
@@ -432,4 +447,12 @@ Requested an end-to-end sweep of the collector, model, and dashboard layers for 
 - **Partially done:** the dashboard's Manager History tab now reads live from the collector's saved entry history (both past-season totals and 2026-27's own gameweek-by-gameweek progress) instead of a hardcoded table — see Dashboard above. `docs/my-fpl-history.html` still carries its own hardcoded copy, since it's statically hosted on GitHub Pages and can't run this project's Python collector; would need a small build step (e.g. a GitHub Action that regenerates the static page's embedded data from the collector's output on each run) to close that gap too.
 - Once there's a processed, league-wide dataset (no personal data), commit it back to the repo each run like NZ-Jobs-Dashboard's sync workflow does, rather than only uploading artifacts.
 - **Done:** the dashboard is deployed on Streamlit Community Cloud as a live link, not just run locally.
+- **Done:** deployment dependencies can no longer drift — `requirements.txt` used to be unpinned ranges (`pandas>=2.0` etc.), so the Streamlit Cloud deploy could resolve newer majors than CI's separately-pinned file ever tested. Both now install the same exact pins (`requirements.in` holds the ranges for the next re-resolve; the old `requirements.lock` was folded in as redundant duplication), with a weekly Dependabot job (`.github/dependabot.yml`) opening PRs against both the Python pins and the workflows' `actions/*` versions instead of letting them age silently.
+- **Done:** the dashboard itself is under test in CI — `app/test_app_offline.py` renders the Home page (all 8 tabs), clicks the Transfers solve through both the gated and unlimited paths, and renders the Historical page via Streamlit's `AppTest`, all with every live FPL call forced to fail and `data/raw/` absent — the exact fresh-checkout/deploy condition. This is the test that would have caught the Transfers `KeyError: 'sell_price'` (see Known Issues) before it shipped. A companion static check pins `shared.py`'s import contract, because a lint autofix that deletes an "unused" name there (only `app.py` imports it *through* shared) surfaces merely as an `ImportError` at startup.
+- **Done:** `pytest.ini` gives a bare `pytest -q` one consistent meaning — `testpaths = src app` (previously `test_optimizer.py`/`test_chips.py` silently collected zero tests and were only ever run as scripts), plus `-m "not live"` by default, with everything that talks to FPL's real API marked `live` for explicit `pytest -m live` runs.
+- **Done:** `ruff check app src` gates every push (rule set pinned in `ruff.toml` so local and CI agree) — first run found two dead result-variables (one in the transfer optimizer's gating loop), five ambiguous `l` names, and 45 unused-import/placeholder-f-string findings across the tree.
+- **Done:** `.gitattributes` forces LF line endings — this checkout lives on a Windows mount where editors default to CRLF, so git had been storing CRLF bytes verbatim: every tracked file showed as permanently modified and any commit became a whole-file diff.
+- **Done:** CI skips pushes touching only `data/**`/`models/**` — the collector commits fallback refreshes to `main` every 30 minutes, and each was queueing a full test run that exercised no code.
+- **Done:** replaced all 26 deprecated `st.dataframe(..., use_container_width=True)` calls with the documented equivalent `width="stretch"` (also `st.dataframe`'s default), clearing the deprecation warnings every page render emitted on Streamlit ≥1.63.
+- Split `app/app.py` (1,200+ lines of tab renderers) into per-tab modules, and add `ruff format` as a CI step — deliberately not started: reformatting the whole tree in the same pass as functional changes would bury the latter in churn, so lint (correctness rules only) is what's enforced today.
 - Once the model and dashboard are solid, port a clean version of this project into the main [data-portfolio](https://github.com/lucifer0096/data-portfolio) repo.
