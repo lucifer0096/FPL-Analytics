@@ -2,6 +2,8 @@
 
 A Fantasy Premier League expected-points model, squad optimizer, and dashboard, built on the free public FPL API. **FPL's own live API is this project's actual basis, not vaastav's archive** — vaastav/Fantasy-Premier-League is used ONLY as a historical bootstrap for 2016-17 through 2025-26, because that's the one thing the live API genuinely cannot provide: verified directly against the API that once a season ends, `element-summary`'s per-gameweek `history` empties out and `history_past` only ever returns SEASON-TOTAL aggregates (total_points, minutes, etc. summed for the whole season) — there is no way, official or otherwise, to pull old seasons' gameweek-by-gameweek data from FPL itself, so a third-party archive is the only source for that window. Every season from 2026-27 onward is captured entirely by this project's own [collector](#running-the-collector) as it happens, straight from the live API, with no vaastav dependency at all — and it captures MORE than vaastav's schema ever could: fields like `in_dreamteam`, `defensive_contribution` (part of FPL's 2025-26 scoring overhaul), `starts`, and real `expected_goals`/`expected_assists` that vaastav's CSVs simply don't carry for any season (see `load_live.py`).
 
+**[Open the live dashboard →](https://fpl-analytics-dashboard.streamlit.app/)**
+
 **[View the manager history page →](https://lucifer0096.github.io/FPL-Analytics/my-fpl-history.html)**
 
 ## Quickstart
@@ -19,7 +21,7 @@ pytest -m live                    # live FPL-API checks (needs network)
 ruff check app src                # lint — the same rule set CI gates on
 ```
 
-The dashboard is deployed on Streamlit Community Cloud and the manager-history page runs on GitHub Pages (see [Manager History](#manager-history)). Dependency layout: `requirements.txt` holds the exact pins everything installs, `requirements.in` the ranges to re-resolve from, `requirements-dev.txt` dev-only tools.
+The dashboard is [deployed on Streamlit Community Cloud](https://fpl-analytics-dashboard.streamlit.app/) and the manager-history page runs on GitHub Pages (see [Manager History](#manager-history)). Dependency layout: `requirements.txt` holds the exact pins everything installs, `requirements.in` the ranges to re-resolve from, `requirements-dev.txt` dev-only tools.
 
 ## Status
 
@@ -109,7 +111,7 @@ FPL's real rules (verified against the live API, not assumed), the PuLP squad bu
 
 ## Dashboard
 
-Two-page Streamlit app — **`streamlit run app/app.py`**.
+Two-page Streamlit app — **`streamlit run app/app.py`**, or open the **[live deployment →](https://fpl-analytics-dashboard.streamlit.app/)**.
 
 - **Home (live, current season)** — 8 tabs: My Squad (your real picks + live points), Transfers (gated optimizer, real free-transfer tracking, injury flags, differentials), Chip Advisor (real chip availability), League Tracker (real private-league standings), Price Changes (risers/fallers + tonight's projections), PL Table, Season Insights, Fixtures & Results. Every number is live-first from FPL's API with a 60s cache, falling back to the committed files only if the API is unreachable.
 - **Historical & Model** — completed-season insights, Team of the Season, Model Performance (live from `models/metrics.json`), Past Seasons (live from the collector's saved history).
