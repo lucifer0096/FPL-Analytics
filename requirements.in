@@ -6,13 +6,19 @@
 # requirements.txt is what actually gets installed everywhere (CI, Streamlit
 # Cloud, local dev) -- it is pinned on purpose, so a fresh deploy can never
 # silently pick up a new major than the one that was tested.
-pandas>=2.0
-numpy>=1.24
+pandas>=3.1.1
+numpy>=2.5.5
 scikit-learn>=1.3
 lightgbm>=4.0
+# PuLP stays on the 3.x line deliberately: 4.x is an API rewrite
+# (LpVariable.dicts, PULP_CBC_CMD and LpStatus are gone, and CBC moved
+# to the pulp[cbc] extra), and the transfers optimizer runs in production
+# on Streamlit Cloud -- migrating both solvers is its own change with its
+# own verification, not a version sweep. dependabot.yml ignores >=4 so
+# this floor stops re-proposing it until that migration happens.
 pulp>=2.7
 # Floor is the oldest release verified against this code: st.dataframe's
 # width="stretch" (which replaced the deprecated use_container_width) has to
 # exist in whatever gets installed.
-streamlit>=1.63
-pytest>=8.0
+streamlit>=1.67.0
+pytest>=9.2.0

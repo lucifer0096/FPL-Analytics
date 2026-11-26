@@ -14,6 +14,13 @@ updates:
       python-dependencies:
         patterns:
           - "*"
+    # PuLP 4.x is an API rewrite (LpVariable.dicts/PULP_CBC_CMD/LpStatus
+    # removed, CBC moved to an extra) and the optimizer runs in production
+    # on Streamlit Cloud: the migration is a deliberate change, so stop
+    # re-proposing it here until it happens. See requirements.in.
+    ignore:
+      - dependency-name: "pulp"
+        versions: [">=4.0.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
