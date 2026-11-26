@@ -41,7 +41,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Restore collector state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/raw/collector_state.json
           key: fpl-collector-state-${{ github.run_id }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Save collector state
         if: steps.check.outputs.needed == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/raw/collector_state.json
           key: fpl-collector-state-${{ github.run_id }}
