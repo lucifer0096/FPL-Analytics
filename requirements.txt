@@ -30,7 +30,7 @@ pandas==3.1.1
 pillow==12.3.0
 pluggy==1.7.0
 protobuf==7.36.2
-pulp==4.3.1
+PuLP==3.3.2
 pyarrow==25.0.1
 pydantic==2.14.4
 pydantic-core==2.50.5
